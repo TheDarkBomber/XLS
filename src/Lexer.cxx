@@ -23,6 +23,8 @@ Token GetToken() {
 		JMPIF(CurrentIdentifier, "implement", GetToken_kw_implement);
 		JMPIF(CurrentIdentifier, "impl", GetToken_kw_implement);
 		JMPIF(CurrentIdentifier, "extern", GetToken_kw_extern);
+		JMPIF(CurrentIdentifier, "if", GetToken_kw_if);
+		JMPIF(CurrentIdentifier, "else", GetToken_kw_else);
 		goto GetToken_end_kw;
 
 	GetToken_kw_implement:
@@ -30,6 +32,12 @@ Token GetToken() {
 		return output;
 	GetToken_kw_extern:
 		output.Type = LEXEME_EXTERN;
+		return output;
+	GetToken_kw_if:
+		output.Type = LEXEME_IF;
+		return output;
+	GetToken_kw_else:
+		output.Type = LEXEME_ELSE;
 		return output;
 	GetToken_end_kw:
 		output.Type = LEXEME_IDENTIFIER;

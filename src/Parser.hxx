@@ -52,6 +52,13 @@ public:
 	SSA *Render() override;
 };
 
+class IfExpression : public Expression {
+  UQP(Expression) Condition, ThenBranch, ElseBranch;
+public:
+	IfExpression(UQP(Expression) condition, UQP(Expression) thenBranch, UQP(Expression) elseBranch) : Condition(std::move(condition)), ThenBranch(std::move(thenBranch)), ElseBranch(std::move(elseBranch)) {}
+	SSA *Render() override;
+};
+
 class SignatureNode {
 	std::string Name;
 	std::vector<std::string> Arguments;
@@ -77,6 +84,7 @@ UQP(Expression) ParseDwordExpression();
 UQP(Expression) ParseParenthetical();
 UQP(Expression) ParseIdentifier();
 UQP(Expression) ParseDispatcher();
+UQP(Expression) ParseIf();
 
 UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS);
 

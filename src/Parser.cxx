@@ -7,6 +7,7 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Function.h>
+#include <llvm/IR/Instructions.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Module.h>
@@ -96,6 +97,10 @@ UQP(Expression) ParseDispatcher() {
 		return ParseIdentifier();
 	case LEXEME_INTEGER:
 		return ParseDwordExpression();
+	case LEXEME_IF:
+		return ParseIf();
+	case LEXEME_ELSE:
+		return nullptr;
 	default:
 		switch (CurrentToken.Value) {
 		case '(': // ')'
@@ -108,7 +113,7 @@ UQP(Expression) ParseDispatcher() {
 Precedence GetTokenPrecedence() {
 	if (!isascii(CurrentToken.Value)) return PRECEDENCE_INVALID;
 	Precedence precedence = BinaryPrecedence[CurrentToken.Value];
-	if (precedence <= PRECEDENCE_COMPARE) return PRECEDENCE_INVALID;
+	if (precedence < PRECEDENCE_COMPARE) return PRECEDENCE_INVALID;
 	return precedence;
 }
 
@@ -137,6 +142,27 @@ UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS) {
 
 		LHS = MUQ(BinaryExpression, binaryOperator, std::move(LHS), std::move(RHS));
 	}
+}
+
+UQP(Expression) ParseIf() {
+	GetNextToken();
+	if (CurrentToken.Value != '(') return ParseError("Expected open parenthesis in if condition.");
+	// ')'
+	UQP(Expression) condition = ParseParenthetical();
+	if (!condition) return nullptr;
+
+	UQP(Expression) thenBranch = ParseExpression();
+	if (!thenBranch) return nullptr;
+
+	if (CurrentToken.Value != ';') return ParseError("Expected else or end of expression (insert semicolon)");
+	UQP(Expression) elseBranch;
+	if (CurrentToken.Type == LEXEME_ELSE) {
+		GetNextToken();
+		elseBranch = ParseExpression();
+		if (!elseBranch) return nullptr;
+	} else elseBranch = MUQ(DwordExpression, 0);
+
+	return MUQ(IfExpression, std::move(condition), std::move(thenBranch), std::move(elseBranch));
 }
 
 UQP(SignatureNode) ParseSignature() {
@@ -232,6 +258,42 @@ SSA *CallExpression::Render() {
 	}
 
 	return Builder->CreateCall(called, ArgumentVector, "xls_call");
+}
+
+SSA *IfExpression::Render() {
+	SSA *condition = Condition->Render();
+	if (!condition) return nullptr;
+
+	if (condition->getType() != llvm::Type::getInt1Ty(*GlobalContext))
+		condition = Builder->CreateICmpNE(condition, llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 1, false)), "xls_if_condition");
+	llvm::Function *function = Builder->GetInsertBlock()->getParent();
+	llvm::BasicBlock *thenBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_then", function);
+	llvm::BasicBlock *elseBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_else");
+	llvm::BasicBlock *afterBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_after_if");
+	Builder->CreateCondBr(condition, thenBlock, elseBlock);
+
+	Builder->SetInsertPoint(thenBlock);
+	SSA *thenBranch = ThenBranch->Render();
+	if (!thenBranch) return nullptr;
+
+	Builder->CreateBr(afterBlock);
+	thenBlock = Builder->GetInsertBlock();
+
+	function->getBasicBlockList().push_back(elseBlock);
+	Builder->SetInsertPoint(elseBlock);
+
+	SSA *elseBranch = ElseBranch->Render();
+	if (!elseBranch) return nullptr;
+
+	Builder->CreateBr(afterBlock);
+	elseBlock = Builder->GetInsertBlock();
+
+	function->getBasicBlockList().push_back(afterBlock);
+	Builder->SetInsertPoint(afterBlock);
+	llvm::PHINode *phiNode = Builder->CreatePHI(llvm::Type::getInt32Ty(*GlobalContext), 2, "xls_if_block");
+	phiNode->addIncoming(thenBranch, thenBlock);
+	phiNode->addIncoming(elseBranch, elseBlock);
+	return phiNode;
 }
 
 llvm::Function *SignatureNode::Render() {
