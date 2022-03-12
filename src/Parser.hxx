@@ -62,9 +62,8 @@ public:
 
 class DwordDeclarationExpression : public Expression {
 	VDX(std::string, UQP(Expression)) VariableNames;
-	UQP(Expression) Body;
 public:
-	DwordDeclarationExpression(VDX(std::string, UQP(Expression)) variableNames, UQP(Expression) body) : VariableNames(std::move(variableNames)), Body(std::move(body)) {}
+	DwordDeclarationExpression(VDX(std::string, UQP(Expression)) variableNames) : VariableNames(std::move(variableNames)) {}
 	SSA *Render() override;
 };
 

@@ -230,12 +230,7 @@ UQP(Expression) ParseDwordDeclaration() {
 		if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected more identifiers after DWORD declaration.");
 	}
 
-	if (CurrentToken.Value != ';') return ParseError("Expected end of DWORD declaration. (insert semicolon)");
-	GetNextToken();
-	UQP(Expression) body = ParseExpression();
-	if (!body) return nullptr;
-
-	return MUQ(DwordDeclarationExpression, std::move(variableNames), std::move(body));
+	return MUQ(DwordDeclarationExpression, std::move(variableNames));
 }
 
 UQP(SignatureNode) ParseOperatorSignature() {
@@ -467,7 +462,6 @@ SSA *IfExpression::Render() {
 }
 
 SSA *DwordDeclarationExpression::Render() {
-	std::vector<Alloca*> Bindings;
 	llvm::Function *function = Builder->GetInsertBlock()->getParent();
 	for (uint i = 0, e = VariableNames.size(); i != e; i++) {
 		const std::string &variableName = VariableNames[i].first;
@@ -482,16 +476,10 @@ SSA *DwordDeclarationExpression::Render() {
 		Alloca *alloca = createEntryBlockAlloca(function, variableName);
 		Builder->CreateStore(definerSSA, alloca);
 
-		Bindings.push_back(AllonymousValues[variableName]);
 		AllonymousValues[variableName] = alloca;
 	}
-	SSA *body = Body->Render();
-	if (!body) return nullptr;
 
-	for (uint i = 0, e = VariableNames.size(); i != e; i++)
-		AllonymousValues[VariableNames[i].first] = Bindings[i];
-
-	return body;
+	return llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false));
 }
 
 llvm::Function *SignatureNode::Render() {
