@@ -92,6 +92,13 @@ public:
 	SSA *Render() override;
 };
 
+class BlockExpression : public Expression {
+	std::vector<UQP(Expression)> Expressions;
+public:
+	BlockExpression(std::vector<UQP(Expression)> expressions) : Expressions(std::move(expressions)) {}
+	SSA *Render() override;
+};
+
 class IfExpression : public Expression {
   UQP(Expression) Condition, ThenBranch, ElseBranch;
 public:
@@ -137,6 +144,7 @@ UQP(Expression) ParseDispatcher();
 UQP(Expression) ParseIf();
 UQP(Expression) ParseUnary();
 UQP(Expression) ParseDwordDeclaration();
+UQP(Expression) ParseBlock();
 
 UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS);
 

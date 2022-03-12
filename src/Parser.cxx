@@ -115,6 +115,8 @@ UQP(Expression) ParseDispatcher() {
 		switch (CurrentToken.Value) {
 		case '(': // ')'
 			return ParseParenthetical();
+		case '{': // '}'
+			return ParseBlock();
 		default: return ParseError("Unknown token value.");
 		}
 	}
@@ -164,6 +166,25 @@ UQP(Expression) ParseUnary() {
 		return MUQ(UnaryExpression, operator_, std::move(operand));
 	}
 	return nullptr;
+}
+
+UQP(Expression) ParseBlock() {
+	GetNextToken();
+	// '{'
+	std::vector<UQP(Expression)> expressions;
+	if (CurrentToken.Value != '}') {
+		for (;;) {
+			if (UQP(Expression) expression = ParseExpression())
+				expressions.push_back(std::move(expression));
+			else return nullptr;
+			// '{'
+			if (CurrentToken.Value == '}') break;
+			if (CurrentToken.Value != ';') return ParseError("Expected semicolon.");
+			GetNextToken();
+		}
+	}
+	GetNextToken();
+	return MUQ(BlockExpression, std::move(expressions));
 }
 
 UQP(Expression) ParseIf() {
@@ -397,6 +418,16 @@ SSA *CallExpression::Render() {
 	llvm::CallInst* callInstance = Builder->CreateCall(called, ArgumentVector, "xls_call");
 	callInstance->setCallingConv(called->getCallingConv());
 	return callInstance;
+}
+
+SSA *BlockExpression::Render() {
+	std::vector<SSA*> ExpressionVector;
+	for (uint i = 0, e = Expressions.size(); i != e; i++) {
+		ExpressionVector.push_back(Expressions[i]->Render());
+		if (!ExpressionVector.back()) return nullptr;
+	}
+
+	return ExpressionVector.back();
 }
 
 SSA *IfExpression::Render() {

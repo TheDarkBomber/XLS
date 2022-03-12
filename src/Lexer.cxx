@@ -79,7 +79,7 @@ Token GetToken() {
 		char nextCharacter = getchar();
 		if (nextCharacter == '/') {
 			LastCharacter = nextCharacter;
-			while (LastCharacter != EOF && LastCharacter != '\n' && LastCharacter != '\r')
+			while (LastCharacter != EOF && LastCharacter != '\n' && LastCharacter != '\r' && LastCharacter != '\t')
 				LastCharacter = getchar();
 
 			if (LastCharacter != EOF) return GetToken();
