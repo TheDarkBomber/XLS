@@ -11,6 +11,7 @@ dword CurrentInteger;
 Token GetToken() {
 	static Token output;
 	output.Value = '\0';
+	output.Subtype = LEXEME_CHARACTER;
 	static char LastCharacter = ' ';
 	while (isspace(LastCharacter)) LastCharacter = getchar();
 
@@ -25,6 +26,14 @@ Token GetToken() {
 		JMPIF(CurrentIdentifier, "extern", GetToken_kw_extern);
 		JMPIF(CurrentIdentifier, "if", GetToken_kw_if);
 		JMPIF(CurrentIdentifier, "else", GetToken_kw_else);
+		JMPIF(CurrentIdentifier, "operator", GetToken_kw_operator);
+		JMPIF(CurrentIdentifier, "dword", GetToken_kw_dword);
+		JMPIF(CurrentIdentifier, "cdecl", GetToken_kw_calling);
+		JMPIF(CurrentIdentifier, "fastcc", GetToken_kw_calling);
+		JMPIF(CurrentIdentifier, "coldcc", GetToken_kw_calling);
+		JMPIF(CurrentIdentifier, "tailcc", GetToken_kw_calling);
+		JMPIF(CurrentIdentifier, "webkitjscc", GetToken_kw_calling);
+		JMPIF(CurrentIdentifier, "win64cc", GetToken_kw_calling);
 		goto GetToken_end_kw;
 
 	GetToken_kw_implement:
@@ -38,6 +47,16 @@ Token GetToken() {
 		return output;
 	GetToken_kw_else:
 		output.Type = LEXEME_ELSE;
+		return output;
+	GetToken_kw_operator:
+		output.Type = LEXEME_OPERATOR;
+		return output;
+	GetToken_kw_dword:
+		output.Type = LEXEME_DWORD_VARIABLE;
+		return output;
+	GetToken_kw_calling:
+		output.Type = LEXEME_IDENTIFIER;
+		output.Subtype = LEXEME_CALLING_CONVENTION;
 		return output;
 	GetToken_end_kw:
 		output.Type = LEXEME_IDENTIFIER;

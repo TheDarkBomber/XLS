@@ -1,9 +1,11 @@
 #include "Parser.hxx"
 #include "Lexer.hxx"
 #include "JIT.hxx"
+#include "colours.def.h"
 #include <llvm/ADT/APInt.h>
 #include <llvm/ExecutionEngine/Orc/ThreadSafeModule.h>
 #include <llvm/IR/BasicBlock.h>
+#include <llvm/IR/CallingConv.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Function.h>
@@ -19,11 +21,15 @@
 #include <llvm/Transforms/InstCombine/InstCombine.h>
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Scalar/GVN.h>
+#include <llvm/Transforms/Utils.h>
+#include <llvm/Transforms/Utils/Mem2Reg.h>
 #include <map>
 #include <ctype.h>
 #include <stdio.h>
 
 static llvm::ExitOnError ExitIfError;
+
+ParserFlags Flags;
 
 Token CurrentToken;
 Token GetNextToken() { return CurrentToken = GetToken(); }
@@ -38,15 +44,17 @@ UQP(JITCompiler) GlobalJIT;
 
 std::map<std::string, UQP(SignatureNode)> FunctionSignatures;
 
-std::map<std::string, SSA*> AllonymousValues;
+std::map<std::string, Alloca*> AllonymousValues;
 
-void AlertError(const char *error) { fprintf(stderr, "Error: %s\n", error); }
+void AlertError(const char *error) { llvm::errs() << COLOUR_RED << "Error: " << error << COLOUR_END << "\n"; }
+void AlertWarning(const char *warning) { llvm::errs() << COLOUR_PURPLE << "Warning: " << warning << COLOUR_END << "\n"; }
 
-#define DEFERROR { AlertError(error); return nullptr; }
+#define DEFERROR(flag) { flag = 1; AlertError(error); return nullptr; }
+#define DEFWARNING(flag) { flag = 1; AlertWaring(warning); return nullptr; }
 
-UQP(Expression) ParseError(const char* error) DEFERROR;
-UQP(SignatureNode) ParseError(const char* error, void*) DEFERROR;
-SSA *CodeError(const char* error) DEFERROR;
+UQP(Expression) ParseError(const char* error) DEFERROR(Flags.ParseError);
+UQP(SignatureNode) ParseError(const char* error, void*) DEFERROR(Flags.ParseError);
+SSA *CodeError(const char* error) DEFERROR(Flags.CodeError);
 
 UQP(Expression) ParseDwordExpression() {
 	MDU(DwordExpression) result = MUQ(DwordExpression, CurrentInteger);
@@ -101,6 +109,8 @@ UQP(Expression) ParseDispatcher() {
 		return ParseIf();
 	case LEXEME_ELSE:
 		return nullptr;
+	case LEXEME_DWORD_VARIABLE:
+		return ParseDwordDeclaration();
 	default:
 		switch (CurrentToken.Value) {
 		case '(': // ')'
@@ -113,12 +123,11 @@ UQP(Expression) ParseDispatcher() {
 Precedence GetTokenPrecedence() {
 	if (!isascii(CurrentToken.Value)) return PRECEDENCE_INVALID;
 	Precedence precedence = BinaryPrecedence[CurrentToken.Value];
-	if (precedence < PRECEDENCE_COMPARE) return PRECEDENCE_INVALID;
 	return precedence;
 }
 
 UQP(Expression) ParseExpression() {
-	UQP(Expression) LHS = ParseDispatcher();
+	UQP(Expression) LHS = ParseUnary();
 	if (!LHS) return nullptr;
 	return ParseBinary(PRECEDENCE_INVALID, std::move(LHS));
 }
@@ -131,7 +140,7 @@ UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS) {
 		char binaryOperator = CurrentToken.Value;
 		GetNextToken();
 
-		UQP(Expression) RHS = ParseDispatcher();
+		UQP(Expression) RHS = ParseUnary();
 		if (!RHS) return nullptr;
 
 		Precedence nextPrecedence = GetTokenPrecedence();
@@ -144,6 +153,19 @@ UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS) {
 	}
 }
 
+UQP(Expression) ParseUnary() {
+	if (!BinaryPrecedence[CurrentToken.Value]) return ParseDispatcher();
+
+	char operator_ = CurrentToken.Value;
+	GetNextToken();
+	printf("Operator = %c, Current = %c\n", operator_, CurrentToken.Value);
+	if (UQP(Expression) operand = ParseUnary()) {
+		printf("Return\n");
+		return MUQ(UnaryExpression, operator_, std::move(operand));
+	}
+	return nullptr;
+}
+
 UQP(Expression) ParseIf() {
 	GetNextToken();
 	if (CurrentToken.Value != '(') return ParseError("Expected open parenthesis in if condition.");
@@ -154,7 +176,6 @@ UQP(Expression) ParseIf() {
 	UQP(Expression) thenBranch = ParseExpression();
 	if (!thenBranch) return nullptr;
 
-	if (CurrentToken.Value != ';') return ParseError("Expected else or end of expression (insert semicolon)");
 	UQP(Expression) elseBranch;
 	if (CurrentToken.Type == LEXEME_ELSE) {
 		GetNextToken();
@@ -165,10 +186,87 @@ UQP(Expression) ParseIf() {
 	return MUQ(IfExpression, std::move(condition), std::move(thenBranch), std::move(elseBranch));
 }
 
+UQP(Expression) ParseDwordDeclaration() {
+	GetNextToken();
+	VDX(std::string, UQP(Expression)) variableNames;
+	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier after DWORD declaration.");
+
+	for (;;) {
+		std::string name = CurrentIdentifier;
+		GetNextToken();
+
+		UQP(Expression) definer;
+		if (CurrentToken.Value == '=') {
+			GetNextToken();
+			definer = ParseExpression();
+			if (!definer) return nullptr;
+		}
+
+		variableNames.push_back(std::make_pair(name, std::move(definer)));
+		if (CurrentToken.Value != ',') break;
+		GetNextToken();
+
+		if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected more identifiers after DWORD declaration.");
+	}
+
+	if (CurrentToken.Value != ';') return ParseError("Expected end of DWORD declaration. (insert semicolon)");
+	GetNextToken();
+	UQP(Expression) body = ParseExpression();
+	if (!body) return nullptr;
+
+	return MUQ(DwordDeclarationExpression, std::move(variableNames), std::move(body));
+}
+
+UQP(SignatureNode) ParseOperatorSignature() {
+	if (CurrentIdentifier != "unary" && CurrentIdentifier != "binary") return ParseError("Expected operator type, unary or binary, or standard declaration/implementation of non-binary function.", nullptr);
+
+	SignatureType signatureType = CurrentIdentifier == "unary" ? SIGNATURE_UNARY : SIGNATURE_BINARY;
+	Precedence precedence = PRECEDENCE_USER_DEFAULT;
+
+	std::string functionName = "#op::" + CurrentIdentifier + "::#" + GetNextToken().Value;
+	GetNextToken();
+
+	if (CurrentToken.Type == LEXEME_INTEGER) {
+		if (CurrentInteger == 0) return ParseError("Invalid precedence: must be greater than zero.", nullptr);
+		precedence = (Precedence)CurrentInteger;
+		GetNextToken();
+	}
+
+	if (CurrentToken.Value != '(') return ParseError("Expected open parenthesis in operator prototype.", nullptr);
+
+	std::vector<std::string> argumentNames;
+	while (GetNextToken().Type == LEXEME_IDENTIFIER)
+		argumentNames.push_back(CurrentIdentifier);
+	if (CurrentToken.Value != ')') return ParseError("Expected close parenthesis in operator prototype.", nullptr);
+	GetNextToken();
+
+	if (signatureType && argumentNames.size() != signatureType) return ParseError("Invalid number of operands for operator.", nullptr);
+	return MUQ(SignatureNode, functionName, std::move(argumentNames), llvm::CallingConv::Fast, true, precedence);
+}
+
 UQP(SignatureNode) ParseSignature() {
 	if (CurrentToken.Type != LEXEME_IDENTIFIER)
 		return ParseError("Expected function name in function signature", nullptr);
 
+	llvm::CallingConv::ID convention = llvm::CallingConv::C;
+	if (CurrentToken.Subtype == LEXEME_CALLING_CONVENTION) {
+		if (!std::string("cdecl").compare(CurrentIdentifier))
+			convention = llvm::CallingConv::C;
+		else if (!std::string("fastcc").compare(CurrentIdentifier))
+			convention = llvm::CallingConv::Fast;
+		else if (!std::string("coldcc").compare(CurrentIdentifier))
+			convention = llvm::CallingConv::Cold;
+		else if (!std::string("tailcc").compare(CurrentIdentifier))
+			convention = llvm::CallingConv::Tail;
+		else if (!std::string("webkitjscc").compare(CurrentIdentifier))
+			convention = llvm::CallingConv::WebKit_JS;
+		else if (!std::string("win64cc").compare(CurrentIdentifier))
+			convention = llvm::CallingConv::Win64;
+
+		GetNextToken();
+		if (CurrentToken.Type != LEXEME_IDENTIFIER)
+			return ParseError("Expected function name in function signature", nullptr);
+	}
 	std::string functionName = CurrentIdentifier;
 	GetNextToken();
 
@@ -180,12 +278,22 @@ UQP(SignatureNode) ParseSignature() {
 	if (CurrentToken.Value != ')') return ParseError("Expected close parenthesis in function prototype.", nullptr);
 	GetNextToken();
 
-	return MUQ(SignatureNode, functionName, std::move(argumentNames));
+	return MUQ(SignatureNode, functionName, std::move(argumentNames), convention);
 }
 
 UQP(FunctionNode) ParseImplementation() {
 	GetNextToken();
 	UQP(SignatureNode) signature = ParseSignature();
+	if (!signature) return nullptr;
+
+	if (UQP(Expression) expression = ParseExpression())
+		return MUQ(FunctionNode, std::move(signature), std::move(expression));
+	return nullptr;
+}
+
+UQP(FunctionNode) ParseOperatorDefinition() {
+	GetNextToken();
+	UQP(SignatureNode) signature = ParseOperatorSignature();
 	if (!signature) return nullptr;
 
 	if (UQP(Expression) expression = ParseExpression())
@@ -215,17 +323,33 @@ llvm::Function *getFunction(std::string name) {
 	return nullptr;
 }
 
+Alloca *createEntryBlockAlloca(llvm::Function *function, llvm::StringRef variableName) {
+	llvm::IRBuilder<> apiobuilder(&function->getEntryBlock(), function->getEntryBlock().begin());
+	return apiobuilder.CreateAlloca(llvm::Type::getInt32Ty(*GlobalContext), nullptr, variableName);
+}
+
 SSA *DwordExpression::Render() {
 	return llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, Value, false));
 }
 
 SSA *VariableExpression::Render() {
-	SSA *value = AllonymousValues[Name];
+	Alloca *value = AllonymousValues[Name];
 	if (!value) CodeError("Reference to undeclared variable.");
-	return value;
+	return Builder->CreateLoad(value->getAllocatedType(), value, Name.c_str());
 }
 
 SSA *BinaryExpression::Render() {
+	if (Operator == '=') {
+		VariableExpression *LAssignment = static_cast<VariableExpression*>(LHS.get());
+		if (!LAssignment) return CodeError("Assignment on fire.");
+		SSA *value = RHS->Render();
+		if (!value) return nullptr;
+		SSA *variable = AllonymousValues[LAssignment->GetName()];
+		if (!variable) return CodeError("Unknown variable name.");
+		Builder->CreateStore(value, variable);
+		return value;
+	}
+
 	SSA *left = LHS->Render();
 	SSA *right = RHS->Render();
 	if (!left || !right) return nullptr;
@@ -241,8 +365,21 @@ SSA *BinaryExpression::Render() {
 	case '>':
 		return Builder->CreateICmpUGT(left, right, "xls_gt_compare");
 	default:
-		return CodeError("Unknown binary operator.");
+		break;
 	}
+
+	llvm::Function *function = getFunction(std::string("#op::binary::#") + Operator);
+	if (!function) return CodeError("Unknown binary operator.");
+	SSA *Operands[2] = { left, right };
+	return Builder->CreateCall(function, Operands, "xls_binary_operation");
+}
+
+SSA *UnaryExpression::Render() {
+	SSA *operand = Operand->Render();
+	if (!operand) return nullptr;
+	llvm::Function *function = getFunction(std::string("#op::unary::#") + Operator);
+	if (!function) return CodeError("Unknown unary operator");
+	return Builder->CreateCall(function, operand, "xls_unary_operation");
 }
 
 SSA *CallExpression::Render() {
@@ -257,7 +394,9 @@ SSA *CallExpression::Render() {
 		if (!ArgumentVector.back()) return nullptr;
 	}
 
-	return Builder->CreateCall(called, ArgumentVector, "xls_call");
+	llvm::CallInst* callInstance = Builder->CreateCall(called, ArgumentVector, "xls_call");
+	callInstance->setCallingConv(called->getCallingConv());
+	return callInstance;
 }
 
 SSA *IfExpression::Render() {
@@ -265,7 +404,7 @@ SSA *IfExpression::Render() {
 	if (!condition) return nullptr;
 
 	if (condition->getType() != llvm::Type::getInt1Ty(*GlobalContext))
-		condition = Builder->CreateICmpNE(condition, llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 1, false)), "xls_if_condition");
+		condition = Builder->CreateICmpNE(condition, llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false)), "xls_if_condition");
 	llvm::Function *function = Builder->GetInsertBlock()->getParent();
 	llvm::BasicBlock *thenBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_then", function);
 	llvm::BasicBlock *elseBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_else");
@@ -296,12 +435,41 @@ SSA *IfExpression::Render() {
 	return phiNode;
 }
 
+SSA *DwordDeclarationExpression::Render() {
+	std::vector<Alloca*> Bindings;
+	llvm::Function *function = Builder->GetInsertBlock()->getParent();
+	for (uint i = 0, e = VariableNames.size(); i != e; i++) {
+		const std::string &variableName = VariableNames[i].first;
+		Expression *definer = VariableNames[i].second.get();
+
+		SSA *definerSSA;
+		if (definer) {
+			definerSSA = definer->Render();
+			if (!definerSSA) return nullptr;
+		} else definerSSA = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false));
+
+		Alloca *alloca = createEntryBlockAlloca(function, variableName);
+		Builder->CreateStore(definerSSA, alloca);
+
+		Bindings.push_back(AllonymousValues[variableName]);
+		AllonymousValues[variableName] = alloca;
+	}
+	SSA *body = Body->Render();
+	if (!body) return nullptr;
+
+	for (uint i = 0, e = VariableNames.size(); i != e; i++)
+		AllonymousValues[VariableNames[i].first] = Bindings[i];
+
+	return body;
+}
+
 llvm::Function *SignatureNode::Render() {
 	std::vector<llvm::Type*> DwordType(Arguments.size(), llvm::Type::getInt32Ty(*GlobalContext));
 
 	llvm::FunctionType *functionType = llvm::FunctionType::get(llvm::Type::getInt32Ty(*GlobalContext), DwordType, false);
 
 	llvm::Function *function = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, Name, GlobalModule.get());
+	function->setCallingConv(Convention);
 
 	uint index = 0;
 	for (llvm::Argument &argument : function->args())
@@ -316,12 +484,18 @@ llvm::Function *FunctionNode::Render() {
 	llvm::Function *function = getFunction(signature.GetName());
 	if (!function) return nullptr;
 
+	if (signature.Binary()) BinaryPrecedence[signature.GetOperatorName()] = signature.GetOperatorPrecedence();
+	if (signature.Unary()) BinaryPrecedence[signature.GetOperatorName()] = PRECEDENCE_UNPRECEDENTED;
+
   llvm::BasicBlock *basicBlock = llvm::BasicBlock::Create(*GlobalContext, "entry", function);
   Builder->SetInsertPoint(basicBlock);
 
   AllonymousValues.clear();
-  for (llvm::Argument &argument : function->args())
-    AllonymousValues[std::string(argument.getName())] = &argument;
+  for (llvm::Argument &argument : function->args()) {
+		Alloca *alloca = createEntryBlockAlloca(function, argument.getName());
+		Builder->CreateStore(&argument, alloca);
+		AllonymousValues[std::string(argument.getName())] = alloca;
+	}
 
   if (SSA *returnValue = Body->Render()) {
     Builder->CreateRet(returnValue);
@@ -334,11 +508,12 @@ llvm::Function *FunctionNode::Render() {
 	return nullptr;
 }
 
-void InitialiseModule() {
+void InitialiseModule(std::string moduleName) {
 	GlobalContext = MUQ(llvm::LLVMContext);
-	GlobalModule = MUQ(llvm::Module, "XLS Module", *GlobalContext);
+	GlobalModule = MUQ(llvm::Module, moduleName, *GlobalContext);
 	GlobalFPM = MUQ(llvm::legacy::FunctionPassManager, GlobalModule.get());
 
+	GlobalFPM->add(llvm::createPromoteMemoryToRegisterPass());
 	GlobalFPM->add(llvm::createInstructionCombiningPass());
 	GlobalFPM->add(llvm::createReassociatePass());
 	GlobalFPM->add(llvm::createGVNPass());
@@ -361,6 +536,7 @@ void InitialiseJIT() {
 
   Builder = MUQ(llvm::IRBuilder<>, *GlobalContext);
 
+	GlobalFPM->add(llvm::createPromoteMemoryToRegisterPass());
   GlobalFPM->add(llvm::createInstructionCombiningPass());
   GlobalFPM->add(llvm::createReassociatePass());
   GlobalFPM->add(llvm::createGVNPass());
@@ -372,21 +548,36 @@ void InitialiseJIT() {
 void HandleImplementation() {
 	if (UQP(FunctionNode) functionNode = ParseImplementation()) {
 		if (llvm::Function* functionIR = functionNode->Render()) {
-			fprintf(stderr, "Generated IR:\n");
-			functionIR->print(llvm::errs());
-			fprintf(stderr, "\n");
-			ExitIfError(GlobalJIT->AddModule(llvm::orc::ThreadSafeModule(std::move(GlobalModule), std::move(GlobalContext))));
-			InitialiseJIT();
+			// fprintf(stderr, "Generated IR:\n");
+			// functionIR->print(llvm::errs());
+			// fprintf(stderr, "\n");
+			if (Flags.EmitIRToSTDOUT) functionIR->print(llvm::outs());
+			// ExitIfError(GlobalJIT->AddModule(llvm::orc::ThreadSafeModule(std::move(GlobalModule), std::move(GlobalContext))));
+			// InitialiseJIT();
 		}
 	} else GetNextToken();
+}
+
+void HandleOperatorDefinition() {
+  if (UQP(FunctionNode) functionNode = ParseOperatorDefinition()) {
+    if (llvm::Function *functionIR = functionNode->Render()) {
+      // fprintf(stderr, "Generated IR:\n");
+      // functionIR->print(llvm::errs());
+      // fprintf(stderr, "\n");
+			if (Flags.EmitIRToSTDOUT) functionIR->print(llvm::outs());
+      // ExitIfError(GlobalJIT->AddModule(llvm::orc::ThreadSafeModule(std::move(GlobalModule), std::move(GlobalContext))));
+      // InitialiseJIT();
+    }
+  } else GetNextToken();
 }
 
 void HandleExtern() {
 	if (UQP(SignatureNode) signature = ParseExtern()) {
 		if (llvm::Function* signatureIR = signature->Render()) {
-			fprintf(stderr, "Generated IR:\n");
-			signatureIR->print(llvm::errs());
-			fprintf(stderr, "\n");
+			// fprintf(stderr, "Generated IR:\n");
+			// signatureIR->print(llvm::errs());
+			// fprintf(stderr, "\n");
+			if (Flags.EmitIRToSTDOUT) signatureIR->print(llvm::outs());
 			FunctionSignatures[signature->GetName()] = std::move(signature);
 		}
 	} else GetNextToken();
@@ -394,29 +585,35 @@ void HandleExtern() {
 
 void HandleUnboundedExpression() {
 	if (UQP(FunctionNode) functionNode = ParseUnboundedExpression()) {
-		if (llvm::Function* functionIR = functionNode->Render()) {
-			llvm::IntrusiveRefCntPtr<llvm::orc::ResourceTracker> RT = GlobalJIT->GetMainJITDylib().createResourceTracker();
-			llvm::orc::ThreadSafeModule TSM = llvm::orc::ThreadSafeModule(std::move(GlobalModule), std::move(GlobalContext));
+		functionNode->Render();
+		// if (llvm::Function* functionIR = functionNode->Render()) {
+		// 	// llvm::IntrusiveRefCntPtr<llvm::orc::ResourceTracker> RT = GlobalJIT->GetMainJITDylib().createResourceTracker();
+		// 	// llvm::orc::ThreadSafeModule TSM = llvm::orc::ThreadSafeModule(std::move(GlobalModule), std::move(GlobalContext));
 
-			ExitIfError(GlobalJIT->AddModule(std::move(TSM), RT));
-			InitialiseJIT();
+		// 	// ExitIfError(GlobalJIT->AddModule(std::move(TSM), RT));
+		// 	// InitialiseJIT();
 
-			fprintf(stderr, "Executing IR:\n");
-			functionIR->print(llvm::errs());
-			fprintf(stderr, "\n");
+		// 	// fprintf(stderr, "Executing IR:\n");
+		// 	// functionIR->print(llvm::errs());
+		// 	// fprintf(stderr, "\n");
 
-			llvm::JITEvaluatedSymbol symbol = ExitIfError(GlobalJIT->Lookup("__mistakeman"));
+		// 	llvm::JITEvaluatedSymbol symbol = ExitIfError(GlobalJIT->Lookup("__mistakeman"));
 
-			dword (*I32)() = (dword (*)())(intp)symbol.getAddress();
-			fprintf(stderr, "Evaluated to %u\n", I32());
+		// 	dword (*I32)() = (dword (*)())(intp)symbol.getAddress();
+		// 	fprintf(stderr, "Evaluated to %u\n", I32());
 
-			ExitIfError(RT->remove());
-		}
+		// 	ExitIfError(RT->remove());
+		// }
 	} else GetNextToken();
 }
 
 
 extern "C" dword putchard(dword X) {
 	fputc((char)X, stderr);
+	return 0;
+}
+
+extern "C" dword printd(dword X) {
+	fprintf(stderr, "%u\n", X);
 	return 0;
 }

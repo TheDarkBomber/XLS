@@ -1,0 +1,24 @@
+#ifndef __COLOURS_XLS_DEF_
+#define __COLOURS_XLS_DEF_
+
+#define COLOUR_BLACK "\033[0;30m"
+#define COLOUR_RED "\033[0;31m"
+#define COLOUR_GREEN "\033[0;32m"
+#define COLOUR_YELLOW "\033[0;33m"
+#define COLOUR_BLUE "\033[0;34m"
+#define COLOUR_PURPLE "\033[0;35m"
+#define COLOUR_CYAN "\033[0;36m"
+#define COLOUR_WHITE "\033[0;37m"
+
+#define COLOUR_BLACK_BOLD "\033[1;30m"
+#define COLOUR_RED_BOLD "\033[1;31m"
+#define COLOUR_GREEN_BOLD "\033[1;32m"
+#define COLOUR_YELLOW_BOLD "\033[1;33m"
+#define COLOUR_BLUE_BOLD "\033[1;34m"
+#define COLOUR_PURPLE_BOLD "\033[1;35m"
+#define COLOUR_CYAN_BOLD "\033[1;36m"
+#define COLOUR_WHITE_BOLD "\033[1;37m"
+
+#define COLOUR_END "\033[0m"
+
+#endif
