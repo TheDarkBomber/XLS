@@ -174,6 +174,8 @@ UQP(Expression) ParseBlock() {
 	std::vector<UQP(Expression)> expressions;
 	if (CurrentToken.Value != '}') {
 		for (;;) {
+			// '{'
+			if (CurrentToken.Value == '}') break;
 			if (UQP(Expression) expression = ParseExpression())
 				expressions.push_back(std::move(expression));
 			else return nullptr;
