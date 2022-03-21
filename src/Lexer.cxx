@@ -34,6 +34,8 @@ Token GetToken() {
 		JMPIF(CurrentIdentifier, "tailcc", GetToken_kw_calling);
 		JMPIF(CurrentIdentifier, "webkitjscc", GetToken_kw_calling);
 		JMPIF(CurrentIdentifier, "win64cc", GetToken_kw_calling);
+		JMPIF(CurrentIdentifier, "while", GetToken_kw_while);
+		JMPIF(CurrentIdentifier, "dowhile", GetToken_kw_dowhile);
 		goto GetToken_end_kw;
 
 	GetToken_kw_implement:
@@ -57,6 +59,13 @@ Token GetToken() {
 	GetToken_kw_calling:
 		output.Type = LEXEME_IDENTIFIER;
 		output.Subtype = LEXEME_CALLING_CONVENTION;
+		return output;
+	GetToken_kw_while:
+		output.Type = LEXEME_WHILE;
+		return output;
+	GetToken_kw_dowhile:
+		output.Type = LEXEME_WHILE;
+		output.Subtype = LEXEME_ELSE;
 		return output;
 	GetToken_end_kw:
 		output.Type = LEXEME_IDENTIFIER;

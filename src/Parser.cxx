@@ -6,6 +6,7 @@
 #include <llvm/ExecutionEngine/Orc/ThreadSafeModule.h>
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/CallingConv.h>
+#include <llvm/IR/Constant.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Function.h>
@@ -107,6 +108,9 @@ UQP(Expression) ParseDispatcher() {
 		return ParseDwordExpression();
 	case LEXEME_IF:
 		return ParseIf();
+	case LEXEME_WHILE:
+		if (CurrentToken.Subtype == LEXEME_ELSE) return ParseWhile(true);
+		return ParseWhile();
 	case LEXEME_ELSE:
 		return nullptr;
 	case LEXEME_DWORD_VARIABLE:
@@ -207,6 +211,19 @@ UQP(Expression) ParseIf() {
 	} else elseBranch = MUQ(DwordExpression, 0);
 
 	return MUQ(IfExpression, std::move(condition), std::move(thenBranch), std::move(elseBranch));
+}
+
+UQP(Expression) ParseWhile(bool doWhile) {
+	GetNextToken();
+	if (CurrentToken.Value != '(') return ParseError("Expected open parenthesis in while condition.");
+	// ')'
+	UQP(Expression) condition = ParseParenthetical();
+	if (!condition) return nullptr;
+
+	UQP(Expression) body = ParseExpression();
+	if (!body) return nullptr;
+
+	return MUQ(WhileExpression, std::move(condition), std::move(body), doWhile);
 }
 
 UQP(Expression) ParseDwordDeclaration() {
@@ -461,6 +478,33 @@ SSA *IfExpression::Render() {
 	phiNode->addIncoming(thenBranch, thenBlock);
 	phiNode->addIncoming(elseBranch, elseBlock);
 	return phiNode;
+}
+
+SSA *WhileExpression::Render() {
+	llvm::Function *function = Builder->GetInsertBlock()->getParent();
+	llvm::BasicBlock *loopBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_loop", function);
+	llvm::BasicBlock *afterBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_after_loop", function);
+
+	SSA *condition;
+	if (!DoWhile) {
+		condition = Condition->Render();
+		if (!condition) return nullptr;
+		if (condition->getType() != llvm::Type::getInt1Ty(*GlobalContext))
+			condition = Builder->CreateICmpNE(condition, llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false)), "xls_while_condition");
+		Builder->CreateCondBr(condition, loopBlock, afterBlock);
+	} else Builder->CreateBr(loopBlock);
+	Builder->SetInsertPoint(loopBlock);
+	if (!Body->Render()) return nullptr;
+
+	condition = Condition->Render();
+	if (!condition) return nullptr;
+	if (condition->getType() != llvm::Type::getInt1Ty(*GlobalContext))
+		condition = Builder->CreateICmpNE( condition, llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false)), "xls_while_condition");
+
+	Builder->CreateCondBr(condition, loopBlock, afterBlock);
+	Builder->SetInsertPoint(afterBlock);
+
+	return llvm::Constant::getNullValue(llvm::Type::getInt32Ty(*GlobalContext));
 }
 
 SSA *DwordDeclarationExpression::Render() {

@@ -105,6 +105,14 @@ public:
 	SSA *Render() override;
 };
 
+class WhileExpression : public Expression {
+	UQP(Expression) Condition, Body;
+	bool DoWhile;
+public:
+	WhileExpression(UQP(Expression) condition, UQP(Expression) body, bool doWhile = false) : Condition(std::move(condition)), Body(std::move(body)), DoWhile(doWhile) {}
+	SSA *Render() override;
+};
+
 class SignatureNode {
 	std::string Name;
 	std::vector<std::string> Arguments;
@@ -141,6 +149,7 @@ UQP(Expression) ParseParenthetical();
 UQP(Expression) ParseIdentifier();
 UQP(Expression) ParseDispatcher();
 UQP(Expression) ParseIf();
+UQP(Expression) ParseWhile(bool doWhile = false);
 UQP(Expression) ParseUnary();
 UQP(Expression) ParseDwordDeclaration();
 UQP(Expression) ParseBlock();
