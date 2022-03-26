@@ -395,6 +395,9 @@ SSA *BinaryExpression::Render() {
 	JMPIF(Operator, "*", Operators_multiply);
 	JMPIF(Operator, "<", Operators_lt_compare);
 	JMPIF(Operator, ">", Operators_gt_compare);
+	JMPIF(Operator, "%", Operators_modulo);
+	JMPIF(Operator, "==", Operators_equal);
+	JMPIF(Operator, "!=", Operators_non_equal);
 	goto Operators_end;
  Operators_plus:
 	return Builder->CreateAdd(left, right, "xls_add");
@@ -406,6 +409,12 @@ SSA *BinaryExpression::Render() {
 	return Builder->CreateICmpULT(left, right, "xls_lt_compare");
  Operators_gt_compare:
 	return Builder->CreateICmpUGT(left, right, "xls_gt_compare");
+ Operators_equal:
+	return Builder->CreateICmpEQ(left, right, "xls_equal");
+ Operators_non_equal:
+	return Builder->CreateICmpNE(left, right, "xls_non_equal");
+ Operators_modulo:
+	return Builder->CreateURem(left, right, "xls_modulo");
  Operators_end:
 
 	llvm::Function *function = getFunction(std::string("#op::binary::#") + Operator);
