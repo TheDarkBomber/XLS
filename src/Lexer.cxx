@@ -17,9 +17,9 @@ Token GetToken() {
 	CurrentOperator = "";
 	while (isspace(LastCharacter)) LastCharacter = getchar();
 
-	if (isalpha(LastCharacter)) {
+	if (isalpha(LastCharacter) || LastCharacter == '_') {
 		CurrentIdentifier = LastCharacter;
-		while (isalnum((LastCharacter = getchar()))) {
+		while (IsIdentifier((LastCharacter = getchar()))) {
 			CurrentIdentifier += LastCharacter;
 		}
 
@@ -127,10 +127,32 @@ bool IsOperator(char c) {
 	case '\\':
 	case '(':
 	case ')':
+	case '[':
+	case ']':
+	case '{':
+	case '}':
 	case ';':
+	case '_':
 	case EOF:
 		return false;
 	default: return true;
+	}
+}
+
+bool IsIdentifier(char c) {
+	if (isalnum(c) || c == '_') return true;
+	switch (c) {
+	case '-':
+	case '+':
+	case '/':
+	case '*':
+	case ':':
+	case '@':
+	case '=':
+	case '?':
+	case '!':
+		return true;
+	default: return false;
 	}
 }
 

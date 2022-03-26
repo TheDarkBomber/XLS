@@ -23,6 +23,7 @@ struct Token {
 } __attribute__((packed));
 
 bool IsOperator(char c);
+bool IsIdentifier(char c);
 void PrintToken(Token token);
 Token GetToken();
 
