@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string>
 
+std::string CurrentOperator;
 std::string CurrentIdentifier;
 dword CurrentInteger;
 
@@ -13,6 +14,7 @@ Token GetToken() {
 	output.Value = '\0';
 	output.Subtype = LEXEME_CHARACTER;
 	static char LastCharacter = ' ';
+	CurrentOperator = "";
 	while (isspace(LastCharacter)) LastCharacter = getchar();
 
 	if (isalpha(LastCharacter)) {
@@ -95,6 +97,18 @@ Token GetToken() {
 		}
 	}
 
+	if (IsOperator(LastCharacter)) {
+		CurrentOperator = "";
+		while (IsOperator(LastCharacter)) {
+			CurrentOperator += LastCharacter;
+			LastCharacter = getchar();
+		}
+		output.Type = LEXEME_CHARACTER;
+		output.Subtype = LEXEME_OPERATOR;
+		output.Value = CurrentOperator.c_str()[0];
+		return output;
+	}
+
 	if (LastCharacter == EOF) {
 		output.Type = LEXEME_END_OF_FILE;
 		return output;
@@ -104,4 +118,31 @@ Token GetToken() {
 	output.Type = LEXEME_CHARACTER;
 	output.Value = current;
 	return output;
+}
+
+bool IsOperator(char c) {
+	if (isalpha(c) || isspace(c) || isdigit(c)) return false;
+	switch (c) {
+	case '#':
+	case '\\':
+	case '(':
+	case ')':
+	case ';':
+	case EOF:
+		return false;
+	default: return true;
+	}
+}
+
+void PrintToken(Token token) {
+	fprintf(stderr, "TOKEN:\n");
+	fprintf(stderr, "Type = %u\n", token.Type);
+	fprintf(stderr, "Subtype = %u\n", token.Subtype);
+	fprintf(stderr, "Value = %c\n", token.Value);
+	fprintf(stderr, "CURRENT:\n");
+	fprintf(stderr, "Operator = %s\n", CurrentOperator.c_str());
+	fprintf(stderr, "Identifier = %s\n", CurrentIdentifier.c_str());
+	fprintf(stderr, "Integer = %u\n", CurrentInteger);
+	fprintf(stderr, "Alphanumeric = %s\n", isalnum(token.Value) ? "yes" : "no");
+	fprintf(stderr, "Operator = %s\n", IsOperator(token.Value) ? "yes" : "no");
 }

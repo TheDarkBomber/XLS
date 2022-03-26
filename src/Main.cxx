@@ -18,7 +18,7 @@
 
 extern ParserFlags Flags;
 
-extern std::map<char, Precedence> BinaryPrecedence;
+extern std::map<std::string, Precedence> BinaryPrecedence;
 extern Token CurrentToken;
 extern Token GetNextToken();
 
@@ -52,12 +52,12 @@ static void Handle() {
 }
 
 int main(int argc, char* argv[]) {
-	BinaryPrecedence['='] = PRECEDENCE_ASSIGN;
-	BinaryPrecedence['<'] = PRECEDENCE_COMPARE;
-	BinaryPrecedence['>'] = PRECEDENCE_COMPARE;
-	BinaryPrecedence['+'] = PRECEDENCE_ADD;
-	BinaryPrecedence['-'] = PRECEDENCE_ADD;
-	BinaryPrecedence['*'] = PRECEDENCE_MULTIPLY;
+	BinaryPrecedence["="] = PRECEDENCE_ASSIGN;
+	BinaryPrecedence["<"] = PRECEDENCE_COMPARE;
+	BinaryPrecedence[">"] = PRECEDENCE_COMPARE;
+	BinaryPrecedence["+"] = PRECEDENCE_ADD;
+	BinaryPrecedence["-"] = PRECEDENCE_ADD;
+	BinaryPrecedence["*"] = PRECEDENCE_MULTIPLY;
 
 	llvm::InitializeAllTargetInfos();
 	llvm::InitializeAllTargets();

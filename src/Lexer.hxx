@@ -22,6 +22,8 @@ struct Token {
 	char Value;
 } __attribute__((packed));
 
+bool IsOperator(char c);
+void PrintToken(Token token);
 Token GetToken();
 
 #endif

@@ -6,5 +6,6 @@
 #define MUQ(type, ...) std::make_unique<type>(__VA_ARGS__);
 #define MDU(type) std::_MakeUniq<type>::__single_object
 #define VDX(atype, btype) std::vector<std::pair<atype, btype>>
+#define CMP(a, b) !std::string(a).compare(b)
 // std::_MakeUniq<DwordExpression>::__single_object result = std ::make_unique<DwordExpression>(CurrentInteger);
 #endif

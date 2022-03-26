@@ -35,7 +35,7 @@ ParserFlags Flags;
 Token CurrentToken;
 Token GetNextToken() { return CurrentToken = GetToken(); }
 
-std::map<char, Precedence> BinaryPrecedence;
+std::map<std::string, Precedence> BinaryPrecedence;
 
 UQP(llvm::LLVMContext) GlobalContext;
 UQP(llvm::IRBuilder<>) Builder;
@@ -121,14 +121,16 @@ UQP(Expression) ParseDispatcher() {
 			return ParseParenthetical();
 		case '{': // '}'
 			return ParseBlock();
-		default: return ParseError("Unknown token value.");
+		default: PrintToken(CurrentToken); return ParseError("Unknown token value.");
 		}
 	}
 }
 
 Precedence GetTokenPrecedence() {
-	if (!isascii(CurrentToken.Value)) return PRECEDENCE_INVALID;
-	Precedence precedence = BinaryPrecedence[CurrentToken.Value];
+	if (BinaryPrecedence.find(CurrentOperator) == BinaryPrecedence.end())
+		return PRECEDENCE_INVALID;
+	// if (!isascii(CurrentToken.Value)) return PRECEDENCE_INVALID;
+	Precedence precedence = BinaryPrecedence[CurrentOperator];
 	return precedence;
 }
 
@@ -143,7 +145,7 @@ UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS) {
 		Precedence tokenPrecedence = GetTokenPrecedence();
 		if (tokenPrecedence <= precedence) return LHS;
 
-		char binaryOperator = CurrentToken.Value;
+		std::string binaryOperator = CurrentOperator;
 		GetNextToken();
 
 		UQP(Expression) RHS = ParseUnary();
@@ -160,13 +162,11 @@ UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS) {
 }
 
 UQP(Expression) ParseUnary() {
-	if (!BinaryPrecedence[CurrentToken.Value]) return ParseDispatcher();
+	if (GetTokenPrecedence() == PRECEDENCE_INVALID) return ParseDispatcher();
 
-	char operator_ = CurrentToken.Value;
+	std::string operator_ = CurrentOperator;
 	GetNextToken();
-	printf("Operator = %c, Current = %c\n", operator_, CurrentToken.Value);
 	if (UQP(Expression) operand = ParseUnary()) {
-		printf("Return\n");
 		return MUQ(UnaryExpression, operator_, std::move(operand));
 	}
 	return nullptr;
@@ -258,7 +258,8 @@ UQP(SignatureNode) ParseOperatorSignature() {
 	SignatureType signatureType = CurrentIdentifier == "unary" ? SIGNATURE_UNARY : SIGNATURE_BINARY;
 	Precedence precedence = PRECEDENCE_USER_DEFAULT;
 
-	std::string functionName = "#op::" + CurrentIdentifier + "::#" + GetNextToken().Value;
+	GetNextToken();
+	std::string functionName = "#op::" + CurrentIdentifier + "::#" + CurrentOperator;
 	GetNextToken();
 
 	if (CurrentToken.Type == LEXEME_INTEGER) {
@@ -321,8 +322,9 @@ UQP(FunctionNode) ParseImplementation() {
 	UQP(SignatureNode) signature = ParseSignature();
 	if (!signature) return nullptr;
 
-	if (UQP(Expression) expression = ParseExpression())
+	if (UQP(Expression) expression = ParseExpression()) {
 		return MUQ(FunctionNode, std::move(signature), std::move(expression));
+	}
 	return nullptr;
 }
 
@@ -374,7 +376,7 @@ SSA *VariableExpression::Render() {
 }
 
 SSA *BinaryExpression::Render() {
-	if (Operator == '=') {
+	if (CMP("=", Operator)) {
 		VariableExpression *LAssignment = static_cast<VariableExpression*>(LHS.get());
 		if (!LAssignment) return CodeError("Assignment on fire.");
 		SSA *value = RHS->Render();
@@ -388,25 +390,30 @@ SSA *BinaryExpression::Render() {
 	SSA *left = LHS->Render();
 	SSA *right = RHS->Render();
 	if (!left || !right) return nullptr;
-	switch (Operator) {
-	case '+':
-		return Builder->CreateAdd(left, right, "xls_add");
-	case '-':
-		return Builder->CreateSub(left, right, "xls_subtract");
-	case '*':
-		return Builder->CreateMul(left, right, "xls_multiply");
-	case '<':
-		return Builder->CreateICmpULT(left, right, "xls_lt_compare");
-	case '>':
-		return Builder->CreateICmpUGT(left, right, "xls_gt_compare");
-	default:
-		break;
-	}
+	JMPIF(Operator, "+", Operators_plus);
+	JMPIF(Operator, "-", Operators_minus);
+	JMPIF(Operator, "*", Operators_multiply);
+	JMPIF(Operator, "<", Operators_lt_compare);
+	JMPIF(Operator, ">", Operators_gt_compare);
+	goto Operators_end;
+ Operators_plus:
+	return Builder->CreateAdd(left, right, "xls_add");
+ Operators_minus:
+	return Builder->CreateSub(left, right, "xls_subtract");
+ Operators_multiply:
+	return Builder->CreateMul(left, right, "xls_multiply");
+ Operators_lt_compare:
+	return Builder->CreateICmpULT(left, right, "xls_lt_compare");
+ Operators_gt_compare:
+	return Builder->CreateICmpUGT(left, right, "xls_gt_compare");
+ Operators_end:
 
 	llvm::Function *function = getFunction(std::string("#op::binary::#") + Operator);
 	if (!function) return CodeError("Unknown binary operator.");
 	SSA *Operands[2] = { left, right };
-	return Builder->CreateCall(function, Operands, "xls_binary_operation");
+	llvm::CallInst* callInstance = Builder->CreateCall(function, Operands, "xls_binary_operation");
+	callInstance->setCallingConv(function->getCallingConv());
+	return callInstance;
 }
 
 SSA *UnaryExpression::Render() {

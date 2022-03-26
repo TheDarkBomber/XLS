@@ -68,18 +68,18 @@ public:
 };
 
 class BinaryExpression : public Expression {
-	char Operator;
+	std::string Operator;
 	UQP(Expression) LHS, RHS;
 public:
-	BinaryExpression(char operator_, UQP(Expression) LHS_, UQP(Expression) RHS_) : Operator(operator_), LHS(std::move(LHS_)), RHS(std::move(RHS_)) {}
+	BinaryExpression(std::string operator_, UQP(Expression) LHS_, UQP(Expression) RHS_) : Operator(operator_), LHS(std::move(LHS_)), RHS(std::move(RHS_)) {}
 	SSA *Render() override;
 };
 
 class UnaryExpression : public Expression {
-	char Operator;
+	std::string Operator;
 	UQP(Expression) Operand;
 public:
-	UnaryExpression(char operator_, UQP(Expression) operand) : Operator(operator_), Operand(std::move(operand)) {}
+	UnaryExpression(std::string operator_, UQP(Expression) operand) : Operator(operator_), Operand(std::move(operand)) {}
 	SSA *Render() override;
 };
 
@@ -125,9 +125,11 @@ public:
 	const std::string &GetName() const { return Name; }
 	bool Unary() const { return Operator && Arguments.size() == 1; }
 	bool Binary() const { return Operator && Arguments.size() == 2; }
-	char GetOperatorName() const {
+	std::string GetOperatorName() const {
 		assert(Operator && "Assert that signature is signature for an operator.");
-		return Name[Name.size() - 1];
+		// return Name[Name.size() - 1];
+		// return Unary() ? Name.substr(13) : Name.substr(14);
+		return Name.substr(12 + Arguments.size());
 	}
 	Precedence GetOperatorPrecedence() const { return OperatorPrecedence; }
 };
@@ -141,6 +143,7 @@ public:
 };
 
 extern std::string CurrentIdentifier;
+extern std::string CurrentOperator;
 extern dword CurrentInteger;
 
 UQP(Expression) ParseExpression();
