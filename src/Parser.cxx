@@ -44,6 +44,7 @@ UQP(llvm::legacy::FunctionPassManager) GlobalFPM;
 UQP(JITCompiler) GlobalJIT;
 
 std::map<std::string, UQP(SignatureNode)> FunctionSignatures;
+std::map<std::string, llvm::BasicBlock*> AllonymousLabels;
 
 std::map<std::string, Alloca*> AllonymousValues;
 
@@ -73,10 +74,10 @@ UQP(Expression) ParseParenthetical() {
 	return inside;
 }
 
-UQP(Expression) ParseIdentifier() {
+UQP(Expression) ParseIdentifier(bool isVolatile) {
 	std::string identifier = CurrentIdentifier;
 	GetNextToken();
-	if (CurrentToken.Value != '(') return MUQ(VariableExpression, identifier);
+	if (CurrentToken.Value != '(') return MUQ(VariableExpression, identifier, isVolatile);
 
 	GetNextToken();
 	std::vector<UQP(Expression)> arguments;
@@ -111,10 +112,17 @@ UQP(Expression) ParseDispatcher() {
 	case LEXEME_WHILE:
 		if (CurrentToken.Subtype == LEXEME_ELSE) return ParseWhile(true);
 		return ParseWhile();
+	case LEXEME_LABEL:
+		return ParseLabel();
+	case LEXEME_JUMP:
+		return ParseJump();
 	case LEXEME_ELSE:
 		return nullptr;
 	case LEXEME_DWORD_VARIABLE:
 		return ParseDwordDeclaration();
+	case LEXEME_VOLATILE:
+		GetNextToken();
+		return ParseExpression(true);
 	default:
 		switch (CurrentToken.Value) {
 		case '(': // ')'
@@ -134,13 +142,13 @@ Precedence GetTokenPrecedence() {
 	return precedence;
 }
 
-UQP(Expression) ParseExpression() {
+UQP(Expression) ParseExpression(bool isVolatile) {
 	UQP(Expression) LHS = ParseUnary();
 	if (!LHS) return nullptr;
-	return ParseBinary(PRECEDENCE_INVALID, std::move(LHS));
+	return ParseBinary(PRECEDENCE_INVALID, std::move(LHS), isVolatile);
 }
 
-UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS) {
+UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS, bool isVolatile) {
 	for(;;) {
 		Precedence tokenPrecedence = GetTokenPrecedence();
 		if (tokenPrecedence <= precedence) return LHS;
@@ -153,11 +161,11 @@ UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS) {
 
 		Precedence nextPrecedence = GetTokenPrecedence();
 		if (tokenPrecedence < nextPrecedence) {
-			RHS = ParseBinary((Precedence)(tokenPrecedence + 1), std::move(RHS));
+			RHS = ParseBinary((Precedence)(tokenPrecedence + 1), std::move(RHS), isVolatile);
 			if (!RHS) return nullptr;
 		}
 
-		LHS = MUQ(BinaryExpression, binaryOperator, std::move(LHS), std::move(RHS));
+		LHS = MUQ(BinaryExpression, binaryOperator, std::move(LHS), std::move(RHS), isVolatile);
 	}
 }
 
@@ -191,6 +199,22 @@ UQP(Expression) ParseBlock() {
 	}
 	GetNextToken();
 	return MUQ(BlockExpression, std::move(expressions));
+}
+
+UQP(Expression) ParseLabel() {
+	GetNextToken();
+	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier name for label.");
+	std::string name = CurrentIdentifier;
+	GetNextToken();
+	return MUQ(LabelExpression, name);
+}
+
+UQP(Expression) ParseJump() {
+	GetNextToken();
+	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier name for jump.");
+	std::string label = CurrentIdentifier;
+	GetNextToken();
+	return MUQ(JumpExpression, label);
 }
 
 UQP(Expression) ParseIf() {
@@ -372,7 +396,9 @@ SSA *DwordExpression::Render() {
 SSA *VariableExpression::Render() {
 	Alloca *value = AllonymousValues[Name];
 	if (!value) CodeError("Reference to undeclared variable.");
-	return Builder->CreateLoad(value->getAllocatedType(), value, Name.c_str());
+	llvm::LoadInst *loadInstance = Builder->CreateLoad(value->getAllocatedType(), value, Name.c_str());
+	loadInstance->setVolatile(Volatile);
+	return loadInstance;
 }
 
 SSA *BinaryExpression::Render() {
@@ -383,7 +409,8 @@ SSA *BinaryExpression::Render() {
 		if (!value) return nullptr;
 		SSA *variable = AllonymousValues[LAssignment->GetName()];
 		if (!variable) return CodeError("Unknown variable name.");
-		Builder->CreateStore(value, variable);
+		llvm::StoreInst *storeInstance = Builder->CreateStore(value, variable);
+		storeInstance->setVolatile(Volatile);
 		return value;
 	}
 
@@ -488,6 +515,20 @@ SSA *BlockExpression::Render() {
 	}
 
 	return ExpressionVector.back();
+}
+
+SSA *LabelExpression::Render() {
+	llvm::Function *function = Builder->GetInsertBlock()->getParent();
+	llvm::BasicBlock *label = llvm::BasicBlock::Create(*GlobalContext, Name, function);
+	Builder->CreateBr(label);
+	Builder->SetInsertPoint(label);
+	AllonymousLabels[Name] = label;
+	return label;
+}
+
+SSA *JumpExpression::Render() {
+	if (AllonymousLabels.find(Label) == AllonymousLabels.end()) return CodeError("Cannot find label.");
+	return Builder->CreateBr(AllonymousLabels[Label]);
 }
 
 SSA *IfExpression::Render() {

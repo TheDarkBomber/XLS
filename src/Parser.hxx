@@ -56,8 +56,9 @@ public:
 
 class VariableExpression : public Expression {
 	std::string Name;
+	bool Volatile;
 public:
-	VariableExpression(const std::string &name) : Name(name) {}
+	VariableExpression(const std::string &name, bool isVolatile = false) : Name(name), Volatile(isVolatile) {}
 	SSA *Render() override;
 	const std::string &GetName() const { return Name; }
 };
@@ -72,8 +73,9 @@ public:
 class BinaryExpression : public Expression {
 	std::string Operator;
 	UQP(Expression) LHS, RHS;
+	bool Volatile;
 public:
-	BinaryExpression(std::string operator_, UQP(Expression) LHS_, UQP(Expression) RHS_) : Operator(operator_), LHS(std::move(LHS_)), RHS(std::move(RHS_)) {}
+	BinaryExpression(std::string operator_, UQP(Expression) LHS_, UQP(Expression) RHS_, bool isVolatile = false) : Operator(operator_), LHS(std::move(LHS_)), RHS(std::move(RHS_)), Volatile(isVolatile) {}
 	SSA *Render() override;
 };
 
@@ -90,6 +92,20 @@ class CallExpression : public Expression {
 	std::vector<UQP(Expression)> Arguments;
 public:
 	CallExpression(const std::string &called, std::vector<UQP(Expression)> arguments) : Called(called), Arguments(std::move(arguments)) {}
+	SSA *Render() override;
+};
+
+class LabelExpression : public Expression {
+	std::string Name;
+public:
+	LabelExpression(const std::string &name) : Name(name) {}
+	SSA *Render() override;
+};
+
+class JumpExpression : public Expression {
+	std::string Label;
+public:
+	JumpExpression(const std::string &label) : Label(label) {}
 	SSA *Render() override;
 };
 
@@ -148,18 +164,20 @@ extern std::string CurrentIdentifier;
 extern std::string CurrentOperator;
 extern dword CurrentInteger;
 
-UQP(Expression) ParseExpression();
+UQP(Expression) ParseExpression(bool isVolatile = false);
 UQP(Expression) ParseDwordExpression();
 UQP(Expression) ParseParenthetical();
-UQP(Expression) ParseIdentifier();
+UQP(Expression) ParseIdentifier(bool isVolatile = false);
 UQP(Expression) ParseDispatcher();
 UQP(Expression) ParseIf();
 UQP(Expression) ParseWhile(bool doWhile = false);
 UQP(Expression) ParseUnary();
 UQP(Expression) ParseDwordDeclaration();
 UQP(Expression) ParseBlock();
+UQP(Expression) ParseLabel();
+UQP(Expression) ParseJump();
 
-UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS);
+UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS, bool isVolatile = false);
 
 UQP(SignatureNode) ParseSignature();
 UQP(SignatureNode) ParseExtern();

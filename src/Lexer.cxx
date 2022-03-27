@@ -38,6 +38,9 @@ Token GetToken() {
 		JMPIF(CurrentIdentifier, "win64cc", GetToken_kw_calling);
 		JMPIF(CurrentIdentifier, "while", GetToken_kw_while);
 		JMPIF(CurrentIdentifier, "dowhile", GetToken_kw_dowhile);
+		JMPIF(CurrentIdentifier, "label", GetToken_kw_label);
+		JMPIF(CurrentIdentifier, "jump", GetToken_kw_jump);
+		JMPIF(CurrentIdentifier, "volatile", GetToken_kw_volatile);
 		goto GetToken_end_kw;
 
 	GetToken_kw_implement:
@@ -68,6 +71,15 @@ Token GetToken() {
 	GetToken_kw_dowhile:
 		output.Type = LEXEME_WHILE;
 		output.Subtype = LEXEME_ELSE;
+		return output;
+	GetToken_kw_label:
+		output.Type = LEXEME_LABEL;
+		return output;
+	GetToken_kw_jump:
+		output.Type = LEXEME_JUMP;
+		return output;
+	GetToken_kw_volatile:
+		output.Type = LEXEME_VOLATILE;
 		return output;
 	GetToken_end_kw:
 		output.Type = LEXEME_IDENTIFIER;
