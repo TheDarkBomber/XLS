@@ -38,6 +38,9 @@ static void Handle() {
 		case LEXEME_OPERATOR:
 			HandleOperatorDefinition();
 			break;
+		case LEXEME_DWORD_VARIABLE:
+			HandleGlobalDword();
+			break;
 		default:
 			switch (CurrentToken.Value) {
 			case ';':

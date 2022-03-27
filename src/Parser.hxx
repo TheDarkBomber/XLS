@@ -47,6 +47,11 @@ public:
 	virtual SSA *Render() = 0;
 };
 
+class Statement {
+public:
+	virtual SSA *Render() = 0;
+};
+
 class DwordExpression : public Expression {
 	dword Value;
 public:
@@ -69,6 +74,7 @@ public:
 	DwordDeclarationExpression(VDX(std::string, UQP(Expression)) variableNames) : VariableNames(std::move(variableNames)) {}
 	SSA *Render() override;
 };
+
 
 class BinaryExpression : public Expression {
 	std::string Operator;
@@ -160,6 +166,14 @@ public:
 	llvm::Function *Render();
 };
 
+class GlobalDwordNode : public Statement {
+	std::string Name;
+	UQP(Expression) Value;
+public:
+	GlobalDwordNode(const std::string &name, UQP(Expression) value) : Name(name), Value(std::move(value)) {}
+	SSA *Render() override;
+};
+
 extern std::string CurrentIdentifier;
 extern std::string CurrentOperator;
 extern dword CurrentInteger;
@@ -179,6 +193,8 @@ UQP(Expression) ParseJump();
 
 UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS, bool isVolatile = false);
 
+UQP(Statement) ParseGlobalDword();
+
 UQP(SignatureNode) ParseSignature();
 UQP(SignatureNode) ParseExtern();
 
@@ -191,6 +207,7 @@ Precedence GetTokenPrecedence();
 void HandleOperatorDefinition();
 void HandleImplementation();
 void HandleExtern();
+void HandleGlobalDword();
 void HandleUnboundedExpression();
 
 void PreinitialiseJIT();

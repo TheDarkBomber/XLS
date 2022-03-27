@@ -10,6 +10,7 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Function.h>
+#include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/IRBuilder.h>
@@ -47,6 +48,7 @@ std::map<std::string, UQP(SignatureNode)> FunctionSignatures;
 std::map<std::string, llvm::BasicBlock*> AllonymousLabels;
 
 std::map<std::string, Alloca*> AllonymousValues;
+std::map<std::string, llvm::GlobalVariable*> GlobalValues;
 
 void AlertError(const char *error) { llvm::errs() << COLOUR_RED << "Error: " << error << COLOUR_END << "\n"; }
 void AlertWarning(const char *warning) { llvm::errs() << COLOUR_PURPLE << "Warning: " << warning << COLOUR_END << "\n"; }
@@ -56,6 +58,7 @@ void AlertWarning(const char *warning) { llvm::errs() << COLOUR_PURPLE << "Warni
 
 UQP(Expression) ParseError(const char* error) DEFERROR(Flags.ParseError);
 UQP(SignatureNode) ParseError(const char* error, void*) DEFERROR(Flags.ParseError);
+UQP(Statement) ParseError(const char* error, void*, void*) DEFERROR(Flags.ParseError);
 SSA *CodeError(const char* error) DEFERROR(Flags.CodeError);
 
 UQP(Expression) ParseDwordExpression() {
@@ -276,6 +279,14 @@ UQP(Expression) ParseDwordDeclaration() {
 	return MUQ(DwordDeclarationExpression, std::move(variableNames));
 }
 
+UQP(Statement) ParseGlobalDword() {
+	GetNextToken();
+	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier after global DWORD declaration.", nullptr, nullptr);
+	std::string name = CurrentIdentifier;
+	UQP(Expression) value = ParseExpression();
+	return MUQ(GlobalDwordNode, name, std::move(value));
+}
+
 UQP(SignatureNode) ParseOperatorSignature() {
 	if (CurrentIdentifier != "unary" && CurrentIdentifier != "binary") return ParseError("Expected operator type, unary or binary, or standard declaration/implementation of non-binary function.", nullptr);
 
@@ -404,7 +415,12 @@ SSA *DwordExpression::Render() {
 
 SSA *VariableExpression::Render() {
 	Alloca *value = AllonymousValues[Name];
-	if (!value) CodeError("Reference to undeclared variable.");
+	if (!value) {
+		llvm::GlobalVariable *global = GlobalValues[Name];
+		if (!global) CodeError("Reference to undeclared variable.");
+		llvm::LoadInst *gloadInstance = Builder->CreateLoad(global->getType(), global, Name.c_str());
+		return gloadInstance;
+	}
 	llvm::LoadInst *loadInstance = Builder->CreateLoad(value->getAllocatedType(), value, Name.c_str());
 	loadInstance->setVolatile(Volatile);
 	return loadInstance;
@@ -417,7 +433,10 @@ SSA *BinaryExpression::Render() {
 		SSA *value = RHS->Render();
 		if (!value) return nullptr;
 		SSA *variable = AllonymousValues[LAssignment->GetName()];
-		if (!variable) return CodeError("Unknown variable name.");
+		if (!variable) {
+			variable = GlobalValues[LAssignment->GetName()];
+			if (!variable) return CodeError("Unknown variable name.");
+		}
 		llvm::StoreInst *storeInstance = Builder->CreateStore(value, variable);
 		storeInstance->setVolatile(Volatile);
 		return value;
@@ -624,6 +643,13 @@ SSA *DwordDeclarationExpression::Render() {
 	return llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false));
 }
 
+SSA *GlobalDwordNode::Render() {
+	llvm::GlobalVariable *global = new llvm::GlobalVariable(*GlobalModule, llvm::Type::getInt32Ty(*GlobalContext), false, llvm::GlobalValue::ExternalLinkage, 0, Name);
+	global->setInitializer(llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false)));
+	GlobalValues[Name] = global;
+	return global;
+}
+
 llvm::Function *SignatureNode::Render() {
 	std::vector<llvm::Type*> DwordType(Arguments.size(), llvm::Type::getInt32Ty(*GlobalContext));
 
@@ -740,6 +766,14 @@ void HandleExtern() {
 			// fprintf(stderr, "\n");
 			if (Flags.EmitIRToSTDOUT) signatureIR->print(llvm::outs());
 			FunctionSignatures[signature->GetName()] = std::move(signature);
+		}
+	} else GetNextToken();
+}
+
+void HandleGlobalDword() {
+	if (UQP(Statement) globalDword = ParseGlobalDword()) {
+		if (SSA *globalIR = globalDword->Render()) {
+			if (Flags.EmitIRToSTDOUT) globalIR->print(llvm::outs());
 		}
 	} else GetNextToken();
 }
