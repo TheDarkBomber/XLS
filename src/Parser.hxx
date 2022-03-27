@@ -168,9 +168,9 @@ public:
 
 class GlobalDwordNode : public Statement {
 	std::string Name;
-	UQP(Expression) Value;
+	dword Value;
 public:
-	GlobalDwordNode(const std::string &name, UQP(Expression) value) : Name(name), Value(std::move(value)) {}
+	GlobalDwordNode(const std::string &name, dword value = 0) : Name(name), Value(value) {}
 	SSA *Render() override;
 };
 

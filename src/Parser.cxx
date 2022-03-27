@@ -283,8 +283,14 @@ UQP(Statement) ParseGlobalDword() {
 	GetNextToken();
 	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier after global DWORD declaration.", nullptr, nullptr);
 	std::string name = CurrentIdentifier;
-	UQP(Expression) value = ParseExpression();
-	return MUQ(GlobalDwordNode, name, std::move(value));
+	GetNextToken();
+	if (CurrentToken.Value == '=') {
+		GetNextToken();
+		dword value = CurrentInteger;
+		GetNextToken();
+		return MUQ(GlobalDwordNode, name, value);
+	}
+	return MUQ(GlobalDwordNode, name);
 }
 
 UQP(SignatureNode) ParseOperatorSignature() {
@@ -645,7 +651,7 @@ SSA *DwordDeclarationExpression::Render() {
 
 SSA *GlobalDwordNode::Render() {
 	llvm::GlobalVariable *global = new llvm::GlobalVariable(*GlobalModule, llvm::Type::getInt32Ty(*GlobalContext), false, llvm::GlobalValue::ExternalLinkage, 0, Name);
-	global->setInitializer(llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false)));
+	global->setInitializer(llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, Value, false)));
 	GlobalValues[Name] = global;
 	return global;
 }
