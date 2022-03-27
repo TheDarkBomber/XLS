@@ -61,6 +61,14 @@ int main(int argc, char* argv[]) {
 	BinaryPrecedence["%"] = PRECEDENCE_MULTIPLY;
 	BinaryPrecedence["=="] = PRECEDENCE_COMPARE;
 	BinaryPrecedence["!="] = PRECEDENCE_COMPARE;
+	BinaryPrecedence["&&"] = PRECEDENCE_LOGICAL;
+	BinaryPrecedence["||"] = PRECEDENCE_LOGICAL;
+	BinaryPrecedence["^^"] = PRECEDENCE_LOGICAL;
+	BinaryPrecedence["&"] = PRECEDENCE_BITWISE;
+	BinaryPrecedence["|"] = PRECEDENCE_BITWISE;
+	BinaryPrecedence["^"] = PRECEDENCE_BITWISE;
+	BinaryPrecedence["~"] = PRECEDENCE_BITWISE;
+	BinaryPrecedence["!"] = PRECEDENCE_LOGICAL;
 
 	llvm::InitializeAllTargetInfos();
 	llvm::InitializeAllTargets();

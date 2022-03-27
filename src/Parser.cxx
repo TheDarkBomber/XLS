@@ -398,6 +398,12 @@ SSA *BinaryExpression::Render() {
 	JMPIF(Operator, "%", Operators_modulo);
 	JMPIF(Operator, "==", Operators_equal);
 	JMPIF(Operator, "!=", Operators_non_equal);
+	JMPIF(Operator, "&&", Operators_logical_and);
+	JMPIF(Operator, "||", Operators_logical_or);
+	JMPIF(Operator, "^^", Operators_logical_xor);
+	JMPIF(Operator, "&", Operators_bitwise_and);
+	JMPIF(Operator, "|", Operators_bitwise_or);
+	JMPIF(Operator, "^", Operators_bitwise_xor);
 	goto Operators_end;
  Operators_plus:
 	return Builder->CreateAdd(left, right, "xls_add");
@@ -415,6 +421,18 @@ SSA *BinaryExpression::Render() {
 	return Builder->CreateICmpNE(left, right, "xls_non_equal");
  Operators_modulo:
 	return Builder->CreateURem(left, right, "xls_modulo");
+ Operators_bitwise_and:
+	return Builder->CreateAnd(left, right, "xls_bitwise_and");
+ Operators_bitwise_or:
+	return Builder->CreateOr(left, right, "xls_bitwise_or");
+ Operators_bitwise_xor:
+	return Builder->CreateXor(left, right, "xls_bitwise_xor");
+ Operators_logical_and:
+	return Builder->CreateLogicalAnd(left, right, "xls_logical_and");
+ Operators_logical_or:
+	return Builder->CreateLogicalOr(left, right, "xls_logical_or");
+ Operators_logical_xor:
+	return Builder->CreateICmpNE(Builder->CreateLogicalOr(left, right), Builder->CreateLogicalAnd(left, right), "xls_logical_xor");
  Operators_end:
 
 	llvm::Function *function = getFunction(std::string("#op::binary::#") + Operator);
@@ -428,9 +446,21 @@ SSA *BinaryExpression::Render() {
 SSA *UnaryExpression::Render() {
 	SSA *operand = Operand->Render();
 	if (!operand) return nullptr;
+
+	JMPIF(Operator, "!", Unary_not);
+	JMPIF(Operator, "~", Unary_ones_complement);
+	goto Unary_end;
+ Unary_not:
+	operand = Builder->CreateZExt(operand, llvm::Type::getInt32Ty(*GlobalContext), "xls_cast_low_to_i32");
+	return Builder->CreateICmpEQ(operand, llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false)), "xls_unary_not");
+ Unary_ones_complement:
+	return Builder->CreateNot(operand, "xls_ones_complement");
+ Unary_end:
 	llvm::Function *function = getFunction(std::string("#op::unary::#") + Operator);
 	if (!function) return CodeError("Unknown unary operator");
-	return Builder->CreateCall(function, operand, "xls_unary_operation");
+	llvm::CallInst *callInstance = Builder->CreateCall(function, operand, "xls_unary_operation");
+	callInstance->setCallingConv(function->getCallingConv());
+	return callInstance;
 }
 
 SSA *CallExpression::Render() {
