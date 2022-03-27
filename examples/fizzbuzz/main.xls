@@ -20,7 +20,7 @@ impl printmsg(message) {
 
 impl fizzbuzz(to) {
 		 dword i = 1;
-		 while (i < to + 1) {
+		 while (i <= to) {
 		 			 if (i % 15 == 0) {
 					 		printmsg(1); // "Fizz"
 							printmsg(2); // "Buzz"

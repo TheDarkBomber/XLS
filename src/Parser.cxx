@@ -465,6 +465,8 @@ SSA *BinaryExpression::Render() {
 	JMPIF(Operator, "&", Operators_bitwise_and);
 	JMPIF(Operator, "|", Operators_bitwise_or);
 	JMPIF(Operator, "^", Operators_bitwise_xor);
+	JMPIF(Operator, "<=", Operators_lte_compare);
+	JMPIF(Operator, ">=", Operators_gte_compare);
 	goto Operators_end;
  Operators_plus:
 	return Builder->CreateAdd(left, right, "xls_add");
@@ -476,6 +478,10 @@ SSA *BinaryExpression::Render() {
 	return Builder->CreateICmpULT(left, right, "xls_lt_compare");
  Operators_gt_compare:
 	return Builder->CreateICmpUGT(left, right, "xls_gt_compare");
+ Operators_lte_compare:
+	return Builder->CreateICmpULE(left, right, "xls_lte_compare");
+ Operators_gte_compare:
+	return Builder->CreateICmpUGE(left, right, "xls_gte_compare");
  Operators_equal:
 	return Builder->CreateICmpEQ(left, right, "xls_equal");
  Operators_non_equal:
