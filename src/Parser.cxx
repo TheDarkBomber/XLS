@@ -333,9 +333,18 @@ UQP(SignatureNode) ParseSignature() {
 	if (CurrentToken.Value != '(') return ParseError("Expected open parenthesis in function prototype", nullptr);
 
 	std::vector<std::string> argumentNames;
-	while (GetNextToken().Type == LEXEME_IDENTIFIER)
-		argumentNames.push_back(CurrentIdentifier);
-	if (CurrentToken.Value != ')') return ParseError("Expected close parenthesis in function prototype.", nullptr);
+	GetNextToken();
+	// '('
+	if (CurrentToken.Value != ')') {
+		for(;;) {
+			if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier in parameter list of function signature.", nullptr);
+			argumentNames.push_back(CurrentIdentifier);
+			GetNextToken();
+			if (CurrentToken.Value == ')') break;
+			if (CurrentToken.Value != ',') return ParseError("Expected comma in parameter list of function signature.", nullptr);
+			GetNextToken();
+		}
+	}
 	GetNextToken();
 
 	return MUQ(SignatureNode, functionName, std::move(argumentNames), convention);
