@@ -88,12 +88,46 @@ Token GetToken() {
 
 	if (isdigit(LastCharacter)) {
 		std::string NumericalString;
-		while (isdigit(LastCharacter)) {
+		byte radix = 10;
+
+		if (LastCharacter == '0') {
+			char radixCharacter = getchar();
+			LastCharacter = radixCharacter;
+			switch (radixCharacter) {
+			case 'd':
+				break;
+			case 'x':
+				radix = 16;
+				break;
+			case 'b':
+				radix = 2;
+				break;
+			case 'o':
+				radix = 8;
+				break;
+			case 'q':
+				radix = 4;
+				break;
+			case 's':
+				radix = 6;
+				break;
+			case 'n':
+				radix = 36;
+				break;
+			default:
+				CurrentInteger = 0;
+				output.Type = LEXEME_INTEGER;
+				return output;
+			}
+			LastCharacter = getchar();
+		}
+
+		while (IsRadix(LastCharacter, radix)) {
 			NumericalString += LastCharacter;
 			LastCharacter = getchar();
 		}
 
-		CurrentInteger = strtoul(NumericalString.c_str(), 0, 10);
+		CurrentInteger = strtoul(NumericalString.c_str(), 0, radix);
 		output.Type = LEXEME_INTEGER;
 		return output;
 	}
@@ -166,6 +200,16 @@ bool IsIdentifier(char c) {
 		return true;
 	default: return false;
 	}
+}
+
+bool IsRadix(char c, byte radix) {
+	char upper = toupper(c);
+	if (radix < 2) return false;
+	if (!isalnum(c)) return false;
+	if (!isdigit(c) && radix <= 10) return false;
+	if (upper > '9' && upper - radix > 'A') return false;
+	if (upper <= '9' && upper - radix > '0') return false;
+	return true;
 }
 
 void PrintToken(Token token) {

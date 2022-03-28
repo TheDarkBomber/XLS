@@ -1,6 +1,8 @@
 #ifndef __LEXER_XLS_H_
 #define __LEXER_XLS_H_
 
+#include "num.def.h"
+
 enum Lexeme {
 	LEXEME_CHARACTER = 0,
 	LEXEME_END_OF_FILE = 1,
@@ -27,6 +29,7 @@ struct Token {
 
 bool IsOperator(char c);
 bool IsIdentifier(char c);
+bool IsRadix(char c, byte radix);
 void PrintToken(Token token);
 Token GetToken();
 
