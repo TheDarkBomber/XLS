@@ -45,7 +45,7 @@
 					(x-functions-regex (regexp-opt x-functions 'words)))
 
 		`(
-			 (,x-keywords-regex . font-lock-type-face)
+			 (,x-keywords-regex . font-lock-keyword-face)
 			 (,x-types-regex . font-lock-type-face)
 			 (,x-constants-regex . font-lock-constant-face)
 			 (,x-events-regex . font-lock-builtin-face)
