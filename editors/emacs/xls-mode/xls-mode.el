@@ -53,12 +53,15 @@
 			 )))
 
 ;;;###autoload
-(define-derived-mode xls-mode prog-mode "XLS mode"
+(define-derived-mode xls-mode prog-mode "XLS"
 	"Major mode for editing XLS files"
 
 	(setq font-lock-defaults '((xls-mode/xls-highlight)))
 	(setq comment-start "//")
 	(setq comment-end "")
 	(set-syntax-table xls-mode-syntax-table))
+
+;;;###autoload
+(add-to-list 'auto-mode-alist '("\\.xls\\'" . xls-mode))
 
 (provide 'xls-mode)
