@@ -35,21 +35,19 @@
 												 "volatile"))
 					(x-types '("dword"))
 					(x-constants '())
-					(x-events '())
-					(x-functions '())
 
 					(x-keywords-regex (regexp-opt x-keywords 'words))
 					(x-types-regex (regexp-opt x-types 'words))
 					(x-constants-regex (regexp-opt x-constants 'words))
-					(x-events-regex (regexp-opt x-events 'words))
-					(x-functions-regex (regexp-opt x-functions 'words)))
+					(x-variables-regex "[A-Za-z_][A-Za-z0-9\-+/*:@=?!_]*")
+					(x-functions-regex "\\([A-Za-z_][A-Za-z0-9\-+/*:@=?!_]*\\)\(")) ;; )
 
 		`(
 			 (,x-keywords-regex . font-lock-keyword-face)
 			 (,x-types-regex . font-lock-type-face)
 			 (,x-constants-regex . font-lock-constant-face)
-			 (,x-events-regex . font-lock-builtin-face)
-			 (,x-functions-regex . font-lock-function-name-face)
+			 (,x-functions-regex 1 font-lock-function-name-face)
+			 (,x-variables-regex . font-lock-variable-name-face)
 			 )))
 
 ;;;###autoload
