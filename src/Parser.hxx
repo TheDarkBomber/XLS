@@ -151,7 +151,6 @@ public:
 	bool Binary() const { return Operator && Arguments.size() == 2; }
 	std::string GetOperatorName() const {
 		assert(Operator && "Assert that signature is signature for an operator.");
-		// return Name[Name.size() - 1];
 		// return Unary() ? Name.substr(13) : Name.substr(14);
 		return Name.substr(12 + Arguments.size());
 	}

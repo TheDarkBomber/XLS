@@ -140,7 +140,6 @@ UQP(Expression) ParseDispatcher() {
 Precedence GetTokenPrecedence() {
 	if (BinaryPrecedence.find(CurrentOperator) == BinaryPrecedence.end())
 		return PRECEDENCE_INVALID;
-	// if (!isascii(CurrentToken.Value)) return PRECEDENCE_INVALID;
 	Precedence precedence = BinaryPrecedence[CurrentOperator];
 	return precedence;
 }
@@ -747,12 +746,7 @@ void InitialiseJIT() {
 void HandleImplementation() {
 	if (UQP(FunctionNode) functionNode = ParseImplementation()) {
 		if (llvm::Function* functionIR = functionNode->Render()) {
-			// fprintf(stderr, "Generated IR:\n");
-			// functionIR->print(llvm::errs());
-			// fprintf(stderr, "\n");
 			if (Flags.EmitIRToSTDOUT) functionIR->print(llvm::outs());
-			// ExitIfError(GlobalJIT->AddModule(llvm::orc::ThreadSafeModule(std::move(GlobalModule), std::move(GlobalContext))));
-			// InitialiseJIT();
 		}
 	} else GetNextToken();
 }
@@ -760,12 +754,7 @@ void HandleImplementation() {
 void HandleOperatorDefinition() {
   if (UQP(FunctionNode) functionNode = ParseOperatorDefinition()) {
     if (llvm::Function *functionIR = functionNode->Render()) {
-      // fprintf(stderr, "Generated IR:\n");
-      // functionIR->print(llvm::errs());
-      // fprintf(stderr, "\n");
 			if (Flags.EmitIRToSTDOUT) functionIR->print(llvm::outs());
-      // ExitIfError(GlobalJIT->AddModule(llvm::orc::ThreadSafeModule(std::move(GlobalModule), std::move(GlobalContext))));
-      // InitialiseJIT();
     }
   } else GetNextToken();
 }
@@ -773,9 +762,6 @@ void HandleOperatorDefinition() {
 void HandleExtern() {
 	if (UQP(SignatureNode) signature = ParseExtern()) {
 		if (llvm::Function* signatureIR = signature->Render()) {
-			// fprintf(stderr, "Generated IR:\n");
-			// signatureIR->print(llvm::errs());
-			// fprintf(stderr, "\n");
 			if (Flags.EmitIRToSTDOUT) signatureIR->print(llvm::outs());
 			FunctionSignatures[signature->GetName()] = std::move(signature);
 		}
@@ -793,24 +779,6 @@ void HandleGlobalDword() {
 void HandleUnboundedExpression() {
 	if (UQP(FunctionNode) functionNode = ParseUnboundedExpression()) {
 		functionNode->Render();
-		// if (llvm::Function* functionIR = functionNode->Render()) {
-		// 	// llvm::IntrusiveRefCntPtr<llvm::orc::ResourceTracker> RT = GlobalJIT->GetMainJITDylib().createResourceTracker();
-		// 	// llvm::orc::ThreadSafeModule TSM = llvm::orc::ThreadSafeModule(std::move(GlobalModule), std::move(GlobalContext));
-
-		// 	// ExitIfError(GlobalJIT->AddModule(std::move(TSM), RT));
-		// 	// InitialiseJIT();
-
-		// 	// fprintf(stderr, "Executing IR:\n");
-		// 	// functionIR->print(llvm::errs());
-		// 	// fprintf(stderr, "\n");
-
-		// 	llvm::JITEvaluatedSymbol symbol = ExitIfError(GlobalJIT->Lookup("__mistakeman"));
-
-		// 	dword (*I32)() = (dword (*)())(intp)symbol.getAddress();
-		// 	fprintf(stderr, "Evaluated to %u\n", I32());
-
-		// 	ExitIfError(RT->remove());
-		// }
 	} else GetNextToken();
 }
 

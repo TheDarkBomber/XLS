@@ -190,8 +190,5 @@ int main(int argc, char* argv[]) {
 
 	llvm::errs() << COLOUR_GREEN << "Wrote " << filename << " for " << MTune << "\n" << COLOUR_END;
 
-	// fprintf(stderr, "\n");
-	// GlobalModule->print(llvm::errs(), nullptr);
-
 	return 0;
 }
