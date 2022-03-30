@@ -1,9 +1,9 @@
-#+TITLE: XLS README
+#+TITLE: XLS – The X Low-Level Language for Systems Development
 #+AUTHOR: TheDarkBomber
 
-* XLS – The X Low-Level Language for Systems Developement
-	XLS is a procedure-oriented low-level programming language that compiles to LLVM bytecode.
-	As a result of compilation to LLVM bytecode, XLS inherits the portability features of LLVM.
+XLS is a procedure-oriented low-level programming language that compiles to LLVM bytecode.
+As a result of compilation to LLVM bytecode, XLS inherits the portability features of LLVM.
+
 * Syntax overview
 ** Numerical literals
 	 In XLS, numerical literals are simple. ~534~ refers to the number literal 534 in base 10.
@@ -16,6 +16,7 @@
 		 0b11; // Binary, base 2
 		 0q33; // Quaternary, base 4
 		 0s55; // Heximal, base 6
+		 0o77; // Octal, base 8
 		 0d99; // Decimal, base 10
 		 0xFF; // Hexadecimal, base 16
 		 0nZZ; // Niftimal, base 36.
