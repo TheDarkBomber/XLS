@@ -32,4 +32,80 @@ As a result of compilation to LLVM bytecode, XLS inherits the portability featur
 		 // And so is this.
 		 extern coldcc clygro(argument1, argument2); // This function is defined in clygro.xls
 	 #+END_SRC
+** Functions
+	 Functions are defined in XLS using the ~impl~ keyword. ~implement~ is also usable.
+
+	 This keyword defines an implementation for a given function signature. The syntax is described as follows:
+	 #+BEGIN_SRC xls
+		 implement function-name(argument1, argument2) expression;
+		 // Function signatures may also specify a calling convention.
+		 impl webkitjscc wasm-js-weird-function(thing) expression;
+	 #+END_SRC
+	 The above code section defines two functions, ~function-name~ and ~wasm-js-weird-function~.
+	 The latter function specifies that it uses the WebkitJS calling convention, which is a calling convention that
+	 JavaScript on the web uses, presumably.
+
+	 ~expression~ indicates an expression, in this case a reference to the variable expression,
+	 which is not very useful but you can replace it by any expression, for instance:
+	 #+BEGIN_SRC xls
+		 impl triple(numerical) 3 * numerical; // Function contains a binary operation expression, multiplying triple by 3.
+		 impl triple-those-less-than-5(numerical) {
+			if (numerical < 5) 3 * numerical
+			else numerical;
+			// Note well: If is an expression, and the if line does not end with a semicolon as the else line is part of the if expression.
+		 };
+		 // Function above uses a block expression, which is a sequence of expressions.
+	 #+END_SRC
+* Building
+	To build XLS, you require the following dependencies:
+		- Core utilities and binary utilities.
+		- General Compiler Collection, though you may try to get it to work with your favourite C++ compiler instead.
+		- Make.
+		- LLVM, version 13 at least.
+
+	Then, simply:
+	#+BEGIN_SRC sh
+		git clone https://github.com/TheDarkBomber/XLS
+		cd xls
+		make
+	#+END_SRC
+	If you are using a Windows system, you are without hope to build XLS.
+* Usage
+	Currently, the only way to compile an XLS program is to use the ~~xls~~ binary,
+	which should be installed in the ~~build/xls~~ folder of this repository after
+	building. It is planned to create a frontend to XLS called ~~xlc~~ that will
+	support flag syntax, however this does not yet exist.
+
+	To compile an XLS program called ~~main.xls~~, assuming ~~build~~, or otherwise,
+	the XLS binary is in the path, perform the following:
+	#+BEGIN_SRC sh
+		xls < main.xls
+	#+END_SRC
+	This will output a file, ~~output.o~~ in the current working directory. To specify
+	a name for this file:
+	#+BEGIN_SRC sh
+		xls out main.o < main.xls
+	#+END_SRC
+	This will output a file, ~~main.o~~ in the current working directory.
+
+	~~xls~~ also specifies other flags, such as ~~module~~. The flag ~~module Project~~
+	will use the friendly name ~~Project~~ as the module name. Do not worry if you do not
+	know what this means.
+
+	The ~~mtune~~ flag specifies which CPU type the program will be tuned for. For example,
+	~~mtune znver2~~ will emit code tuned to AMD Zen 2 processors. By default, the tune is generic.
+
+	There is also a ~~march~~ flag which specifies a target triple. This is useful for cross-compilation.
+	You must use a target triple that LLVM accepts. For instance, the flag ~~march hexagon-pc-linux-android~~
+	will target the Hexagon instruction set for the Linux operating system using Android. By default,
+	~~xls~~ will use the target triple that matches that of the host system.
+
+	There is also an ~~asm~~ flag which outputs assembler code instead of object code.
+	Relatedly, there is also an ~~ir~~ flag, which outputs the LLVM IR bytecode rendered by
+	the XLS compiler to standard output, which is useful for debugging.
+
+	Finally, there exists the flag ~~ignorehandleerrors~~, which ignores errors raised during parsing
+	and rendering. Note well that not all errors are ignorable, as some errors may result in a segmentation
+	fault immediately when rendering is attempted in the handler. Use of this flag is not advised.
+	Also note, that errors will still be reported with this flag enabled.
 
