@@ -31,37 +31,37 @@ extern printd(numeral);
 
 // Helper function for printing.
 impl printmsg(message) {
-		 if (message == 1) {
-		 		putchard(70); // 'F'
-				putchard(105); // 'i'
-				putchard(122); // 'z'
-				putchard(122); // 'z'
-		 } else if (message = 2) {
-		 	 	putchard(66); // 'B'
-				putchard(117); // 'u'
-				putchard(122); // 'z'
-				putchard(122); // 'z'
-		 };
+	if (message == 1) {
+		putchard(70); // 'F'
+		putchard(105); // 'i'
+		putchard(122); // 'z'
+		putchard(122); // 'z'
+	} else if (message = 2) {
+		putchard(66); // 'B'
+		putchard(117); // 'u'
+		putchard(122); // 'z'
+		putchard(122); // 'z'
+	};
 }
 
 impl fizzbuzz(to) {
-		 dword i = 1;
-		 while (i <= to) {
-		 			 if (i % 15 == 0) {
-					 		printmsg(1); // "Fizz"
-							printmsg(2); // "Buzz"
-							putchard(10); // '\n'
-					 } else if (i % 3 == 0) {
-					 	  printmsg(1); // "Fizz"
-							putchard(10); // '\n'
-					 } else if (i % 5 == 0) {
-					 	  printmsg(2); // "Buzz"
-							putchard(10); // '\n'
-					 } else printd(i);
-					 i = i + 1;
-		 };
+	dword i = 1;
+	while (i <= to) {
+		if (i % 15 == 0) {
+			printmsg(1); // "Fizz"
+			printmsg(2); // "Buzz"
+			putchard(10); // '\n'
+		} else if (i % 3 == 0) {
+			printmsg(1); // "Fizz"
+			putchard(10); // '\n'
+		} else if (i % 5 == 0) {
+			printmsg(2); // "Buzz"
+			putchard(10); // '\n'
+		} else printd(i);
+		i = i + 1;
+	};
 }
 
 impl main(argc) {
-		 fizzbuzz(100); // Print fizzbuzz to 100.
+	fizzbuzz(100); // Print fizzbuzz to 100.
 }
