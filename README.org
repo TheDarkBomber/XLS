@@ -1,0 +1,34 @@
+#+TITLE: XLS README
+#+AUTHOR: TheDarkBomber
+
+* XLS – The X Low-Level Language for Systems Developement
+	XLS is a procedure-oriented low-level programming language that compiles to LLVM bytecode.
+	As a result of compilation to LLVM bytecode, XLS inherits the portability features of LLVM.
+* Syntax overview
+** Numerical literals
+	 In XLS, numerical literals are simple. ~534~ refers to the number literal 534 in base 10.
+	 XLS also offers the ability to express number literals in other radices. For example,
+	 ~0d534~ refers to the number literal 534 in base 10. :p
+
+	 ~0xFF~ refers to the number literal FF in base 16, which is equal to 255 in base 10.
+	 XLS also supports the following radices:
+	 #+BEGIN_SRC xls
+		 0b11; // Binary, base 2
+		 0q33; // Quaternary, base 4
+		 0s55; // Heximal, base 6
+		 0d99; // Decimal, base 10
+		 0xFF; // Hexadecimal, base 16
+		 0nZZ; // Niftimal, base 36.
+
+		 // Numerical literals are case insensitive
+		 0xFF == 0xff;
+		 0nZZ = 0nzz;
+	 #+END_SRC
+** Comments
+	 Comments are performed using the standard C/C++ syntax.
+	 #+BEGIN_SRC xls
+		 // This is a comment.
+		 // And so is this.
+		 extern coldcc clygro(argument1, argument2); // This function is defined in clygro.xls
+	 #+END_SRC
+
