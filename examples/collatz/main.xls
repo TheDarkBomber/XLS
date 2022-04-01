@@ -27,9 +27,9 @@
 
 // Uses lib.cxx
 extern printd(ascii);
+extern scand();
 
 impl collatz(number) {
-	printd(number);
 	dowhile (number != 1) {
 		if (number % 2 == 0) number = number / 2
 		else number = 3 * number + 1;
@@ -40,6 +40,7 @@ impl collatz(number) {
 
 
 impl main(argc) {
-	collatz(0xBEE);
+	dword number;
+	while ((number = scand()) != 0) collatz(number);
 	0;
 }
