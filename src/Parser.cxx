@@ -453,6 +453,7 @@ SSA *BinaryExpression::Render() {
 	JMPIF(Operator, "+", Operators_plus);
 	JMPIF(Operator, "-", Operators_minus);
 	JMPIF(Operator, "*", Operators_multiply);
+	JMPIF(Operator, "/", Operators_divide);
 	JMPIF(Operator, "<", Operators_lt_compare);
 	JMPIF(Operator, ">", Operators_gt_compare);
 	JMPIF(Operator, "%", Operators_modulo);
@@ -473,6 +474,8 @@ SSA *BinaryExpression::Render() {
 	return Builder->CreateSub(left, right, "xls_subtract");
  Operators_multiply:
 	return Builder->CreateMul(left, right, "xls_multiply");
+ Operators_divide:
+	return Builder->CreateUDiv(left, right, "xls_divide");
  Operators_lt_compare:
 	return Builder->CreateICmpULT(left, right, "xls_lt_compare");
  Operators_gt_compare:
