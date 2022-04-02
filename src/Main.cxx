@@ -41,6 +41,12 @@ static void Handle() {
 		case LEXEME_DWORD_VARIABLE:
 			HandleGlobalDword();
 			break;
+		case LEXEME_WORD_VARIABLE:
+			HandleGlobalWord();
+			break;
+		case LEXEME_BYTE_VARIABLE:
+			HandleGlobalByte();
+			break;
 		default:
 			switch (CurrentToken.Value) {
 			case ';':

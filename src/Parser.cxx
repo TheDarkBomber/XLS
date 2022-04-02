@@ -296,18 +296,18 @@ UQP(Expression) ParseDeclaration(XLSType type) {
 	return MUQ(DeclarationExpression, std::move(variableNames), type);
 }
 
-UQP(Statement) ParseGlobalDword() {
+UQP(Statement) ParseGlobalVariable(XLSType type) {
 	GetNextToken();
-	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier after global DWORD declaration.", nullptr, nullptr);
+	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier after global variable declaration.", nullptr, nullptr);
 	std::string name = CurrentIdentifier;
 	GetNextToken();
 	if (CurrentToken.Value == '=') {
 		GetNextToken();
 		dword value = CurrentInteger;
 		GetNextToken();
-		return MUQ(GlobalDwordNode, name, value);
+		return MUQ(GlobalVariableNode, name, type, value);
 	}
-	return MUQ(GlobalDwordNode, name);
+	return MUQ(GlobalVariableNode, name, type);
 }
 
 UQP(SignatureNode) ParseOperatorSignature() {
@@ -701,11 +701,11 @@ SSA *DeclarationExpression::Render() {
 	return llvm::ConstantInt::get(*GlobalContext, llvm::APInt(Type.Size, 0, false));
 }
 
-SSA *GlobalDwordNode::Render() {
+SSA *GlobalVariableNode::Render() {
 	llvm::GlobalVariable *global = new llvm::GlobalVariable(*GlobalModule, llvm::Type::getInt32Ty(*GlobalContext), false, llvm::GlobalValue::ExternalLinkage, 0, Name);
-	global->setInitializer(llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, Value, false)));
+	global->setInitializer(llvm::ConstantInt::get(*GlobalContext, llvm::APInt(Type.Size, Value, false)));
 	AnnotatedGlobal aGlobal;
-	aGlobal.Type = DefinedTypes["dword"];
+	aGlobal.Type = Type;
 	aGlobal.Value = global;
 	GlobalValues[Name] = aGlobal;
 	return global;
@@ -845,11 +845,28 @@ void HandleExtern() {
 }
 
 void HandleGlobalDword() {
-	if (UQP(Statement) globalDword = ParseGlobalDword()) {
+	if (UQP(Statement) globalDword = ParseGlobalVariable(DefinedTypes["dword"])) {
 		if (SSA *globalIR = globalDword->Render()) {
 			if (Flags.EmitIRToSTDOUT) globalIR->print(llvm::outs());
 		}
 	} else GetNextToken();
+}
+
+void HandleGlobalWord() {
+	if (UQP(Statement) globalWord = ParseGlobalVariable(DefinedTypes["word"])) {
+		if (SSA *globalIR = globalWord->Render()) {
+			if (Flags.EmitIRToSTDOUT) globalIR->print(llvm::outs());
+		}
+	}
+}
+
+void HandleGlobalByte() {
+  if (UQP(Statement) globalByte = ParseGlobalVariable(DefinedTypes["byte"])) {
+    if (SSA *globalIR = globalByte->Render()) {
+      if (Flags.EmitIRToSTDOUT)
+        globalIR->print(llvm::outs());
+    }
+  }
 }
 
 void HandleUnboundedExpression() {

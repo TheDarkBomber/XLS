@@ -173,11 +173,12 @@ public:
 	llvm::Function *Render();
 };
 
-class GlobalDwordNode : public Statement {
+class GlobalVariableNode : public Statement {
 	std::string Name;
 	dword Value;
+	XLSType Type;
 public:
-	GlobalDwordNode(const std::string &name, dword value = 0) : Name(name), Value(value) {}
+	GlobalVariableNode(const std::string &name, XLSType type, dword value = 0) : Name(name), Type(type), Value(value) {}
 	SSA *Render() override;
 };
 
@@ -211,7 +212,7 @@ UQP(Expression) ParseSizeof();
 
 UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS, bool isVolatile = false);
 
-UQP(Statement) ParseGlobalDword();
+UQP(Statement) ParseGlobalVariable(XLSType type);
 
 UQP(SignatureNode) ParseSignature();
 UQP(SignatureNode) ParseExtern();
@@ -228,6 +229,8 @@ void HandleOperatorDefinition();
 void HandleImplementation();
 void HandleExtern();
 void HandleGlobalDword();
+void HandleGlobalWord();
+void HandleGlobalByte();
 void HandleUnboundedExpression();
 
 void PreinitialiseJIT();
