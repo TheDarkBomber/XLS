@@ -151,10 +151,12 @@ class SignatureNode {
 	bool Operator;
 	Precedence OperatorPrecedence;
 	llvm::CallingConv::ID Convention;
+	XLSType Type;
 public:
-	SignatureNode(const std::string &name, std::vector<std::string> arguments, llvm::CallingConv::ID convention = llvm::CallingConv::C, bool operator_ = false, Precedence precedence = PRECEDENCE_INVALID) : Name(name), Arguments(std::move(arguments)), Convention(convention), Operator(operator_), OperatorPrecedence(precedence) {}
+	SignatureNode(const std::string &name, std::vector<std::string> arguments, const XLSType &type, llvm::CallingConv::ID convention = llvm::CallingConv::C, bool operator_ = false, Precedence precedence = PRECEDENCE_INVALID) : Name(name), Arguments(std::move(arguments)), Type(type), Convention(convention), Operator(operator_), OperatorPrecedence(precedence) {}
 	llvm::Function *Render();
 	const std::string &GetName() const { return Name; }
+	const XLSType &GetType() const { return Type; }
 	bool Unary() const { return Operator && Arguments.size() == 1; }
 	bool Binary() const { return Operator && Arguments.size() == 2; }
 	std::string GetOperatorName() const {

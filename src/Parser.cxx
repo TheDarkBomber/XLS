@@ -335,13 +335,14 @@ UQP(SignatureNode) ParseOperatorSignature() {
 	GetNextToken();
 
 	if (signatureType && argumentNames.size() != signatureType) return ParseError("Invalid number of operands for operator.", nullptr);
-	return MUQ(SignatureNode, functionName, std::move(argumentNames), llvm::CallingConv::Fast, true, precedence);
+	return MUQ(SignatureNode, functionName, std::move(argumentNames), DefinedTypes["dword"], llvm::CallingConv::Fast, true, precedence);
 }
 
 UQP(SignatureNode) ParseSignature() {
 	if (CurrentToken.Type != LEXEME_IDENTIFIER)
 		return ParseError("Expected function name in function signature", nullptr);
 
+	XLSType type = DefinedTypes["dword"];
 	llvm::CallingConv::ID convention = llvm::CallingConv::C;
 	if (CurrentToken.Subtype == LEXEME_CALLING_CONVENTION) {
 		if (!std::string("cdecl").compare(CurrentIdentifier))
@@ -381,7 +382,16 @@ UQP(SignatureNode) ParseSignature() {
 	}
 	GetNextToken();
 
-	return MUQ(SignatureNode, functionName, std::move(argumentNames), convention);
+	if (CurrentToken.Value == ':') {
+		GetNextToken();
+		if (CurrentToken.Subtype != LEXEME_IDENTIFIER) return ParseError("Expected type name in function signature.", nullptr);
+		if (DefinedTypes.find(CurrentIdentifier) == DefinedTypes.end())
+			return ParseError("Unknown type in type signature.", nullptr);
+		type = DefinedTypes[CurrentIdentifier];
+		GetNextToken();
+	}
+
+	return MUQ(SignatureNode, functionName, std::move(argumentNames), type, convention);
 }
 
 UQP(FunctionNode) ParseImplementation() {
@@ -412,7 +422,7 @@ UQP(SignatureNode) ParseExtern() {
 
 UQP(FunctionNode) ParseUnboundedExpression() {
 	if (UQP(Expression) expression = ParseExpression()) {
-		MDU(SignatureNode) signature = MUQ(SignatureNode, "__mistakeman", std::vector<std::string>());
+		MDU(SignatureNode) signature = MUQ(SignatureNode, "__mistakeman", std::vector<std::string>(), DefinedTypes["dword"]);
 		return MUQ(FunctionNode, std::move(signature), std::move(expression));
 	}
 	return nullptr;
@@ -714,7 +724,7 @@ SSA *GlobalVariableNode::Render() {
 llvm::Function *SignatureNode::Render() {
 	std::vector<llvm::Type*> DwordType(Arguments.size(), llvm::Type::getInt32Ty(*GlobalContext));
 
-	llvm::FunctionType *functionType = llvm::FunctionType::get(llvm::Type::getInt32Ty(*GlobalContext), DwordType, false);
+	llvm::FunctionType *functionType = llvm::FunctionType::get(Type.Type, DwordType, false);
 
 	llvm::Function *function = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, Name, GlobalModule.get());
 	function->setCallingConv(Convention);
@@ -749,7 +759,7 @@ llvm::Function *FunctionNode::Render() {
 	}
 
   if (SSA *returnValue = Body->Render()) {
-    Builder->CreateRet(returnValue);
+    Builder->CreateRet(ImplicitCast(signature.GetType(), returnValue));
     llvm::verifyFunction(*function);
     GlobalFPM->run(*function);
     return function;
