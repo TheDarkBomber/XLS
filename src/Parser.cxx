@@ -437,11 +437,11 @@ SSA *VariableExpression::Render() {
 	if (AllonymousValues.find(Name) == AllonymousValues.end()) {
 		if (GlobalValues.find(Name) == GlobalValues.end()) CodeError("Reference to undeclared variable.");
 		AnnotatedGlobal global = GlobalValues[Name];
-		llvm::LoadInst *gloadInstance = Builder->CreateLoad(DefinedTypes[global.Type].Type, global.Value, Name.c_str());
+		llvm::LoadInst *gloadInstance = Builder->CreateLoad(global.Type.Type, global.Value, Name.c_str());
 		return gloadInstance;
 	}
 	Alloca *value = AllonymousValues[Name].Value;
-	llvm::LoadInst *loadInstance = Builder->CreateLoad(value->getAllocatedType(), value, Name.c_str());
+	llvm::LoadInst *loadInstance = Builder->CreateLoad(AllonymousValues[Name].Type.Type, value, Name.c_str());
 	loadInstance->setVolatile(Volatile);
 	return loadInstance;
 }
@@ -458,7 +458,7 @@ SSA *BinaryExpression::Render() {
 			if (GlobalValues.find(LAssignment->GetName()) == GlobalValues.end()) return CodeError("Unknown variable name.");
 			AnnotatedGlobal global = GlobalValues[LAssignment->GetName()];
 			variable = global.Value;
-			llvm::Type *gltype = DefinedTypes[global.Type].Type;
+			llvm::Type *gltype = global.Type.Type;
 			llvm::Type *grtype = value->getType();
 			llvm::StoreInst *gstoreInstance;
 			if (gltype != grtype) {
@@ -472,7 +472,7 @@ SSA *BinaryExpression::Render() {
 		variable = aVariable.Value;
 		llvm::StoreInst *storeInstance;
 		// llvm::StoreInst *storeInstance = Builder->CreateStore(value, variable);
-		XLSType ltype = DefinedTypes[aVariable.Type];
+		XLSType ltype = aVariable.Type;
 		if (ltype.Type != value->getType()) {
 			SSA *casted = Builder->CreateZExtOrTrunc(value, ltype.Type, "xls_cast");
 			storeInstance = Builder->CreateStore(casted, variable);
@@ -686,7 +686,7 @@ SSA *DeclarationExpression::Render() {
 		Builder->CreateStore(definerSSA, alloca);
 
 		AnnotatedValue stored;
-		stored.Type = Type.Name;
+		stored.Type = Type;
 		stored.Value = alloca;
 		AllonymousValues[variableName] = stored;
 	}
@@ -698,7 +698,7 @@ SSA *GlobalDwordNode::Render() {
 	llvm::GlobalVariable *global = new llvm::GlobalVariable(*GlobalModule, llvm::Type::getInt32Ty(*GlobalContext), false, llvm::GlobalValue::ExternalLinkage, 0, Name);
 	global->setInitializer(llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, Value, false)));
 	AnnotatedGlobal aGlobal;
-	aGlobal.Type = "dword";
+	aGlobal.Type = DefinedTypes["dword"];
 	aGlobal.Value = global;
 	GlobalValues[Name] = aGlobal;
 	return global;
@@ -736,7 +736,7 @@ llvm::Function *FunctionNode::Render() {
 		Alloca *alloca = createEntryBlockAlloca(function, argument.getName());
 		Builder->CreateStore(&argument, alloca);
 		AnnotatedValue stored;
-		stored.Type = "dword";
+		stored.Type = DefinedTypes["dword"];
 		stored.Value = alloca;
 		AllonymousValues[std::string(argument.getName())] = stored;
 	}

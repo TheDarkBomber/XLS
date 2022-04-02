@@ -182,12 +182,12 @@ public:
 };
 
 struct AnnotatedValue {
-	std::string Type;
+	XLSType Type;
 	Alloca* Value;
 };
 
 struct AnnotatedGlobal {
-	std::string Type;
+	XLSType Type;
 	llvm::GlobalVariable* Value;
 };
 
