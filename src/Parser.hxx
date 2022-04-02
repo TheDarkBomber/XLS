@@ -6,6 +6,7 @@
 #include <llvm/ADT/StringRef.h>
 #include <llvm/IR/CallingConv.h>
 #include <llvm/IR/Function.h>
+#include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Instructions.h>
 #include <string>
@@ -42,6 +43,12 @@ struct ParserFlags {
 	uint ParseError : 1;
 } __attribute__((packed));
 
+struct XLSType {
+  dword Size;
+  llvm::Type *Type;
+	std::string Name;
+};
+
 class Expression {
 public:
 	virtual SSA *Render() = 0;
@@ -68,13 +75,14 @@ public:
 	const std::string &GetName() const { return Name; }
 };
 
-class DwordDeclarationExpression : public Expression {
+class DeclarationExpression : public Expression {
 	VDX(std::string, UQP(Expression)) VariableNames;
+	XLSType Type;
 public:
-	DwordDeclarationExpression(VDX(std::string, UQP(Expression)) variableNames) : VariableNames(std::move(variableNames)) {}
+	DeclarationExpression(VDX(std::string, UQP(Expression)) variableNames, XLSType type) : VariableNames(std::move(variableNames)), Type(type) {}
+	const XLSType &GetType() const { return Type; }
 	SSA *Render() override;
 };
-
 
 class BinaryExpression : public Expression {
 	std::string Operator;
@@ -173,9 +181,14 @@ public:
 	SSA *Render() override;
 };
 
-struct XLSType {
-	dword Size;
-	llvm::Type* Type;
+struct AnnotatedValue {
+	std::string Type;
+	Alloca* Value;
+};
+
+struct AnnotatedGlobal {
+	std::string Type;
+	llvm::GlobalVariable* Value;
 };
 
 extern std::string CurrentIdentifier;
@@ -190,7 +203,7 @@ UQP(Expression) ParseDispatcher();
 UQP(Expression) ParseIf();
 UQP(Expression) ParseWhile(bool doWhile = false);
 UQP(Expression) ParseUnary();
-UQP(Expression) ParseDwordDeclaration();
+UQP(Expression) ParseDeclaration(XLSType type);
 UQP(Expression) ParseBlock();
 UQP(Expression) ParseLabel();
 UQP(Expression) ParseJump();

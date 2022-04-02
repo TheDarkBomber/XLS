@@ -49,8 +49,8 @@ std::map<std::string, XLSType> DefinedTypes;
 std::map<std::string, UQP(SignatureNode)> FunctionSignatures;
 std::map<std::string, llvm::BasicBlock*> AllonymousLabels;
 
-std::map<std::string, Alloca*> AllonymousValues;
-std::map<std::string, llvm::GlobalVariable*> GlobalValues;
+std::map<std::string, AnnotatedValue> AllonymousValues;
+std::map<std::string, AnnotatedGlobal> GlobalValues;
 
 void AlertError(const char *error) { llvm::errs() << COLOUR_RED << "Error: " << error << COLOUR_END << "\n"; }
 void AlertWarning(const char *warning) { llvm::errs() << COLOUR_PURPLE << "Warning: " << warning << COLOUR_END << "\n"; }
@@ -124,7 +124,9 @@ UQP(Expression) ParseDispatcher() {
 	case LEXEME_ELSE:
 		return nullptr;
 	case LEXEME_DWORD_VARIABLE:
-		return ParseDwordDeclaration();
+		return ParseDeclaration(DefinedTypes["dword"]);
+	case LEXEME_WORD_VARIABLE:
+		return ParseDeclaration(DefinedTypes["word"]);
 	case LEXEME_SIZEOF:
 		return ParseSizeof();
 	case LEXEME_VOLATILE:
@@ -265,10 +267,10 @@ UQP(Expression) ParseWhile(bool doWhile) {
 	return MUQ(WhileExpression, std::move(condition), std::move(body), doWhile);
 }
 
-UQP(Expression) ParseDwordDeclaration() {
+UQP(Expression) ParseDeclaration(XLSType type) {
 	GetNextToken();
 	VDX(std::string, UQP(Expression)) variableNames;
-	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier after DWORD declaration.");
+	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier after declaration.");
 
 	for (;;) {
 		std::string name = CurrentIdentifier;
@@ -285,10 +287,10 @@ UQP(Expression) ParseDwordDeclaration() {
 		if (CurrentToken.Value != ',') break;
 		GetNextToken();
 
-		if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected more identifiers after DWORD declaration.");
+		if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected more identifiers after declaration.");
 	}
 
-	return MUQ(DwordDeclarationExpression, std::move(variableNames));
+	return MUQ(DeclarationExpression, std::move(variableNames), type);
 }
 
 UQP(Statement) ParseGlobalDword() {
@@ -432,13 +434,13 @@ SSA *DwordExpression::Render() {
 }
 
 SSA *VariableExpression::Render() {
-	Alloca *value = AllonymousValues[Name];
-	if (!value) {
-		llvm::GlobalVariable *global = GlobalValues[Name];
-		if (!global) CodeError("Reference to undeclared variable.");
-		llvm::LoadInst *gloadInstance = Builder->CreateLoad(global->getType(), global, Name.c_str());
+	if (AllonymousValues.find(Name) == AllonymousValues.end()) {
+		if (GlobalValues.find(Name) == GlobalValues.end()) CodeError("Reference to undeclared variable.");
+		AnnotatedGlobal global = GlobalValues[Name];
+		llvm::LoadInst *gloadInstance = Builder->CreateLoad(DefinedTypes[global.Type].Type, global.Value, Name.c_str());
 		return gloadInstance;
 	}
+	Alloca *value = AllonymousValues[Name].Value;
 	llvm::LoadInst *loadInstance = Builder->CreateLoad(value->getAllocatedType(), value, Name.c_str());
 	loadInstance->setVolatile(Volatile);
 	return loadInstance;
@@ -450,12 +452,31 @@ SSA *BinaryExpression::Render() {
 		if (!LAssignment) return CodeError("Assignment on fire.");
 		SSA *value = RHS->Render();
 		if (!value) return nullptr;
-		SSA *variable = AllonymousValues[LAssignment->GetName()];
-		if (!variable) {
-			variable = GlobalValues[LAssignment->GetName()];
-			if (!variable) return CodeError("Unknown variable name.");
+		SSA *variable;
+		AnnotatedValue aVariable;
+		if (AllonymousValues.find(LAssignment->GetName()) == AllonymousValues.end()) {
+			if (GlobalValues.find(LAssignment->GetName()) == GlobalValues.end()) return CodeError("Unknown variable name.");
+			AnnotatedGlobal global = GlobalValues[LAssignment->GetName()];
+			variable = global.Value;
+			llvm::Type *gltype = DefinedTypes[global.Type].Type;
+			llvm::Type *grtype = value->getType();
+			llvm::StoreInst *gstoreInstance;
+			if (gltype != grtype) {
+				SSA *gcasted = Builder->CreateZExtOrTrunc(value, gltype, "xls_global_cast");
+				gstoreInstance = Builder->CreateStore(gcasted, variable);
+			} else gstoreInstance = Builder->CreateStore(value, variable);
+			gstoreInstance->setVolatile(Volatile);
+			return gstoreInstance;
 		}
-		llvm::StoreInst *storeInstance = Builder->CreateStore(value, variable);
+		aVariable = AllonymousValues[LAssignment->GetName()];
+		variable = aVariable.Value;
+		llvm::StoreInst *storeInstance;
+		// llvm::StoreInst *storeInstance = Builder->CreateStore(value, variable);
+		XLSType ltype = DefinedTypes[aVariable.Type];
+		if (ltype.Type != value->getType()) {
+			SSA *casted = Builder->CreateZExtOrTrunc(value, ltype.Type, "xls_cast");
+			storeInstance = Builder->CreateStore(casted, variable);
+		} else storeInstance = Builder->CreateStore(value, variable);
 		storeInstance->setVolatile(Volatile);
 		return value;
 	}
@@ -649,7 +670,7 @@ SSA *WhileExpression::Render() {
 	return llvm::Constant::getNullValue(llvm::Type::getInt32Ty(*GlobalContext));
 }
 
-SSA *DwordDeclarationExpression::Render() {
+SSA *DeclarationExpression::Render() {
 	llvm::Function *function = Builder->GetInsertBlock()->getParent();
 	for (uint i = 0, e = VariableNames.size(); i != e; i++) {
 		const std::string &variableName = VariableNames[i].first;
@@ -659,21 +680,27 @@ SSA *DwordDeclarationExpression::Render() {
 		if (definer) {
 			definerSSA = definer->Render();
 			if (!definerSSA) return nullptr;
-		} else definerSSA = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false));
+		} else definerSSA = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(Type.Size, 0, false));
 
 		Alloca *alloca = createEntryBlockAlloca(function, variableName);
 		Builder->CreateStore(definerSSA, alloca);
 
-		AllonymousValues[variableName] = alloca;
+		AnnotatedValue stored;
+		stored.Type = Type.Name;
+		stored.Value = alloca;
+		AllonymousValues[variableName] = stored;
 	}
 
-	return llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false));
+	return llvm::ConstantInt::get(*GlobalContext, llvm::APInt(Type.Size, 0, false));
 }
 
 SSA *GlobalDwordNode::Render() {
 	llvm::GlobalVariable *global = new llvm::GlobalVariable(*GlobalModule, llvm::Type::getInt32Ty(*GlobalContext), false, llvm::GlobalValue::ExternalLinkage, 0, Name);
 	global->setInitializer(llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, Value, false)));
-	GlobalValues[Name] = global;
+	AnnotatedGlobal aGlobal;
+	aGlobal.Type = "dword";
+	aGlobal.Value = global;
+	GlobalValues[Name] = aGlobal;
 	return global;
 }
 
@@ -708,7 +735,10 @@ llvm::Function *FunctionNode::Render() {
   for (llvm::Argument &argument : function->args()) {
 		Alloca *alloca = createEntryBlockAlloca(function, argument.getName());
 		Builder->CreateStore(&argument, alloca);
-		AllonymousValues[std::string(argument.getName())] = alloca;
+		AnnotatedValue stored;
+		stored.Type = "dword";
+		stored.Value = alloca;
+		AllonymousValues[std::string(argument.getName())] = stored;
 	}
 
   if (SSA *returnValue = Body->Render()) {
@@ -742,8 +772,11 @@ void InitialiseModule(std::string moduleName) {
 
 	DwordType.Size = 32;
 	DwordType.Type = llvm::Type::getInt32Ty(*GlobalContext);
+	DwordType.Name = "dword";
+
 	WordType.Size = 16;
 	WordType.Type = llvm::Type::getInt16Ty(*GlobalContext);
+	WordType.Name = "word";
 
 	DefinedTypes["dword"] = DwordType;
 	DefinedTypes["word"] = WordType;
