@@ -59,7 +59,7 @@
 												 "label"
 												 "jump"
 												 "volatile"))
-					(x-types '("dword" "word"))
+					(x-types '("dword" "word" "byte"))
 					(x-auxillary '("sizeof"))
 					(x-constants '())
 

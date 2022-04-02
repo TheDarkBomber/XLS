@@ -45,6 +45,7 @@ UQP(llvm::legacy::FunctionPassManager) GlobalFPM;
 UQP(JITCompiler) GlobalJIT;
 
 std::map<std::string, XLSType> DefinedTypes;
+std::map<llvm::Type*, XLSType> TypeMap;
 
 std::map<std::string, UQP(SignatureNode)> FunctionSignatures;
 std::map<std::string, llvm::BasicBlock*> AllonymousLabels;
@@ -127,6 +128,8 @@ UQP(Expression) ParseDispatcher() {
 		return ParseDeclaration(DefinedTypes["dword"]);
 	case LEXEME_WORD_VARIABLE:
 		return ParseDeclaration(DefinedTypes["word"]);
+	case LEXEME_BYTE_VARIABLE:
+		return ParseDeclaration(DefinedTypes["byte"]);
 	case LEXEME_SIZEOF:
 		return ParseSizeof();
 	case LEXEME_VOLATILE:
@@ -415,6 +418,15 @@ UQP(FunctionNode) ParseUnboundedExpression() {
 	return nullptr;
 }
 
+SSA *ImplicitCast(XLSType type, SSA *toCast) {
+	if (type.Type == toCast->getType()) {
+		printf("Cast to %s is same.\n", type.Name.c_str());
+		return toCast;
+	}
+	SSA *casted = Builder->CreateZExtOrTrunc(toCast, type.Type, "xls_implicit_cast");
+	return casted;
+}
+
 llvm::Function *getFunction(std::string name) {
 	if (llvm::Function *function = GlobalModule->getFunction(name)) return function;
 
@@ -472,11 +484,7 @@ SSA *BinaryExpression::Render() {
 		variable = aVariable.Value;
 		llvm::StoreInst *storeInstance;
 		// llvm::StoreInst *storeInstance = Builder->CreateStore(value, variable);
-		XLSType ltype = aVariable.Type;
-		if (ltype.Type != value->getType()) {
-			SSA *casted = Builder->CreateZExtOrTrunc(value, ltype.Type, "xls_cast");
-			storeInstance = Builder->CreateStore(casted, variable);
-		} else storeInstance = Builder->CreateStore(value, variable);
+		storeInstance = Builder->CreateStore(ImplicitCast(aVariable.Type, value), variable);
 		storeInstance->setVolatile(Volatile);
 		return value;
 	}
@@ -768,7 +776,7 @@ void InitialiseModule(std::string moduleName) {
 	Builder = MUQ(llvm::IRBuilder<>, *GlobalContext);
 
 	// Type definitions.
-	XLSType DwordType, WordType;
+	XLSType DwordType, WordType, ByteType;
 
 	DwordType.Size = 32;
 	DwordType.Type = llvm::Type::getInt32Ty(*GlobalContext);
@@ -778,8 +786,17 @@ void InitialiseModule(std::string moduleName) {
 	WordType.Type = llvm::Type::getInt16Ty(*GlobalContext);
 	WordType.Name = "word";
 
-	DefinedTypes["dword"] = DwordType;
-	DefinedTypes["word"] = WordType;
+	ByteType.Size = 8;
+	ByteType.Type = llvm::Type::getInt8Ty(*GlobalContext);
+	ByteType.Name = "byte";
+
+	DefinedTypes[DwordType.Name] = DwordType;
+	DefinedTypes[WordType.Name] = WordType;
+	DefinedTypes[ByteType.Name] = ByteType;
+
+	TypeMap[DwordType.Type] = DwordType;
+	TypeMap[WordType.Type] = WordType;
+	TypeMap[ByteType.Type] = ByteType;
 }
 
 void PreinitialiseJIT() {

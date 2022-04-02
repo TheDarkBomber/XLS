@@ -220,6 +220,8 @@ UQP(FunctionNode) ParseOperatorDefinition();
 UQP(FunctionNode) ParseImplementation();
 UQP(FunctionNode) ParseUnboundedExpression();
 
+SSA *ImplicitCast(XLSType type, SSA *toCast);
+
 Precedence GetTokenPrecedence();
 
 void HandleOperatorDefinition();
