@@ -59,11 +59,13 @@
 												 "label"
 												 "jump"
 												 "volatile"))
-					(x-types '("dword"))
+					(x-types '("dword" "word"))
+					(x-auxillary '("sizeof"))
 					(x-constants '())
 
 					(x-keywords-regex (regexp-opt x-keywords 'words))
 					(x-types-regex (regexp-opt x-types 'words))
+					(x-auxillary-regex (regexp-opt x-auxillary 'words))
 					(x-constants-regex (regexp-opt x-constants 'words))
 					(x-variables-regex "[A-Za-z_][A-Za-z0-9\-+/*:@=?!_]*")
 					(x-functions-regex "\\([A-Za-z_][A-Za-z0-9\-+/*:@=?!_]*\\)\(")) ;; )
@@ -71,6 +73,7 @@
 		`(
 			 (,x-keywords-regex . font-lock-keyword-face)
 			 (,x-types-regex . font-lock-type-face)
+			 (,x-auxillary-regex . font-lock-builtin-face)
 			 (,x-constants-regex . font-lock-constant-face)
 			 (,x-functions-regex 1 font-lock-function-name-face)
 			 (,x-variables-regex . font-lock-variable-name-face)

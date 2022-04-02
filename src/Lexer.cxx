@@ -41,6 +41,7 @@ Token GetToken() {
 		JMPIF(CurrentIdentifier, "label", GetToken_kw_label);
 		JMPIF(CurrentIdentifier, "jump", GetToken_kw_jump);
 		JMPIF(CurrentIdentifier, "volatile", GetToken_kw_volatile);
+		JMPIF(CurrentIdentifier, "sizeof", GetToken_kw_sizeof);
 		goto GetToken_end_kw;
 
 	GetToken_kw_implement:
@@ -60,6 +61,10 @@ Token GetToken() {
 		return output;
 	GetToken_kw_dword:
 		output.Type = LEXEME_DWORD_VARIABLE;
+		output.Subtype = LEXEME_IDENTIFIER;
+		return output;
+	GetToken_kw_sizeof:
+		output.Type = LEXEME_SIZEOF;
 		return output;
 	GetToken_kw_calling:
 		output.Type = LEXEME_IDENTIFIER;

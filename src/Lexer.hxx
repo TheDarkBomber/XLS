@@ -18,7 +18,8 @@ enum Lexeme {
 	LEXEME_WHILE = 11,
 	LEXEME_LABEL = 12,
 	LEXEME_JUMP = 13,
-	LEXEME_VOLATILE = 14
+	LEXEME_VOLATILE = 14,
+	LEXEME_SIZEOF = 15
 };
 
 struct Token {

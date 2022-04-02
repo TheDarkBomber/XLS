@@ -173,6 +173,11 @@ public:
 	SSA *Render() override;
 };
 
+struct XLSType {
+	dword Size;
+	llvm::Type* Type;
+};
+
 extern std::string CurrentIdentifier;
 extern std::string CurrentOperator;
 extern dword CurrentInteger;
@@ -189,6 +194,7 @@ UQP(Expression) ParseDwordDeclaration();
 UQP(Expression) ParseBlock();
 UQP(Expression) ParseLabel();
 UQP(Expression) ParseJump();
+UQP(Expression) ParseSizeof();
 
 UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS, bool isVolatile = false);
 

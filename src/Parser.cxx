@@ -44,6 +44,8 @@ UQP(llvm::Module) GlobalModule;
 UQP(llvm::legacy::FunctionPassManager) GlobalFPM;
 UQP(JITCompiler) GlobalJIT;
 
+std::map<std::string, XLSType> DefinedTypes;
+
 std::map<std::string, UQP(SignatureNode)> FunctionSignatures;
 std::map<std::string, llvm::BasicBlock*> AllonymousLabels;
 
@@ -123,6 +125,8 @@ UQP(Expression) ParseDispatcher() {
 		return nullptr;
 	case LEXEME_DWORD_VARIABLE:
 		return ParseDwordDeclaration();
+	case LEXEME_SIZEOF:
+		return ParseSizeof();
 	case LEXEME_VOLATILE:
 		GetNextToken();
 		return ParseExpression(true);
@@ -217,6 +221,15 @@ UQP(Expression) ParseJump() {
 	std::string label = CurrentIdentifier;
 	GetNextToken();
 	return MUQ(JumpExpression, label);
+}
+
+UQP(Expression) ParseSizeof() {
+	GetNextToken();
+	if (CurrentToken.Type != LEXEME_IDENTIFIER && CurrentToken.Subtype != LEXEME_IDENTIFIER) return ParseError("Expected type name for sizeof.");
+	std::string type = CurrentIdentifier;
+	GetNextToken();
+	if (DefinedTypes.find(type) == DefinedTypes.end()) return ParseError("Unknown type to calculate the size of.");
+	return MUQ(DwordExpression, DefinedTypes[type].Size / 8);
 }
 
 UQP(Expression) ParseIf() {
@@ -723,6 +736,17 @@ void InitialiseModule(std::string moduleName) {
 	GlobalFPM->doInitialization();
 
 	Builder = MUQ(llvm::IRBuilder<>, *GlobalContext);
+
+	// Type definitions.
+	XLSType DwordType, WordType;
+
+	DwordType.Size = 32;
+	DwordType.Type = llvm::Type::getInt32Ty(*GlobalContext);
+	WordType.Size = 16;
+	WordType.Type = llvm::Type::getInt16Ty(*GlobalContext);
+
+	DefinedTypes["dword"] = DwordType;
+	DefinedTypes["word"] = WordType;
 }
 
 void PreinitialiseJIT() {
