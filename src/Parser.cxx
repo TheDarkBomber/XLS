@@ -774,11 +774,13 @@ void InitialiseModule(std::string moduleName) {
 	GlobalModule = MUQ(llvm::Module, moduleName, *GlobalContext);
 	GlobalFPM = MUQ(llvm::legacy::FunctionPassManager, GlobalModule.get());
 
-	GlobalFPM->add(llvm::createPromoteMemoryToRegisterPass());
-	GlobalFPM->add(llvm::createInstructionCombiningPass());
-	GlobalFPM->add(llvm::createReassociatePass());
-	GlobalFPM->add(llvm::createGVNPass());
-	GlobalFPM->add(llvm::createCFGSimplificationPass());
+	if (!Flags.NoOptimise) {
+		GlobalFPM->add(llvm::createPromoteMemoryToRegisterPass());
+		GlobalFPM->add(llvm::createInstructionCombiningPass());
+		GlobalFPM->add(llvm::createReassociatePass());
+		GlobalFPM->add(llvm::createGVNPass());
+		GlobalFPM->add(llvm::createCFGSimplificationPass());
+	}
 
 	GlobalFPM->doInitialization();
 

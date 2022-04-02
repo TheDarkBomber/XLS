@@ -35,7 +35,8 @@ enum SignatureType {
 };
 
 struct ParserFlags {
-	uint Unused : 3;
+	uint Unused : 2;
+	uint NoOptimise : 1;
 	uint EmitIRToSTDOUT : 1;
 	uint CodeWarning : 1;
 	uint ParseWarning : 1;

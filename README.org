@@ -104,6 +104,11 @@ As a result of compilation to LLVM bytecode, XLS inherits the portability featur
 	Relatedly, there is also an ~ir~ flag, which outputs the LLVM IR bytecode rendered by
 	the XLS compiler to standard output, which is useful for debugging.
 
+	Another flag that may be useful for debugging is the ~pessimise~ flag, which disables
+	optimisations. This will allow you to check if unexpected behaviour was the result of
+	optimisation, or for some other reason. If it is the result of optimisation, note well
+	the ~volatile~ keyword that XLS provides for both assigning and referencing variables.
+
 	Finally, there exists the flag ~ignorehandleerrors~, which ignores errors raised during parsing
 	and rendering. Note well that not all errors are ignorable, as some errors may result in a segmentation
 	fault immediately when rendering is attempted in the handler. Use of this flag is not advised.

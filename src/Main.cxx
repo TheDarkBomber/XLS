@@ -135,6 +135,11 @@ int main(int argc, char* argv[]) {
 			END_ARGV;
 		}
 
+		PARSE_ARGV("pessimise") {
+			Flags.NoOptimise = 1;
+			END_ARGV;
+		}
+
 	continue_argv_parse:
 		currentargc++;
 	}
