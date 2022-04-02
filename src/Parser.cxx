@@ -419,10 +419,7 @@ UQP(FunctionNode) ParseUnboundedExpression() {
 }
 
 SSA *ImplicitCast(XLSType type, SSA *toCast) {
-	if (type.Type == toCast->getType()) {
-		printf("Cast to %s is same.\n", type.Name.c_str());
-		return toCast;
-	}
+	if (type.Type == toCast->getType()) return toCast;
 	SSA *casted = Builder->CreateZExtOrTrunc(toCast, type.Type, "xls_implicit_cast");
 	return casted;
 }
@@ -489,6 +486,7 @@ SSA *BinaryExpression::Render() {
 		return value;
 	}
 
+#define RCAST ImplicitCast(TypeMap[left->getType()], right)
 	SSA *left = LHS->Render();
 	SSA *right = RHS->Render();
 	if (!left || !right) return nullptr;
@@ -519,17 +517,17 @@ SSA *BinaryExpression::Render() {
  Operators_divide:
 	return Builder->CreateUDiv(left, right, "xls_divide");
  Operators_lt_compare:
-	return Builder->CreateICmpULT(left, right, "xls_lt_compare");
+	return Builder->CreateICmpULT(left, RCAST, "xls_lt_compare");
  Operators_gt_compare:
-	return Builder->CreateICmpUGT(left, right, "xls_gt_compare");
+	return Builder->CreateICmpUGT(left, RCAST, "xls_gt_compare");
  Operators_lte_compare:
-	return Builder->CreateICmpULE(left, right, "xls_lte_compare");
+	return Builder->CreateICmpULE(left, RCAST, "xls_lte_compare");
  Operators_gte_compare:
-	return Builder->CreateICmpUGE(left, right, "xls_gte_compare");
+	return Builder->CreateICmpUGE(left, RCAST, "xls_gte_compare");
  Operators_equal:
-	return Builder->CreateICmpEQ(left, right, "xls_equal");
+	return Builder->CreateICmpEQ(left, RCAST, "xls_equal");
  Operators_non_equal:
-	return Builder->CreateICmpNE(left, right, "xls_non_equal");
+	return Builder->CreateICmpNE(left, RCAST, "xls_non_equal");
  Operators_modulo:
 	return Builder->CreateURem(left, right, "xls_modulo");
  Operators_bitwise_and:
@@ -545,6 +543,7 @@ SSA *BinaryExpression::Render() {
  Operators_logical_xor:
 	return Builder->CreateICmpNE(Builder->CreateLogicalOr(left, right), Builder->CreateLogicalAnd(left, right), "xls_logical_xor");
  Operators_end:
+#undef RCAST
 
 	llvm::Function *function = getFunction(std::string("#op::binary::#") + Operator);
 	if (!function) return CodeError("Unknown binary operator.");
