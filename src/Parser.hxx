@@ -86,6 +86,14 @@ public:
 	SSA *Render() override;
 };
 
+class CastExpression : public Expression {
+	XLSType Type;
+	UQP(Expression) Value;
+public:
+	CastExpression(XLSType type, UQP(Expression) value) : Type(type), Value(std::move(value)) {}
+	SSA *Render() override;
+};
+
 class BinaryExpression : public Expression {
 	std::string Operator;
 	UQP(Expression) LHS, RHS;

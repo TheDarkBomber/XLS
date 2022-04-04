@@ -276,6 +276,14 @@ UQP(Expression) ParseWhile(bool doWhile) {
 
 UQP(Expression) ParseDeclaration(XLSType type) {
 	GetNextToken();
+	if (CurrentToken.Type == LEXEME_CHARACTER && CurrentToken.Value == '(') {
+		GetNextToken();
+		UQP(Expression) toCast = ParseExpression();
+		if (CurrentToken.Value != ')')
+			return ParseError("Expected close parenthesis in cast expression.");
+		GetNextToken();
+		return MUQ(CastExpression, type, std::move(toCast));
+	}
 	if (CurrentToken.Type != LEXEME_IDENTIFIER) return MUQ(VariableExpression, type.Name);
 	VDX(std::string, UQP(Expression)) variableNames;
 
@@ -474,6 +482,12 @@ SSA *VariableExpression::Render() {
 	llvm::LoadInst *loadInstance = Builder->CreateLoad(AllonymousValues[Name].Type.Type, value, Name.c_str());
 	loadInstance->setVolatile(Volatile);
 	return loadInstance;
+}
+
+SSA *CastExpression::Render() {
+	SSA *toCast = Value->Render();
+	if (!toCast) return nullptr;
+	return ImplicitCast(Type, toCast);
 }
 
 SSA *BinaryExpression::Render() {
