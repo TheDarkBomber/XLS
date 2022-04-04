@@ -2,11 +2,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-extern "C" uint32_t putchard(uint8_t X) {
-  fputc(X, stderr);
-  return 0;
-}
-
 extern "C" uint32_t printd(uint32_t X) {
   fprintf(stderr, "%u\n", X);
   return 0;

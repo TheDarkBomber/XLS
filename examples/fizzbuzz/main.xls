@@ -25,22 +25,21 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Uses lib.cxx
-
-extern putchard(byte ascii);
 extern printd(numeral);
+extern putchar(byte ascii); // LIBC function.
 
 // Helper function for printing.
 impl printmsg(message) {
 	if (message == 1) {
-		putchard(70); // 'F'
-		putchard(105); // 'i'
-		putchard(122); // 'z'
-		putchard(122); // 'z'
+		putchar(70); // 'F'
+		putchar(105); // 'i'
+		putchar(122); // 'z'
+		putchar(122); // 'z'
 	} else if (message = 2) {
-		putchard(66); // 'B'
-		putchard(117); // 'u'
-		putchard(122); // 'z'
-		putchard(122); // 'z'
+		putchar(66); // 'B'
+		putchar(117); // 'u'
+		putchar(122); // 'z'
+		putchar(122); // 'z'
 	};
 }
 
@@ -50,13 +49,13 @@ impl fizzbuzz(to) {
 		if (i % 15 == 0) {
 			printmsg(1); // "Fizz"
 			printmsg(2); // "Buzz"
-			putchard(10); // '\n'
+			putchar(10); // '\n'
 		} else if (i % 3 == 0) {
 			printmsg(1); // "Fizz"
-			putchard(10); // '\n'
+			putchar(10); // '\n'
 		} else if (i % 5 == 0) {
 			printmsg(2); // "Buzz"
-			putchard(10); // '\n'
+			putchar(10); // '\n'
 		} else printd(i);
 		i = i + 1;
 	};

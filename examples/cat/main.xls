@@ -26,11 +26,9 @@
 
 
 extern getchar() : byte; // LIBC function.
-
-// Uses lib.cxx
-extern putchard(byte ascii);
+extern putchar(byte ascii); // LIBC function.
 
 impl main(argc) {
 	byte current;
-	while ((current = getchar()) != 0xFF) putchard(current);
+	while ((current = getchar()) != 0xFF) putchar(current);
 }

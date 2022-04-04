@@ -27,9 +27,7 @@
 // Upcat, like cat but only in uppercase.
 
 extern getchar() : byte; // LIBC function.
-
-// Uses lib.cxx
-extern putchard(byte ascii);
+extern putchar(byte ascii); // LIBC function.
 
 impl upcase(byte ascii) : byte {
 	if (ascii >= 0x61 && ascii <= 0x7A) ascii - 32
@@ -38,5 +36,5 @@ impl upcase(byte ascii) : byte {
 
 impl main(argc) {
 	byte current;
-	while ((current = getchar()) != 0xFF) upcase(current) |> putchard;
+	while ((current = getchar()) != 0xFF) upcase(current) |> putchar;
 }
