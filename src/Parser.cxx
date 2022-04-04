@@ -4,6 +4,7 @@
 #include "colours.def.h"
 #include <llvm/ADT/APInt.h>
 #include <llvm/ExecutionEngine/Orc/ThreadSafeModule.h>
+#include <llvm/IR/Argument.h>
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/CallingConv.h>
 #include <llvm/IR/Constant.h>
@@ -28,6 +29,7 @@
 #include <map>
 #include <ctype.h>
 #include <stdio.h>
+#include <string>
 
 static llvm::ExitOnError ExitIfError;
 
@@ -328,9 +330,9 @@ UQP(SignatureNode) ParseOperatorSignature() {
 
 	if (CurrentToken.Value != '(') return ParseError("Expected open parenthesis in operator prototype.", nullptr);
 
-	std::vector<std::string> argumentNames;
+	VDX(std::string, XLSType) argumentNames;
 	while (GetNextToken().Type == LEXEME_IDENTIFIER)
-		argumentNames.push_back(CurrentIdentifier);
+		argumentNames.push_back(SDX(std::string, XLSType)(CurrentIdentifier, DefinedTypes["dword"]));
 	if (CurrentToken.Value != ')') return ParseError("Expected close parenthesis in operator prototype.", nullptr);
 	GetNextToken();
 
@@ -367,13 +369,20 @@ UQP(SignatureNode) ParseSignature() {
 
 	if (CurrentToken.Value != '(') return ParseError("Expected open parenthesis in function prototype", nullptr);
 
-	std::vector<std::string> argumentNames;
+	VDX(std::string, XLSType) argumentNames;
 	GetNextToken();
 	// '('
 	if (CurrentToken.Value != ')') {
 		for(;;) {
+			XLSType currentType;
+			if (CurrentToken.Subtype == LEXEME_IDENTIFIER) {
+				if (DefinedTypes.find(CurrentIdentifier) == DefinedTypes.end()) return ParseError("Unknown type in parameter list of function signature.", nullptr);
+				currentType = DefinedTypes[CurrentIdentifier];
+				GetNextToken();
+			} else currentType = DefinedTypes["dword"];
+
 			if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier in parameter list of function signature.", nullptr);
-			argumentNames.push_back(CurrentIdentifier);
+			argumentNames.push_back(SDX(std::string, XLSType)(CurrentIdentifier, currentType));
 			GetNextToken();
 			if (CurrentToken.Value == ')') break;
 			if (CurrentToken.Value != ',') return ParseError("Expected comma in parameter list of function signature.", nullptr);
@@ -422,7 +431,7 @@ UQP(SignatureNode) ParseExtern() {
 
 UQP(FunctionNode) ParseUnboundedExpression() {
 	if (UQP(Expression) expression = ParseExpression()) {
-		MDU(SignatureNode) signature = MUQ(SignatureNode, "__mistakeman", std::vector<std::string>(), DefinedTypes["dword"]);
+		MDU(SignatureNode) signature = MUQ(SignatureNode, "__mistakeman", VDX(std::string, XLSType)(), DefinedTypes["dword"]);
 		return MUQ(FunctionNode, std::move(signature), std::move(expression));
 	}
 	return nullptr;
@@ -590,8 +599,10 @@ SSA *CallExpression::Render() {
 	if (called->arg_size() != Arguments.size()) return CodeError("Argument call size mismatch with real argument size.");
 
 	std::vector<SSA*> ArgumentVector;
-	for (uint i = 0, e = Arguments.size(); i != e; i++) {
-		ArgumentVector.push_back(Arguments[i]->Render());
+	uint index = 0;
+
+	for (llvm::Argument &argument : called->args()) {
+		ArgumentVector.push_back(ImplicitCast(TypeMap[argument.getType()], Arguments[index++]->Render()));
 		if (!ArgumentVector.back()) return nullptr;
 	}
 
@@ -722,16 +733,18 @@ SSA *GlobalVariableNode::Render() {
 }
 
 llvm::Function *SignatureNode::Render() {
-	std::vector<llvm::Type*> DwordType(Arguments.size(), llvm::Type::getInt32Ty(*GlobalContext));
+	std::vector<llvm::Type*> ArgumentType;
+	for (uint i = 0; i < Arguments.size(); i++)
+		ArgumentType.push_back(Arguments[i].second.Type);
 
-	llvm::FunctionType *functionType = llvm::FunctionType::get(Type.Type, DwordType, false);
+	llvm::FunctionType *functionType = llvm::FunctionType::get(Type.Type, ArgumentType, false);
 
 	llvm::Function *function = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, Name, GlobalModule.get());
 	function->setCallingConv(Convention);
 
 	uint index = 0;
 	for (llvm::Argument &argument : function->args())
-		argument.setName(Arguments[index++]);
+		argument.setName(Arguments[index++].first);
 
 	return function;
 }

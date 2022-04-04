@@ -2,8 +2,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-extern "C" uint32_t putchard(uint32_t X) {
-  fputc((char)X, stderr);
+extern "C" uint32_t putchard(uint8_t X) {
+  fputc(X, stderr);
   return 0;
 }
 

@@ -26,7 +26,7 @@
 
 // Uses lib.cxx
 
-extern putchard(ascii);
+extern putchard(byte ascii);
 extern printd(numeral);
 
 // Helper function for printing.
