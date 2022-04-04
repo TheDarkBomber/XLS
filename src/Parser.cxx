@@ -698,7 +698,7 @@ SSA *IfExpression::Render() {
 
 	function->getBasicBlockList().push_back(afterBlock);
 	Builder->SetInsertPoint(afterBlock);
-	llvm::PHINode *phiNode = Builder->CreatePHI(llvm::Type::getInt32Ty(*GlobalContext), 2, "xls_if_block");
+	llvm::PHINode *phiNode = Builder->CreatePHI(thenBranch->getType(), 2, "xls_if_block");
 	phiNode->addIncoming(thenBranch, thenBlock);
 	phiNode->addIncoming(ImplicitCast(TypeMap[thenBranch->getType()], elseBranch), elseBlock);
 	return phiNode;
