@@ -132,6 +132,8 @@ UQP(Expression) ParseDispatcher() {
 		return ParseDeclaration(DefinedTypes["word"]);
 	case LEXEME_BYTE_VARIABLE:
 		return ParseDeclaration(DefinedTypes["byte"]);
+	case LEXEME_BOOLE_VARIABLE:
+		return ParseDeclaration(DefinedTypes["boole"]);
 	case LEXEME_SIZEOF:
 		return ParseSizeof();
 	case LEXEME_VOLATILE:
@@ -800,7 +802,7 @@ void InitialiseModule(std::string moduleName) {
 	Builder = MUQ(llvm::IRBuilder<>, *GlobalContext);
 
 	// Type definitions.
-	XLSType DwordType, WordType, ByteType;
+	XLSType DwordType, WordType, ByteType, BooleType;
 
 	DwordType.Size = 32;
 	DwordType.Type = llvm::Type::getInt32Ty(*GlobalContext);
@@ -814,13 +816,19 @@ void InitialiseModule(std::string moduleName) {
 	ByteType.Type = llvm::Type::getInt8Ty(*GlobalContext);
 	ByteType.Name = "byte";
 
+	BooleType.Size = 1;
+	BooleType.Type = llvm::Type::getInt1Ty(*GlobalContext);
+	BooleType.Name = "boole";
+
 	DefinedTypes[DwordType.Name] = DwordType;
 	DefinedTypes[WordType.Name] = WordType;
 	DefinedTypes[ByteType.Name] = ByteType;
+	DefinedTypes[BooleType.Name] = BooleType;
 
 	TypeMap[DwordType.Type] = DwordType;
 	TypeMap[WordType.Type] = WordType;
 	TypeMap[ByteType.Type] = ByteType;
+	TypeMap[BooleType.Type] = BooleType;
 }
 
 void PreinitialiseJIT() {
@@ -892,6 +900,15 @@ void HandleGlobalByte() {
         globalIR->print(llvm::outs());
     }
   }
+}
+
+void HandleGlobalBoole() {
+	if (UQP(Statement) globalBoole = ParseGlobalVariable(DefinedTypes["boole"])) {
+		if (SSA *globalIR = globalBoole->Render()) {
+			if (Flags.EmitIRToSTDOUT)
+				globalIR->print(llvm::outs());
+		}
+	}
 }
 
 void HandleUnboundedExpression() {

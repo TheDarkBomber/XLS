@@ -234,6 +234,7 @@ void HandleExtern();
 void HandleGlobalDword();
 void HandleGlobalWord();
 void HandleGlobalByte();
+void HandleGlobalBoole();
 void HandleUnboundedExpression();
 
 void PreinitialiseJIT();
