@@ -452,9 +452,9 @@ llvm::Function *getFunction(std::string name) {
 	return nullptr;
 }
 
-Alloca *createEntryBlockAlloca(llvm::Function *function, llvm::StringRef variableName) {
+ Alloca *createEntryBlockAlloca(llvm::Function *function, llvm::StringRef variableName, XLSType type = DefinedTypes["dword"]) {
 	llvm::IRBuilder<> apiobuilder(&function->getEntryBlock(), function->getEntryBlock().begin());
-	return apiobuilder.CreateAlloca(llvm::Type::getInt32Ty(*GlobalContext), nullptr, variableName);
+	return apiobuilder.CreateAlloca(type.Type, nullptr, variableName);
 }
 
 SSA *DwordExpression::Render() {
@@ -710,7 +710,7 @@ SSA *DeclarationExpression::Render() {
 			if (!definerSSA) return nullptr;
 		} else definerSSA = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(Type.Size, 0, false));
 
-		Alloca *alloca = createEntryBlockAlloca(function, variableName);
+		Alloca *alloca = createEntryBlockAlloca(function, variableName, Type);
 		Builder->CreateStore(definerSSA, alloca);
 
 		AnnotatedValue stored;
@@ -763,10 +763,10 @@ llvm::Function *FunctionNode::Render() {
 
   AllonymousValues.clear();
   for (llvm::Argument &argument : function->args()) {
-		Alloca *alloca = createEntryBlockAlloca(function, argument.getName());
+		Alloca *alloca = createEntryBlockAlloca(function, argument.getName(), TypeMap[argument.getType()]);
 		Builder->CreateStore(&argument, alloca);
 		AnnotatedValue stored;
-		stored.Type = DefinedTypes["dword"];
+		stored.Type = TypeMap[argument.getType()];
 		stored.Value = alloca;
 		AllonymousValues[std::string(argument.getName())] = stored;
 	}
