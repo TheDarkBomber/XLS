@@ -47,6 +47,9 @@ static void Handle() {
 		case LEXEME_BYTE_VARIABLE:
 			HandleGlobalByte();
 			break;
+		case LEXEME_BOOLE_VARIABLE:
+			HandleGlobalBoole();
+			break;
 		default:
 			switch (CurrentToken.Value) {
 			case ';':
