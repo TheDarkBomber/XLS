@@ -84,6 +84,7 @@ int main(int argc, char* argv[]) {
 	BinaryPrecedence["!"] = PRECEDENCE_LOGICAL;
 	BinaryPrecedence["<="] = PRECEDENCE_COMPARE;
 	BinaryPrecedence[">="] = PRECEDENCE_COMPARE;
+	BinaryPrecedence["|>"] = PRECEDENCE_PIPE;
 
 	llvm::InitializeAllTargetInfos();
 	llvm::InitializeAllTargets();

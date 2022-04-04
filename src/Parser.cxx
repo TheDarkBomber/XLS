@@ -276,8 +276,8 @@ UQP(Expression) ParseWhile(bool doWhile) {
 
 UQP(Expression) ParseDeclaration(XLSType type) {
 	GetNextToken();
+	if (CurrentToken.Type != LEXEME_IDENTIFIER) return MUQ(VariableExpression, type.Name);
 	VDX(std::string, UQP(Expression)) variableNames;
-	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier after declaration.");
 
 	for (;;) {
 		std::string name = CurrentIdentifier;
@@ -505,6 +505,23 @@ SSA *BinaryExpression::Render() {
 		storeInstance = Builder->CreateStore(ImplicitCast(aVariable.Type, value), variable);
 		storeInstance->setVolatile(Volatile);
 		return value;
+	}
+
+	if (CMP("|>", Operator)) {
+		VariableExpression *RFunction = static_cast<VariableExpression*>(RHS.get());
+		if (!RFunction) return CodeError("Pipe on fire.");
+		SSA *lvalue = LHS->Render();
+		if (!lvalue) return nullptr;
+		if (DefinedTypes.find(RFunction->GetName()) != DefinedTypes.end()) {
+			return ImplicitCast(DefinedTypes[RFunction->GetName()], lvalue);
+		}
+		llvm::Function *pipe = getFunction(RFunction->GetName());
+		if (!pipe) return CodeError("Unknown function name in pipe.");
+		if (pipe->arg_size() != 1) return CodeError("Can only pipe into function with one argument.");
+		llvm::Argument *piped = pipe->getArg(0);
+		llvm::CallInst *call = Builder->CreateCall(pipe, ImplicitCast(TypeMap[piped->getType()], lvalue), "xls_pipe");
+		call->setCallingConv(pipe->getCallingConv());
+		return call;
 	}
 
 #define RCAST ImplicitCast(TypeMap[left->getType()], right)
