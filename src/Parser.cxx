@@ -700,7 +700,7 @@ SSA *IfExpression::Render() {
 	Builder->SetInsertPoint(afterBlock);
 	llvm::PHINode *phiNode = Builder->CreatePHI(llvm::Type::getInt32Ty(*GlobalContext), 2, "xls_if_block");
 	phiNode->addIncoming(thenBranch, thenBlock);
-	phiNode->addIncoming(elseBranch, elseBlock);
+	phiNode->addIncoming(ImplicitCast(TypeMap[thenBranch->getType()], elseBranch), elseBlock);
 	return phiNode;
 }
 
@@ -744,7 +744,7 @@ SSA *DeclarationExpression::Render() {
 		} else definerSSA = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(Type.Size, 0, false));
 
 		Alloca *alloca = createEntryBlockAlloca(function, variableName, Type);
-		Builder->CreateStore(definerSSA, alloca);
+		Builder->CreateStore(ImplicitCast(Type, definerSSA), alloca);
 
 		AnnotatedValue stored;
 		stored.Type = Type;
