@@ -1,0 +1,61 @@
+// BSD 2-Clause License
+//
+// Copyright (c)  2022, TheDarkBomber
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//
+// 1. Redistributions of source code must retain the above copyright notice, this
+//    list of conditions and the following disclaimer.
+//
+// 2. Redistributions in binary form must reproduce the above copyright notice,
+//   this list of conditions and the following disclaimer in the documentation
+//   and/or other materials provided with the distribution.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+// FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+extern printchar(byte ascii) : byte; // Defined manually in lib.asm
+
+impl say-hi() : void {
+	printchar(0x48); // 'H'
+	printchar(0x65); // 'e'
+	printchar(0x79); // 'y'
+	printchar(0x20); // ' '
+	printchar(0x74); // 't'
+	printchar(0x68); // 'h'
+	printchar(0x65); // 'e'
+	printchar(0x72); // 'r'
+	printchar(0x65); // 'e'
+	printchar(0x2C); // ','
+	printchar(0x20); // ' '
+	printchar(0x67); // 'g'
+	printchar(0x61); // 'a'
+	printchar(0x6C); // 'l'
+	printchar(0x61); // 'a'
+	printchar(0x78); // 'x'
+	printchar(0x79); // 'y'
+	printchar(0x21); // '!'
+	printchar(0x0A); // newline
+}
+
+impl main(argc) {
+	say-hi();
+	if (argc > 1) {
+		printchar(0x42); // 'B'
+		printchar(0x41); // 'A'
+		printchar(0x44); // 'D'
+		printchar(0x21); // '!'
+		printchar(0x0A); // newline
+		1; // Return error, 1.
+	}
+}
