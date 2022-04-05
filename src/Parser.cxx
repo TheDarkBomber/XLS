@@ -134,6 +134,8 @@ UQP(Expression) ParseDispatcher() {
 		return ParseDeclaration(DefinedTypes["byte"]);
 	case LEXEME_BOOLE_VARIABLE:
 		return ParseDeclaration(DefinedTypes["boole"]);
+	case LEXEME_VOID_VARIABLE:
+		return ParseDeclaration(DefinedTypes["void"]);
 	case LEXEME_SIZEOF:
 		return ParseSizeof();
 	case LEXEME_VOLATILE:
@@ -285,6 +287,7 @@ UQP(Expression) ParseDeclaration(XLSType type) {
 		return MUQ(CastExpression, type, std::move(toCast));
 	}
 	if (CurrentToken.Type != LEXEME_IDENTIFIER) return MUQ(VariableExpression, type.Name);
+	if (type.Name == "void") return ParseError("Cannot declare variable of type void.");
 	VDX(std::string, UQP(Expression)) variableNames;
 
 	for (;;) {
@@ -386,6 +389,7 @@ UQP(SignatureNode) ParseSignature() {
 		for(;;) {
 			XLSType currentType;
 			if (CurrentToken.Subtype == LEXEME_IDENTIFIER) {
+				if (CurrentIdentifier == "void") return ParseError("Void is not a valid argument type.", nullptr);
 				if (DefinedTypes.find(CurrentIdentifier) == DefinedTypes.end()) return ParseError("Unknown type in parameter list of function signature.", nullptr);
 				currentType = DefinedTypes[CurrentIdentifier];
 				GetNextToken();
@@ -449,6 +453,8 @@ UQP(FunctionNode) ParseUnboundedExpression() {
 
 SSA *ImplicitCast(XLSType type, SSA *toCast) {
 	if (type.Type == toCast->getType()) return toCast;
+	if (type.Name == "void" || TypeMap[toCast->getType()].Name == "void")
+		return llvm::Constant::getNullValue(type.Type);
 	SSA *casted = Builder->CreateZExtOrTrunc(toCast, type.Type, "xls_implicit_cast");
 	return casted;
 }
@@ -833,7 +839,7 @@ void InitialiseModule(std::string moduleName) {
 	Builder = MUQ(llvm::IRBuilder<>, *GlobalContext);
 
 	// Type definitions.
-	XLSType DwordType, WordType, ByteType, BooleType;
+	XLSType DwordType, WordType, ByteType, BooleType, VoidType;
 
 	DwordType.Size = 32;
 	DwordType.Type = llvm::Type::getInt32Ty(*GlobalContext);
@@ -851,15 +857,21 @@ void InitialiseModule(std::string moduleName) {
 	BooleType.Type = llvm::Type::getInt1Ty(*GlobalContext);
 	BooleType.Name = "boole";
 
+	VoidType.Size = 0;
+	VoidType.Type = llvm::Type::getVoidTy(*GlobalContext);
+	VoidType.Name = "void";
+
 	DefinedTypes[DwordType.Name] = DwordType;
 	DefinedTypes[WordType.Name] = WordType;
 	DefinedTypes[ByteType.Name] = ByteType;
 	DefinedTypes[BooleType.Name] = BooleType;
+	DefinedTypes[VoidType.Name] = VoidType;
 
 	TypeMap[DwordType.Type] = DwordType;
 	TypeMap[WordType.Type] = WordType;
 	TypeMap[ByteType.Type] = ByteType;
 	TypeMap[BooleType.Type] = BooleType;
+	TypeMap[VoidType.Type] = VoidType;
 }
 
 void PreinitialiseJIT() {

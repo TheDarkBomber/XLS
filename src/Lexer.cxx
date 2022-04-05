@@ -45,6 +45,7 @@ Token GetToken() {
 		JMPIF(CurrentIdentifier, "word", GetToken_kw_word);
 		JMPIF(CurrentIdentifier, "byte", GetToken_kw_byte);
 		JMPIF(CurrentIdentifier, "boole", GetToken_kw_boole);
+		JMPIF(CurrentIdentifier, "void", GetToken_kw_void);
 		goto GetToken_end_kw;
 
 	GetToken_kw_implement:
@@ -76,6 +77,10 @@ Token GetToken() {
 		return output;
 	GetToken_kw_boole:
 		output.Type = LEXEME_BOOLE_VARIABLE;
+		output.Subtype = LEXEME_IDENTIFIER;
+		return output;
+	GetToken_kw_void:
+		output.Type = LEXEME_VOID_VARIABLE;
 		output.Subtype = LEXEME_IDENTIFIER;
 		return output;
 	GetToken_kw_sizeof:
