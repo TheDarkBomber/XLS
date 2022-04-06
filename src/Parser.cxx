@@ -55,8 +55,23 @@ std::map<std::string, llvm::BasicBlock*> AllonymousLabels;
 std::map<std::string, AnnotatedValue> AllonymousValues;
 std::map<std::string, AnnotatedGlobal> GlobalValues;
 
-void AlertError(const char *error) { llvm::errs() << COLOUR_RED << "Error: " << error << COLOUR_END << "\n"; }
-void AlertWarning(const char *warning) { llvm::errs() << COLOUR_PURPLE << "Warning: " << warning << COLOUR_END << "\n"; }
+void AlertError(const char *error) {
+	llvm::errs() <<
+		COLOUR_YELLOW <<
+		"R" << CurrentRow << "C" << CurrentColumn << ": " <<
+		COLOUR_RED <<
+		"Error: " << error << COLOUR_RED_BOLD <<
+		COLOUR_END << "\n";
+}
+
+void AlertWarning(const char *warning) {
+  llvm::errs() <<
+		COLOUR_YELLOW <<
+		"R" << CurrentRow << "C" << CurrentColumn << ": " <<
+		COLOUR_PURPLE <<
+		"Warning: " << warning << COLOUR_PURPLE_BOLD <<
+		COLOUR_END << "\n";
+}
 
 #define DEFERROR(flag) { flag = 1; AlertError(error); return nullptr; }
 #define DEFWARNING(flag) { flag = 1; AlertWaring(warning); return nullptr; }

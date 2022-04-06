@@ -215,6 +215,9 @@ extern std::string CurrentIdentifier;
 extern std::string CurrentOperator;
 extern dword CurrentInteger;
 
+extern dword CurrentRow;
+extern dword CurrentColumn;
+
 UQP(Expression) ParseExpression(bool isVolatile = false);
 UQP(Expression) ParseDwordExpression();
 UQP(Expression) ParseCharacterExpression();

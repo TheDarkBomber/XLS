@@ -1,13 +1,41 @@
 #include "Lexer.hxx"
 #include "num.def.h"
 #include "macros.def.h"
+#include "colours.def.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <string>
+#include <iostream>
 
 std::string CurrentOperator;
 std::string CurrentIdentifier;
 dword CurrentInteger;
+
+qword CurrentRow = 1;
+dword CurrentColumn = 1;
+
+char advance() {
+	char next = getchar();
+	if (next == '\n') {
+		CurrentRow++;
+		CurrentColumn = 0;
+	} else CurrentColumn++;
+	return next;
+}
+
+Token LexicalError(const char* error) {
+	Token output;
+	output.Type = LEXEME_END_OF_FILE;
+	output.Subtype = LEXEME_END_OF_FILE;
+	output.Value = '\0';
+	std::cerr <<
+		COLOUR_YELLOW <<
+		"R" << CurrentRow << "C" << CurrentColumn << ": " <<
+		COLOUR_PURPLE <<
+		"Warning: " << COLOUR_PURPLE_BOLD << error <<
+		COLOUR_END << '\n';
+	return output;
+}
 
 Token GetToken() {
 	static Token output;
@@ -15,11 +43,11 @@ Token GetToken() {
 	output.Subtype = LEXEME_CHARACTER;
 	static char LastCharacter = ' ';
 	CurrentOperator = "";
-	while (isspace(LastCharacter)) LastCharacter = getchar();
+	while (isspace(LastCharacter)) LastCharacter = advance();
 
 	if (isalpha(LastCharacter) || LastCharacter == '_') {
 		CurrentIdentifier = LastCharacter;
-		while (IsIdentifier((LastCharacter = getchar()))) {
+		while (IsIdentifier((LastCharacter = advance()))) {
 			CurrentIdentifier += LastCharacter;
 		}
 
@@ -116,7 +144,7 @@ Token GetToken() {
 		byte radix = 10;
 
 		if (LastCharacter == '0') {
-			char radixCharacter = getchar();
+			char radixCharacter = advance();
 			LastCharacter = radixCharacter;
 			switch (radixCharacter) {
 			case 'd':
@@ -144,12 +172,12 @@ Token GetToken() {
 				output.Type = LEXEME_INTEGER;
 				return output;
 			}
-			LastCharacter = getchar();
+			LastCharacter = advance();
 		}
 
 		while (IsRadix(LastCharacter, radix)) {
 			NumericalString += LastCharacter;
-			LastCharacter = getchar();
+			LastCharacter = advance();
 		}
 
 		CurrentInteger = strtoul(NumericalString.c_str(), 0, radix);
@@ -159,9 +187,9 @@ Token GetToken() {
 
 	if (LastCharacter == '\'') {
 		char CharacterLiteral;
-		LastCharacter = getchar();
+		LastCharacter = advance();
 		if (LastCharacter == '\\') {
-			LastCharacter = getchar();
+			LastCharacter = advance();
 #define SYMEQ(symbol, character) case symbol: CharacterLiteral = character; break
 			switch (LastCharacter) {
 				SYMEQ('0', 0x00);
@@ -200,9 +228,9 @@ Token GetToken() {
 				SYMEQ('%', 0xFF);
 			case 'x':
 			  char buffer[2];
-				buffer[0] = LastCharacter = getchar();
-				buffer[1] = LastCharacter = getchar();
-				if (!IsRadix(buffer[0], 16) || !IsRadix(buffer[1], 16)) return output;
+				buffer[0] = LastCharacter = advance();
+				buffer[1] = LastCharacter = advance();
+				if (!IsRadix(buffer[0], 16) || !IsRadix(buffer[1], 16)) return LexicalError("Arbitrary value character literal malformed.");
 				CharacterLiteral = (char)strtoul(std::string(buffer).c_str(), nullptr, 16);
 				break;
 			default:
@@ -211,19 +239,19 @@ Token GetToken() {
 			}
 #undef SYMEQ
 		} else CharacterLiteral = LastCharacter;
-		if ((LastCharacter = getchar()) != '\'') return output;
-		LastCharacter = getchar();
+		if ((LastCharacter = advance()) != '\'') return LexicalError("Expected closing apostrophe in character literal.");
+		LastCharacter = advance();
 		output.Type = LEXEME_CHARACTER_LITERAL;
 		output.Value = CharacterLiteral;
 		return output;
 	}
 
 	if (LastCharacter == '/') {
-		char nextCharacter = getchar();
+		char nextCharacter = advance();
 		if (nextCharacter == '/') {
 			LastCharacter = nextCharacter;
 			while (LastCharacter != EOF && LastCharacter != '\n' && LastCharacter != '\r' && LastCharacter != '\t')
-				LastCharacter = getchar();
+				LastCharacter = advance();
 
 			if (LastCharacter != EOF) return GetToken();
 		}
@@ -233,7 +261,7 @@ Token GetToken() {
 		CurrentOperator = "";
 		while (IsOperator(LastCharacter)) {
 			CurrentOperator += LastCharacter;
-			LastCharacter = getchar();
+			LastCharacter = advance();
 		}
 		output.Type = LEXEME_CHARACTER;
 		output.Subtype = LEXEME_OPERATOR;
@@ -246,7 +274,7 @@ Token GetToken() {
 		return output;
 	}
 	char current = LastCharacter;
-	LastCharacter = getchar();
+	LastCharacter = advance();
 	output.Type = LEXEME_CHARACTER;
 	output.Value = current;
 	return output;
