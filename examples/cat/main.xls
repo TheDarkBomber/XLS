@@ -30,5 +30,5 @@ extern putchar(byte ascii); // LIBC function.
 
 impl main(argc) {
 	byte current;
-	while ((current = getchar()) != 0xFF) putchar(current);
+	while ((current = getchar()) != '\%') putchar(current);
 }

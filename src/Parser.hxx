@@ -68,6 +68,13 @@ public:
 	SSA *Render() override;
 };
 
+class CharacterExpression : public Expression {
+	char Value;
+public:
+	CharacterExpression(char value) : Value(value) {}
+	SSA *Render() override;
+};
+
 class VariableExpression : public Expression {
 	std::string Name;
 	bool Volatile;
@@ -210,6 +217,7 @@ extern dword CurrentInteger;
 
 UQP(Expression) ParseExpression(bool isVolatile = false);
 UQP(Expression) ParseDwordExpression();
+UQP(Expression) ParseCharacterExpression();
 UQP(Expression) ParseParenthetical();
 UQP(Expression) ParseIdentifier(bool isVolatile = false);
 UQP(Expression) ParseDispatcher();

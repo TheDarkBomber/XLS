@@ -30,11 +30,11 @@ extern getchar() : byte; // LIBC function.
 extern putchar(byte ascii); // LIBC function.
 
 impl lowcase(byte ascii) : byte {
-	if (ascii >= 0x41 && ascii <= 0x5A) ascii + 32
+	if (ascii >= 'A' && ascii <= 'Z') ascii + 32
 	else ascii;
 }
 
 impl main(argc) {
 	byte current;
-	while ((current = getchar()) != 0xFF) lowcase(current) |> putchar;
+	while ((current = getchar()) != '\%') lowcase(current) |> putchar;
 }

@@ -157,6 +157,67 @@ Token GetToken() {
 		return output;
 	}
 
+	if (LastCharacter == '\'') {
+		char CharacterLiteral;
+		LastCharacter = getchar();
+		if (LastCharacter == '\\') {
+			LastCharacter = getchar();
+#define SYMEQ(symbol, character) case symbol: CharacterLiteral = character; break
+			switch (LastCharacter) {
+				SYMEQ('0', 0x00);
+				SYMEQ('H', 0x01);
+				SYMEQ('T', 0x02);
+				SYMEQ('X', 0x03);
+				SYMEQ('E', 0x04);
+				SYMEQ('Q', 0x05);
+				SYMEQ('A', 0x06);
+				SYMEQ('a', '\a');
+				SYMEQ('b', '\b');
+			case 't': SYMEQ('h', '\t');
+				SYMEQ('n', '\n');
+				SYMEQ('v', '\v');
+				SYMEQ('f', '\f');
+				SYMEQ('r', '\r');
+				SYMEQ('O', 0x0E);
+				SYMEQ('I', 0x0F);
+				SYMEQ('D', 0x10);
+				SYMEQ('1', 0x11);
+				SYMEQ('2', 0x12);
+				SYMEQ('3', 0x13);
+				SYMEQ('4', 0x14);
+				SYMEQ('N', 0x15);
+				SYMEQ('Y', 0x16);
+				SYMEQ('B', 0x17);
+				SYMEQ('C', 0x18);
+				SYMEQ('M', 0x19);
+				SYMEQ('S', 0x1A);
+				SYMEQ('$', 0x1B);
+				SYMEQ('F', 0x1C);
+				SYMEQ('G', 0x1D);
+				SYMEQ('R', 0x1E);
+				SYMEQ('U', 0x1F);
+				SYMEQ('*', 0x7F);
+				SYMEQ('%', 0xFF);
+			case 'x':
+			  char buffer[2];
+				buffer[0] = LastCharacter = getchar();
+				buffer[1] = LastCharacter = getchar();
+				if (!IsRadix(buffer[0], 16) || !IsRadix(buffer[1], 16)) return output;
+				CharacterLiteral = (char)strtoul(std::string(buffer).c_str(), nullptr, 16);
+				break;
+			default:
+				CharacterLiteral = LastCharacter;
+				break;
+			}
+#undef SYMEQ
+		} else CharacterLiteral = LastCharacter;
+		if ((LastCharacter = getchar()) != '\'') return output;
+		LastCharacter = getchar();
+		output.Type = LEXEME_CHARACTER_LITERAL;
+		output.Value = CharacterLiteral;
+		return output;
+	}
+
 	if (LastCharacter == '/') {
 		char nextCharacter = getchar();
 		if (nextCharacter == '/') {

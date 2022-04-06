@@ -1,6 +1,6 @@
 ;; BSD 2-Clause License
 ;;
-;; Copyright (c)  2022, name
+;; Copyright (c)  2022, TheDarkBomber
 ;; All rights reserved.
 ;;
 ;; Redistribution and use in source and binary forms, with or without
@@ -28,10 +28,10 @@
 global _start ; Entrypoint.
 extern main ; Defined in main.xls
 
-section .text 									; Code section.
+section .text ; Code section.
 _start:
 	; Call main with argc
-	mov rdi, [rsp] 								; RSP stores the argument count.
+	mov rdi, [rsp] ; RSP stores the argument count.
 	call main
 
 	; EXIT(Return code)

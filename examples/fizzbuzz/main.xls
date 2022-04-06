@@ -31,15 +31,15 @@ extern putchar(byte ascii); // LIBC function.
 // Helper function for printing.
 impl printmsg(message) {
 	if (message == 1) {
-		putchar(70); // 'F'
-		putchar(105); // 'i'
-		putchar(122); // 'z'
-		putchar(122); // 'z'
+		putchar('F');
+		putchar('i');
+		putchar('z');
+		putchar('z');
 	} else if (message = 2) {
-		putchar(66); // 'B'
-		putchar(117); // 'u'
-		putchar(122); // 'z'
-		putchar(122); // 'z'
+		putchar('B');
+		putchar('u');
+		putchar('z');
+		putchar('z');
 	};
 }
 
@@ -49,13 +49,13 @@ impl fizzbuzz(to) {
 		if (i % 15 == 0) {
 			printmsg(1); // "Fizz"
 			printmsg(2); // "Buzz"
-			putchar(10); // '\n'
+			putchar('\n'); // '\n'
 		} else if (i % 3 == 0) {
 			printmsg(1); // "Fizz"
-			putchar(10); // '\n'
+			putchar('\n'); // '\n'
 		} else if (i % 5 == 0) {
 			printmsg(2); // "Buzz"
-			putchar(10); // '\n'
+			putchar('\n');
 		} else printd(i);
 		i = i + 1;
 	};

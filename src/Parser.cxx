@@ -72,6 +72,12 @@ UQP(Expression) ParseDwordExpression() {
 	return std::move(result);
 }
 
+UQP(Expression) ParseCharacterExpression() {
+	UQP(CharacterExpression) result = MUQ(CharacterExpression, CurrentToken.Value);
+	GetNextToken();
+	return std::move(result);
+}
+
 UQP(Expression) ParseParenthetical() {
 	GetNextToken();
 	UQP(Expression) inside = ParseExpression();
@@ -115,6 +121,8 @@ UQP(Expression) ParseDispatcher() {
 		return ParseIdentifier();
 	case LEXEME_INTEGER:
 		return ParseDwordExpression();
+	case LEXEME_CHARACTER_LITERAL:
+		return ParseCharacterExpression();
 	case LEXEME_IF:
 		return ParseIf();
 	case LEXEME_WHILE:
@@ -475,6 +483,10 @@ llvm::Function *getFunction(std::string name) {
 
 SSA *DwordExpression::Render() {
 	return llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, Value, false));
+}
+
+SSA *CharacterExpression::Render() {
+	return llvm::ConstantInt::get(*GlobalContext, llvm::APInt(8, Value, false));
 }
 
 SSA *VariableExpression::Render() {

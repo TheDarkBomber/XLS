@@ -27,35 +27,35 @@
 extern printchar(byte ascii) : byte; // Defined manually in lib.asm
 
 impl say-hi() : void {
-	printchar(0x48); // 'H'
-	printchar(0x65); // 'e'
-	printchar(0x79); // 'y'
-	printchar(0x20); // ' '
-	printchar(0x74); // 't'
-	printchar(0x68); // 'h'
-	printchar(0x65); // 'e'
-	printchar(0x72); // 'r'
-	printchar(0x65); // 'e'
-	printchar(0x2C); // ','
-	printchar(0x20); // ' '
-	printchar(0x67); // 'g'
-	printchar(0x61); // 'a'
-	printchar(0x6C); // 'l'
-	printchar(0x61); // 'a'
-	printchar(0x78); // 'x'
-	printchar(0x79); // 'y'
-	printchar(0x21); // '!'
-	printchar(0x0A); // newline
+	printchar('H');
+	printchar('e');
+	printchar('y');
+	printchar(' ');
+	printchar('t');
+	printchar('h');
+	printchar('e');
+	printchar('r');
+	printchar('e');
+	printchar(',');
+	printchar(' ');
+	printchar('g');
+	printchar('a');
+	printchar('l');
+	printchar('a');
+	printchar('x');
+	printchar('y');
+	printchar('!');
+	printchar('\n');
 }
 
 impl main(argc) {
 	say-hi();
 	if (argc > 1) {
-		printchar(0x42); // 'B'
-		printchar(0x41); // 'A'
-		printchar(0x44); // 'D'
-		printchar(0x21); // '!'
-		printchar(0x0A); // newline
+		printchar('B');
+		printchar('A');
+		printchar('D');
+		printchar('!');
+		printchar('\n');
 		1; // Return error, 1.
 	}
 }

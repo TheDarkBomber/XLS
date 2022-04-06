@@ -37,6 +37,7 @@
 		;; Uses standard // syntax for commenting
 		(modify-syntax-entry ?\/ ". 12b" x-syntax-table)
 		(modify-syntax-entry ?\n "> b" x-syntax-table)
+		(modify-syntax-entry ?\' "\"" x-syntax-table)
 		x-syntax-table))
 
 (setq xls-mode/xls-highlight
