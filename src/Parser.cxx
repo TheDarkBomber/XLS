@@ -159,6 +159,8 @@ UQP(Expression) ParseDispatcher() {
 		return ParseDeclaration(DefinedTypes["boole"]);
 	case LEXEME_VOID_VARIABLE:
 		return ParseDeclaration(DefinedTypes["void"]);
+	case LEXEME_BYTE_PTR:
+		return ParseDeclaration(DefinedTypes["byte*"]);
 	case LEXEME_SIZEOF:
 		return ParseSizeof();
 	case LEXEME_VOLATILE:
@@ -478,6 +480,9 @@ SSA *ImplicitCast(XLSType type, SSA *toCast) {
 	if (type.Type == toCast->getType()) return toCast;
 	if (type.Name == "void" || TypeMap[toCast->getType()].Name == "void")
 		return llvm::Constant::getNullValue(type.Type);
+	if (type.IsPointer) return Builder->CreateIntToPtr(toCast, type.Type, "xls_itp_cast");
+	if (toCast->getType()->isPointerTy())
+		return Builder->CreatePtrToInt(toCast, type.Type, "xls_pti_cast");
 	SSA *casted = Builder->CreateZExtOrTrunc(toCast, type.Type, "xls_implicit_cast");
 	return casted;
 }
@@ -550,6 +555,23 @@ SSA *BinaryExpression::Render() {
 		llvm::StoreInst *storeInstance;
 		// llvm::StoreInst *storeInstance = Builder->CreateStore(value, variable);
 		storeInstance = Builder->CreateStore(ImplicitCast(aVariable.Type, value), variable);
+		storeInstance->setVolatile(Volatile);
+		return value;
+	}
+
+	if (CMP("$=", Operator)) {
+		// TODO: Use C syntax, e.g. *x = 5;
+		VariableExpression *LAssignment = static_cast<VariableExpression*>(LHS.get());
+		if (!LAssignment) return CodeError("Assignment on fire.");
+		SSA *value = RHS->Render();
+		if (!value) return nullptr;
+		AnnotatedValue V;
+		if (AllonymousValues.find(LAssignment->GetName()) == AllonymousValues.end())
+			return CodeError("Unknown pointer name.");
+		V = AllonymousValues[LAssignment->GetName()];
+		if (!V.Type.IsPointer) return CodeError("Non-pointer values cannot be dereferenced.");
+		llvm::StoreInst *storeInstance;
+		storeInstance = Builder->CreateStore(ImplicitCast(DefinedTypes[V.Type.Dereference], value), Builder->CreateLoad(V.Type.Type, V.Value, "xls_assign_pointer"));
 		storeInstance->setVolatile(Volatile);
 		return value;
 	}
@@ -644,12 +666,15 @@ SSA *UnaryExpression::Render() {
 
 	JMPIF(Operator, "!", Unary_not);
 	JMPIF(Operator, "~", Unary_ones_complement);
+	JMPIF(Operator, "*", Unary_dereference);
 	goto Unary_end;
  Unary_not:
 	operand = Builder->CreateZExt(operand, llvm::Type::getInt32Ty(*GlobalContext), "xls_cast_low_to_i32");
 	return Builder->CreateICmpEQ(operand, llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false)), "xls_unary_not");
  Unary_ones_complement:
 	return Builder->CreateNot(operand, "xls_ones_complement");
+ Unary_dereference:
+	return Builder->CreateLoad(DefinedTypes[TypeMap[operand->getType()].Dereference].Type, operand, "xls_dereference");
  Unary_end:
 	llvm::Function *function = getFunction(std::string("#op::unary::#") + Operator);
 	if (!function) return CodeError("Unknown unary operator");
@@ -867,6 +892,7 @@ void InitialiseModule(std::string moduleName) {
 
 	// Type definitions.
 	XLSType DwordType, WordType, ByteType, BooleType, VoidType;
+	XLSType BytePtr;
 
 	DwordType.Size = 32;
 	DwordType.Type = llvm::Type::getInt32Ty(*GlobalContext);
@@ -888,17 +914,25 @@ void InitialiseModule(std::string moduleName) {
 	VoidType.Type = llvm::Type::getVoidTy(*GlobalContext);
 	VoidType.Name = "void";
 
+	BytePtr.Size = 64;
+	BytePtr.Type = llvm::Type::getInt8PtrTy(*GlobalContext);
+	BytePtr.Name = "byte*";
+	BytePtr.IsPointer = true;
+	BytePtr.Dereference = "byte";
+
 	DefinedTypes[DwordType.Name] = DwordType;
 	DefinedTypes[WordType.Name] = WordType;
 	DefinedTypes[ByteType.Name] = ByteType;
 	DefinedTypes[BooleType.Name] = BooleType;
 	DefinedTypes[VoidType.Name] = VoidType;
+	DefinedTypes[BytePtr.Name] = BytePtr;
 
 	TypeMap[DwordType.Type] = DwordType;
 	TypeMap[WordType.Type] = WordType;
 	TypeMap[ByteType.Type] = ByteType;
 	TypeMap[BooleType.Type] = BooleType;
 	TypeMap[VoidType.Type] = VoidType;
+	TypeMap[BytePtr.Type] = BytePtr;
 }
 
 void PreinitialiseJIT() {

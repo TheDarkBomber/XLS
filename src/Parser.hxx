@@ -49,6 +49,8 @@ struct XLSType {
   dword Size;
   llvm::Type *Type;
 	std::string Name;
+	bool IsPointer = false;
+	std::string Dereference = "void";
 };
 
 class Expression {
@@ -78,8 +80,9 @@ public:
 class VariableExpression : public Expression {
 	std::string Name;
 	bool Volatile;
+	bool Dereference;
 public:
-	VariableExpression(const std::string &name, bool isVolatile = false) : Name(name), Volatile(isVolatile) {}
+	VariableExpression(const std::string &name, bool isVolatile = false, bool isDereference = false) : Name(name), Volatile(isVolatile), Dereference(isDereference) {}
 	SSA *Render() override;
 	const std::string &GetName() const { return Name; }
 };
