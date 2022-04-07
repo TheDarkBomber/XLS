@@ -9,10 +9,14 @@
 
 std::string CurrentOperator;
 std::string CurrentIdentifier;
+std::string LError;
 dword CurrentInteger;
 
 qword CurrentRow = 1;
 dword CurrentColumn = 1;
+
+char CharacterLiteral;
+std::string StringLiteral;
 
 char advance() {
 	char next = getchar();
@@ -28,6 +32,7 @@ Token LexicalError(const char* error) {
 	output.Type = LEXEME_END_OF_FILE;
 	output.Subtype = LEXEME_END_OF_FILE;
 	output.Value = '\0';
+	LError = "";
 	std::cerr <<
 		COLOUR_YELLOW <<
 		"R" << CurrentRow << "C" << CurrentColumn << ": " <<
@@ -161,63 +166,27 @@ Token GetToken() {
 	}
 
 	if (LastCharacter == '\'') {
-		char CharacterLiteral;
 		LastCharacter = advance();
-		if (LastCharacter == '\\') {
-			LastCharacter = advance();
-#define SYMEQ(symbol, character) case symbol: CharacterLiteral = character; break
-			switch (LastCharacter) {
-				SYMEQ('0', 0x00);
-				SYMEQ('H', 0x01);
-				SYMEQ('T', 0x02);
-				SYMEQ('X', 0x03);
-				SYMEQ('E', 0x04);
-				SYMEQ('Q', 0x05);
-				SYMEQ('A', 0x06);
-				SYMEQ('a', '\a');
-				SYMEQ('b', '\b');
-			case 't': SYMEQ('h', '\t');
-				SYMEQ('n', '\n');
-				SYMEQ('v', '\v');
-				SYMEQ('f', '\f');
-				SYMEQ('r', '\r');
-				SYMEQ('O', 0x0E);
-				SYMEQ('I', 0x0F);
-				SYMEQ('D', 0x10);
-				SYMEQ('1', 0x11);
-				SYMEQ('2', 0x12);
-				SYMEQ('3', 0x13);
-				SYMEQ('4', 0x14);
-				SYMEQ('N', 0x15);
-				SYMEQ('Y', 0x16);
-				SYMEQ('B', 0x17);
-				SYMEQ('C', 0x18);
-				SYMEQ('M', 0x19);
-				SYMEQ('S', 0x1A);
-				SYMEQ('$', 0x1B);
-				SYMEQ('F', 0x1C);
-				SYMEQ('G', 0x1D);
-				SYMEQ('R', 0x1E);
-				SYMEQ('U', 0x1F);
-				SYMEQ('*', 0x7F);
-				SYMEQ('%', 0xFF);
-			case 'x':
-			  char buffer[2];
-				buffer[0] = LastCharacter = advance();
-				buffer[1] = LastCharacter = advance();
-				if (!IsRadix(buffer[0], 16) || !IsRadix(buffer[1], 16)) return LexicalError("Arbitrary value character literal malformed.");
-				CharacterLiteral = (char)strtoul(std::string(buffer).c_str(), nullptr, 16);
-				break;
-			default:
-				CharacterLiteral = LastCharacter;
-				break;
-			}
-#undef SYMEQ
-		} else CharacterLiteral = LastCharacter;
+		LastCharacter = LexCharacter(LastCharacter);
+		if (LError != "") return LexicalError(LError.c_str());
 		if ((LastCharacter = advance()) != '\'') return LexicalError("Expected closing apostrophe in character literal.");
 		LastCharacter = advance();
 		output.Type = LEXEME_CHARACTER_LITERAL;
 		output.Value = CharacterLiteral;
+		return output;
+	}
+
+	if (LastCharacter == '"') {
+		StringLiteral = "";
+		LastCharacter = advance();
+		while (LastCharacter != '"') {
+			LastCharacter = LexCharacter(LastCharacter);
+			if (LError != "") return LexicalError(LError.c_str());
+			StringLiteral += CharacterLiteral;
+			LastCharacter = advance();
+		}
+		LastCharacter = advance();
+		output.Type = LEXEME_STRING;
 		return output;
 	}
 
@@ -253,6 +222,64 @@ Token GetToken() {
 	output.Type = LEXEME_CHARACTER;
 	output.Value = current;
 	return output;
+}
+
+char LexCharacter(char LastCharacter) {
+	if (LastCharacter == '\\') {
+		LastCharacter = advance();
+#define SYMEQ(symbol, character) case symbol: CharacterLiteral = character; break
+		switch (LastCharacter) {
+			SYMEQ('0', 0x00);
+			SYMEQ('H', 0x01);
+			SYMEQ('T', 0x02);
+			SYMEQ('X', 0x03);
+			SYMEQ('E', 0x04);
+			SYMEQ('Q', 0x05);
+			SYMEQ('A', 0x06);
+			SYMEQ('a', '\a');
+			SYMEQ('b', '\b');
+		case 't': SYMEQ('h', '\t');
+			SYMEQ('n', '\n');
+			SYMEQ('v', '\v');
+			SYMEQ('f', '\f');
+			SYMEQ('r', '\r');
+			SYMEQ('O', 0x0E);
+			SYMEQ('I', 0x0F);
+			SYMEQ('D', 0x10);
+			SYMEQ('1', 0x11);
+			SYMEQ('2', 0x12);
+			SYMEQ('3', 0x13);
+			SYMEQ('4', 0x14);
+			SYMEQ('N', 0x15);
+			SYMEQ('Y', 0x16);
+			SYMEQ('B', 0x17);
+			SYMEQ('C', 0x18);
+			SYMEQ('M', 0x19);
+			SYMEQ('S', 0x1A);
+			SYMEQ('$', 0x1B);
+			SYMEQ('F', 0x1C);
+			SYMEQ('G', 0x1D);
+			SYMEQ('R', 0x1E);
+			SYMEQ('U', 0x1F);
+			SYMEQ('*', 0x7F);
+			SYMEQ('%', 0xFF);
+		case 'x':
+			char buffer[2];
+			buffer[0] = LastCharacter = advance();
+			buffer[1] = LastCharacter = advance();
+			if (!IsRadix(buffer[0], 16) || !IsRadix(buffer[1], 16)) {
+				LError = "Arbitrary value character literal malformed.";
+				return '\0';
+			}
+			CharacterLiteral = (char)strtoul(std::string(buffer).c_str(), nullptr, 16);
+			break;
+		default:
+			CharacterLiteral = LastCharacter;
+			break;
+		}
+#undef SYMEQ
+	} else CharacterLiteral = LastCharacter;
+	return LastCharacter;
 }
 
 bool IsOperator(char c) {
@@ -312,4 +339,5 @@ void PrintToken(Token token) {
 	fprintf(stderr, "Integer = %u\n", CurrentInteger);
 	fprintf(stderr, "Alphanumeric = %s\n", isalnum(token.Value) ? "yes" : "no");
 	fprintf(stderr, "Operator = %s\n", IsOperator(token.Value) ? "yes" : "no");
+	fprintf(stderr, "String = %s\n", StringLiteral.c_str());
 }

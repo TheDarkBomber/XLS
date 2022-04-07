@@ -171,7 +171,7 @@ int main(int argc, char* argv[]) {
 	std::string features = "";
 
 	llvm::TargetOptions options;
-	llvm::Optional<llvm::Reloc::Model> RM = llvm::Optional<llvm::Reloc::Model>();
+	llvm::Optional<llvm::Reloc::Model> RM = llvm::Reloc::DynamicNoPIC;
 	llvm::TargetMachine *targetMachine = target->createTargetMachine(targetTriple, MTune, features, options, RM);
 
 	GlobalModule->setDataLayout(targetMachine->createDataLayout());

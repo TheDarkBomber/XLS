@@ -95,6 +95,12 @@ UQP(Expression) ParseCharacterExpression() {
 	return std::move(result);
 }
 
+UQP(Expression) ParseStringExpression() {
+	UQP(StringExpression) result = MUQ(StringExpression, StringLiteral);
+	GetNextToken();
+	return std::move(result);
+}
+
 UQP(Expression) ParseParenthetical() {
 	GetNextToken();
 	UQP(Expression) inside = ParseExpression();
@@ -142,6 +148,8 @@ UQP(Expression) ParseDispatcher() {
 		return ParseDwordExpression();
 	case LEXEME_CHARACTER_LITERAL:
 		return ParseCharacterExpression();
+	case LEXEME_STRING:
+		return ParseStringExpression();
 	case LEXEME_IF:
 		return ParseIf();
 	case LEXEME_WHILE:
@@ -518,6 +526,28 @@ SSA *CharacterExpression::Render() {
   SSA *R = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(8, Value, false));
 	TypeAnnotation[R] = DefinedTypes["byte"];
   return R;
+}
+
+SSA *StringExpression::Render() {
+	if (!CheckTypeDefined("byte*")) return nullptr;
+	std::vector<llvm::Constant*> elements(Value.size());
+	for (unsigned i = 0; i < Value.size(); i++) {
+		elements[i] = llvm::ConstantInt::get(DefinedTypes["byte"].Type, Value[i]);
+	}
+
+	if (Terminator == ST_NULL) elements.push_back(llvm::ConstantInt::get(DefinedTypes["byte"].Type, 0x00));
+
+	llvm::ArrayType* strType = llvm::ArrayType::get(DefinedTypes["byte"].Type, elements.size());
+
+	llvm::GlobalVariable* global = (llvm::GlobalVariable*)GlobalModule->getOrInsertGlobal("xls_string", strType);
+	global->setInitializer(llvm::ConstantArray::get(strType, elements));
+	global->setConstant(true);
+	global->setLinkage(llvm::GlobalValue::PrivateLinkage);
+	global->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+
+	SSA *R = llvm::ConstantExpr::getBitCast(global, DefinedTypes["byte*"].Type);
+	TypeAnnotation[R] = DefinedTypes["byte*"];
+	return R;
 }
 
 SSA *VariableExpression::Render() {

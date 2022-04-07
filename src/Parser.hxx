@@ -35,6 +35,11 @@ enum SignatureType {
 	SIGNATURE_BINARY = 2
 };
 
+enum StringTermination {
+	ST_NULL = 0,
+	ST_RAW = 1
+};
+
 struct ParserFlags {
 	uint Unused : 2;
 	uint NoOptimise : 1;
@@ -74,6 +79,14 @@ class CharacterExpression : public Expression {
 	char Value;
 public:
 	CharacterExpression(char value) : Value(value) {}
+	SSA *Render() override;
+};
+
+class StringExpression : public Expression {
+	std::string Value;
+	StringTermination Terminator;
+public:
+	StringExpression(std::string value, StringTermination terminator = ST_NULL) : Value(value), Terminator(terminator) {}
 	SSA *Render() override;
 };
 
@@ -222,9 +235,12 @@ extern dword CurrentInteger;
 extern dword CurrentRow;
 extern dword CurrentColumn;
 
+extern std::string StringLiteral;
+
 UQP(Expression) ParseExpression(bool isVolatile = false);
 UQP(Expression) ParseDwordExpression();
 UQP(Expression) ParseCharacterExpression();
+UQP(Expression) ParseStringExpression();
 UQP(Expression) ParseParenthetical();
 UQP(Expression) ParseIdentifier(bool isVolatile = false);
 UQP(Expression) ParseDispatcher();

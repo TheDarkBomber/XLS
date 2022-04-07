@@ -13,17 +13,17 @@ enum Lexeme {
 	LEXEME_IF = 6,
 	LEXEME_ELSE = 7,
 	LEXEME_OPERATOR = 8,
-	LEXEME_UNUSED1 = 9,
+	LEXEME_STRING = 9,
 	LEXEME_CALLING_CONVENTION = 10,
 	LEXEME_WHILE = 11,
 	LEXEME_LABEL = 12,
 	LEXEME_JUMP = 13,
 	LEXEME_VOLATILE = 14,
 	LEXEME_SIZEOF = 15,
-	LEXEME_UNUSED2 = 16,
-	LEXEME_UNUSED3 = 17,
-	LEXEME_UNUSED4 = 18,
-	LEXEME_UNUSED5 = 19,
+	LEXEME_UNUSED1 = 16,
+	LEXEME_UNUSED2 = 17,
+	LEXEME_UNUSED3 = 18,
+	LEXEME_UNUSED4 = 19,
 	LEXEME_CHARACTER_LITERAL = 20
 };
 
@@ -37,6 +37,7 @@ bool IsOperator(char c);
 bool IsIdentifier(char c);
 bool IsRadix(char c, byte radix);
 void PrintToken(Token token);
+char LexCharacter(char LastCharacter);
 Token GetToken();
 
 #endif
