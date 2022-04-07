@@ -683,6 +683,25 @@ SSA *BinaryExpression::Render() {
  }
 
 SSA *UnaryExpression::Render() {
+	if(CMP("&", Operator)) {
+		VariableExpression *LAssignment = static_cast<VariableExpression*>(Operand.get());
+		if (!LAssignment) return CodeError("Address-of operation on fire.");
+		AnnotatedValue V;
+		if (AllonymousValues.find(LAssignment->GetName()) == AllonymousValues.end())
+			return CodeError("Unknown variable name to address.");
+		V = AllonymousValues[LAssignment->GetName()];
+		SSA *value;
+		XLSType PtrType = V.Type;
+		PtrType.Dereference = PtrType.Name;
+		PtrType.Name.push_back('*');
+		PtrType.IsPointer = true;
+		PtrType.Type = PtrType.Type->getPointerTo();
+		if (!CheckTypeDefined(PtrType.Name)) return nullptr;
+		TypeAnnotation[value] = PtrType;
+		value = V.Value;
+		return value;
+	}
+
 	SSA *operand = Operand->Render();
 	if (!operand) return nullptr;
 
