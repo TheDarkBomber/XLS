@@ -255,10 +255,7 @@ Precedence GetTokenPrecedence();
 void HandleOperatorDefinition();
 void HandleImplementation();
 void HandleExtern();
-void HandleGlobalDword();
-void HandleGlobalWord();
-void HandleGlobalByte();
-void HandleGlobalBoole();
+void HandleGlobal();
 void HandleUnboundedExpression();
 
 void PreinitialiseJIT();

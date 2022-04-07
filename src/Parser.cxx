@@ -107,6 +107,8 @@ UQP(Expression) ParseParenthetical() {
 
 UQP(Expression) ParseIdentifier(bool isVolatile) {
 	std::string identifier = CurrentIdentifier;
+	if (DefinedTypes.find(identifier) != DefinedTypes.end())
+		return ParseDeclaration(DefinedTypes[identifier]);
 	GetNextToken();
 	if (CurrentToken.Value != '(') return MUQ(VariableExpression, identifier, isVolatile);
 
@@ -151,20 +153,6 @@ UQP(Expression) ParseDispatcher() {
 		return ParseJump();
 	case LEXEME_ELSE:
 		return nullptr;
-	case LEXEME_DWORD_VARIABLE:
-		return ParseDeclaration(DefinedTypes["dword"]);
-	case LEXEME_WORD_VARIABLE:
-		return ParseDeclaration(DefinedTypes["word"]);
-	case LEXEME_BYTE_VARIABLE:
-		return ParseDeclaration(DefinedTypes["byte"]);
-	case LEXEME_BOOLE_VARIABLE:
-		return ParseDeclaration(DefinedTypes["boole"]);
-	case LEXEME_VOID_VARIABLE:
-		return ParseDeclaration(DefinedTypes["void"]);
-	case LEXEME_BYTE_PTR:
-		return ParseDeclaration(DefinedTypes["byte*"]);
-	case LEXEME_WORD_PTR:
-		return ParseDeclaration(DefinedTypes["word*"]);
 	case LEXEME_SIZEOF:
 		return ParseSizeof();
 	case LEXEME_VOLATILE:
@@ -265,7 +253,7 @@ UQP(Expression) ParseJump() {
 
 UQP(Expression) ParseSizeof() {
 	GetNextToken();
-	if (CurrentToken.Type != LEXEME_IDENTIFIER && CurrentToken.Subtype != LEXEME_IDENTIFIER) return ParseError("Expected type name for sizeof.");
+	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected type name for sizeof.");
 	std::string type = CurrentIdentifier;
 	GetNextToken();
 	if (DefinedTypes.find(type) == DefinedTypes.end()) return ParseError("Unknown type to calculate the size of.");
@@ -417,8 +405,7 @@ UQP(SignatureNode) ParseSignature() {
 	if (CurrentToken.Value != ')') {
 		for(;;) {
 			XLSType currentType;
-			if (CurrentToken.Subtype == LEXEME_IDENTIFIER) {
-				if (CurrentIdentifier == "void") return ParseError("Void is not a valid argument type.", nullptr);
+			if (DefinedTypes.find(CurrentIdentifier) != DefinedTypes.end()) {
 				if (DefinedTypes.find(CurrentIdentifier) == DefinedTypes.end()) return ParseError("Unknown type in parameter list of function signature.", nullptr);
 				currentType = DefinedTypes[CurrentIdentifier];
 				GetNextToken();
@@ -436,7 +423,6 @@ UQP(SignatureNode) ParseSignature() {
 
 	if (CurrentToken.Value == ':') {
 		GetNextToken();
-		if (CurrentToken.Subtype != LEXEME_IDENTIFIER) return ParseError("Expected type name in function signature.", nullptr);
 		if (DefinedTypes.find(CurrentIdentifier) == DefinedTypes.end())
 			return ParseError("Unknown type in type signature.", nullptr);
 		type = DefinedTypes[CurrentIdentifier];
@@ -553,7 +539,7 @@ SSA *CastExpression::Render() {
 }
 
 SSA *PtrRHS(SSA *left, SSA *right) {
-  return Builder->CreateMul(right, llvm::ConstantInt::get(*GlobalContext, llvm::APInt(GetType(right).Size, DefinedTypes[GetType(left).Dereference].Size / 8)));
+  return ImplicitCast(GetType(left), Builder->CreateMul(right, llvm::ConstantInt::get(*GlobalContext, llvm::APInt(GetType(right).Size, DefinedTypes[GetType(left).Dereference].Size / 8))));
 }
 
 SSA *BinaryExpression::Render() {
@@ -941,7 +927,7 @@ void InitialiseModule(std::string moduleName) {
 
 	// Type definitions.
 	XLSType DwordType, WordType, ByteType, BooleType, VoidType;
-	XLSType BytePtr, WordPtr;
+	XLSType BytePtr, WordPtr, ByteDP;
 
 	DwordType.Size = 32;
 	DwordType.Type = llvm::Type::getInt32Ty(*GlobalContext);
@@ -963,6 +949,7 @@ void InitialiseModule(std::string moduleName) {
 	VoidType.Type = llvm::Type::getVoidTy(*GlobalContext);
 	VoidType.Name = "void";
 
+	// TODO: Automatically define pointer types.
 	BytePtr.Size = 64;
 	BytePtr.Type = llvm::Type::getInt8PtrTy(*GlobalContext);
 	BytePtr.Name = "byte*";
@@ -975,6 +962,12 @@ void InitialiseModule(std::string moduleName) {
 	WordPtr.IsPointer = true;
 	WordPtr.Dereference = "word";
 
+	ByteDP.Size = 64;
+	ByteDP.Type = BytePtr.Type->getPointerTo();
+	ByteDP.Name = "byte**";
+	ByteDP.IsPointer = true;
+	ByteDP.Dereference = "byte*";
+
 	DefinedTypes[DwordType.Name] = DwordType;
 	DefinedTypes[WordType.Name] = WordType;
 	DefinedTypes[ByteType.Name] = ByteType;
@@ -982,6 +975,7 @@ void InitialiseModule(std::string moduleName) {
 	DefinedTypes[VoidType.Name] = VoidType;
 	DefinedTypes[BytePtr.Name] = BytePtr;
 	DefinedTypes[WordPtr.Name] = WordPtr;
+	DefinedTypes[ByteDP.Name] = ByteDP;
 
 	TypeMap[DwordType.Type] = DwordType;
 	TypeMap[WordType.Type] = WordType;
@@ -990,6 +984,7 @@ void InitialiseModule(std::string moduleName) {
 	TypeMap[VoidType.Type] = VoidType;
 	TypeMap[BytePtr.Type] = BytePtr;
 	TypeMap[WordPtr.Type] = WordPtr;
+	TypeMap[ByteDP.Type] = ByteDP;
 }
 
 void PreinitialiseJIT() {
@@ -1038,34 +1033,9 @@ void HandleExtern() {
 	} else GetNextToken();
 }
 
-void HandleGlobalDword() {
-	if (UQP(Statement) globalDword = ParseGlobalVariable(DefinedTypes["dword"])) {
-		if (SSA *globalIR = globalDword->Render()) {
-			if (Flags.EmitIRToSTDOUT) globalIR->print(llvm::outs());
-		}
-	} else GetNextToken();
-}
-
-void HandleGlobalWord() {
-	if (UQP(Statement) globalWord = ParseGlobalVariable(DefinedTypes["word"])) {
-		if (SSA *globalIR = globalWord->Render()) {
-			if (Flags.EmitIRToSTDOUT) globalIR->print(llvm::outs());
-		}
-	}
-}
-
-void HandleGlobalByte() {
-  if (UQP(Statement) globalByte = ParseGlobalVariable(DefinedTypes["byte"])) {
-    if (SSA *globalIR = globalByte->Render()) {
-      if (Flags.EmitIRToSTDOUT)
-        globalIR->print(llvm::outs());
-    }
-  }
-}
-
-void HandleGlobalBoole() {
-	if (UQP(Statement) globalBoole = ParseGlobalVariable(DefinedTypes["boole"])) {
-		if (SSA *globalIR = globalBoole->Render()) {
+void HandleGlobal() {
+	if (UQP(Statement) global = ParseGlobalVariable(DefinedTypes[CurrentIdentifier])) {
+		if (SSA *globalIR = global->Render()) {
 			if (Flags.EmitIRToSTDOUT)
 				globalIR->print(llvm::outs());
 		}

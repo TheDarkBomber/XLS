@@ -57,7 +57,6 @@ Token GetToken() {
 		JMPIF(CurrentIdentifier, "if", GetToken_kw_if);
 		JMPIF(CurrentIdentifier, "else", GetToken_kw_else);
 		JMPIF(CurrentIdentifier, "operator", GetToken_kw_operator);
-		JMPIF(CurrentIdentifier, "dword", GetToken_kw_dword);
 		JMPIF(CurrentIdentifier, "cdecl", GetToken_kw_calling);
 		JMPIF(CurrentIdentifier, "fastcc", GetToken_kw_calling);
 		JMPIF(CurrentIdentifier, "coldcc", GetToken_kw_calling);
@@ -70,12 +69,6 @@ Token GetToken() {
 		JMPIF(CurrentIdentifier, "jump", GetToken_kw_jump);
 		JMPIF(CurrentIdentifier, "volatile", GetToken_kw_volatile);
 		JMPIF(CurrentIdentifier, "sizeof", GetToken_kw_sizeof);
-		JMPIF(CurrentIdentifier, "word", GetToken_kw_word);
-		JMPIF(CurrentIdentifier, "byte", GetToken_kw_byte);
-		JMPIF(CurrentIdentifier, "boole", GetToken_kw_boole);
-		JMPIF(CurrentIdentifier, "void", GetToken_kw_void);
-		JMPIF(CurrentIdentifier, "byte*", GetToken_kw_byteptr);
-		JMPIF(CurrentIdentifier, "word*", GetToken_kw_wordptr);
 		goto GetToken_end_kw;
 
 	GetToken_kw_implement:
@@ -92,34 +85,6 @@ Token GetToken() {
 		return output;
 	GetToken_kw_operator:
 		output.Type = LEXEME_OPERATOR;
-		return output;
-	GetToken_kw_dword:
-		output.Type = LEXEME_DWORD_VARIABLE;
-		output.Subtype = LEXEME_IDENTIFIER;
-		return output;
-	GetToken_kw_word:
-		output.Type = LEXEME_WORD_VARIABLE;
-		output.Subtype = LEXEME_IDENTIFIER;
-		return output;
-	GetToken_kw_byte:
-		output.Type = LEXEME_BYTE_VARIABLE;
-		output.Subtype = LEXEME_IDENTIFIER;
-		return output;
-	GetToken_kw_byteptr:
-		output.Type = LEXEME_BYTE_PTR;
-		output.Subtype = LEXEME_IDENTIFIER;
-		return output;
-	GetToken_kw_wordptr:
-		output.Type = LEXEME_WORD_PTR;
-		output.Subtype = LEXEME_IDENTIFIER;
-		return output;
-	GetToken_kw_boole:
-		output.Type = LEXEME_BOOLE_VARIABLE;
-		output.Subtype = LEXEME_IDENTIFIER;
-		return output;
-	GetToken_kw_void:
-		output.Type = LEXEME_VOID_VARIABLE;
-		output.Subtype = LEXEME_IDENTIFIER;
 		return output;
 	GetToken_kw_sizeof:
 		output.Type = LEXEME_SIZEOF;
