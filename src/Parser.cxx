@@ -161,6 +161,8 @@ UQP(Expression) ParseDispatcher() {
 		return ParseDeclaration(DefinedTypes["void"]);
 	case LEXEME_BYTE_PTR:
 		return ParseDeclaration(DefinedTypes["byte*"]);
+	case LEXEME_WORD_PTR:
+		return ParseDeclaration(DefinedTypes["word*"]);
 	case LEXEME_SIZEOF:
 		return ParseSizeof();
 	case LEXEME_VOLATILE:
@@ -528,6 +530,10 @@ SSA *CastExpression::Render() {
 	return ImplicitCast(Type, toCast);
 }
 
+SSA *PtrRHS(SSA *left, SSA *right) {
+  return Builder->CreateMul(right, llvm::ConstantInt::get(*GlobalContext, llvm::APInt(TypeMap[right->getType()].Size, DefinedTypes[TypeMap[left->getType()].Dereference].Size / 8)));
+}
+
 SSA *BinaryExpression::Render() {
 	if (CMP("=", Operator)) {
 		VariableExpression *LAssignment = static_cast<VariableExpression*>(LHS.get());
@@ -594,6 +600,7 @@ SSA *BinaryExpression::Render() {
 	}
 
 #define RCAST ImplicitCast(TypeMap[left->getType()], right)
+#define RPTR left->getType()->isPointerTy() ? PtrRHS(left, right) : right
 	SSA *left = LHS->Render();
 	SSA *right = RHS->Render();
 	if (!left || !right) return nullptr;
@@ -616,13 +623,13 @@ SSA *BinaryExpression::Render() {
 	JMPIF(Operator, ">=", Operators_gte_compare);
 	goto Operators_end;
  Operators_plus:
-	return Builder->CreateAdd(left, right, "xls_add");
+	return Builder->CreateAdd(left, RPTR, "xls_add");
  Operators_minus:
-	return Builder->CreateSub(left, right, "xls_subtract");
+	return Builder->CreateSub(left, RPTR, "xls_subtract");
  Operators_multiply:
-	return Builder->CreateMul(left, right, "xls_multiply");
+	return Builder->CreateMul(left, RPTR, "xls_multiply");
  Operators_divide:
-	return Builder->CreateUDiv(left, right, "xls_divide");
+	return Builder->CreateUDiv(left, RPTR, "xls_divide");
  Operators_lt_compare:
 	return Builder->CreateICmpULT(left, RCAST, "xls_lt_compare");
  Operators_gt_compare:
@@ -636,7 +643,7 @@ SSA *BinaryExpression::Render() {
  Operators_non_equal:
 	return Builder->CreateICmpNE(left, RCAST, "xls_non_equal");
  Operators_modulo:
-	return Builder->CreateURem(left, right, "xls_modulo");
+	return Builder->CreateURem(left, RPTR, "xls_modulo");
  Operators_bitwise_and:
 	return Builder->CreateAnd(left, right, "xls_bitwise_and");
  Operators_bitwise_or:
@@ -651,6 +658,7 @@ SSA *BinaryExpression::Render() {
 	return Builder->CreateICmpNE(Builder->CreateLogicalOr(left, right), Builder->CreateLogicalAnd(left, right), "xls_logical_xor");
  Operators_end:
 #undef RCAST
+#undef RPTR
 
 	llvm::Function *function = getFunction(std::string("#op::binary::#") + Operator);
 	if (!function) return CodeError("Unknown binary operator.");
@@ -658,7 +666,7 @@ SSA *BinaryExpression::Render() {
 	llvm::CallInst* callInstance = Builder->CreateCall(function, Operands, "xls_binary_operation");
 	callInstance->setCallingConv(function->getCallingConv());
 	return callInstance;
-}
+ }
 
 SSA *UnaryExpression::Render() {
 	SSA *operand = Operand->Render();
@@ -892,7 +900,7 @@ void InitialiseModule(std::string moduleName) {
 
 	// Type definitions.
 	XLSType DwordType, WordType, ByteType, BooleType, VoidType;
-	XLSType BytePtr;
+	XLSType BytePtr, WordPtr;
 
 	DwordType.Size = 32;
 	DwordType.Type = llvm::Type::getInt32Ty(*GlobalContext);
@@ -920,12 +928,19 @@ void InitialiseModule(std::string moduleName) {
 	BytePtr.IsPointer = true;
 	BytePtr.Dereference = "byte";
 
+	WordPtr.Size = 64;
+	WordPtr.Type = llvm::Type::getInt16PtrTy(*GlobalContext);
+	WordPtr.Name = "word*";
+	WordPtr.IsPointer = true;
+	WordPtr.Dereference = "word";
+
 	DefinedTypes[DwordType.Name] = DwordType;
 	DefinedTypes[WordType.Name] = WordType;
 	DefinedTypes[ByteType.Name] = ByteType;
 	DefinedTypes[BooleType.Name] = BooleType;
 	DefinedTypes[VoidType.Name] = VoidType;
 	DefinedTypes[BytePtr.Name] = BytePtr;
+	DefinedTypes[WordPtr.Name] = WordPtr;
 
 	TypeMap[DwordType.Type] = DwordType;
 	TypeMap[WordType.Type] = WordType;
@@ -933,6 +948,7 @@ void InitialiseModule(std::string moduleName) {
 	TypeMap[BooleType.Type] = BooleType;
 	TypeMap[VoidType.Type] = VoidType;
 	TypeMap[BytePtr.Type] = BytePtr;
+	TypeMap[WordPtr.Type] = WordPtr;
 }
 
 void PreinitialiseJIT() {
