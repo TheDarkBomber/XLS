@@ -85,6 +85,7 @@ public:
 	VariableExpression(const std::string &name, bool isVolatile = false, bool isDereference = false) : Name(name), Volatile(isVolatile), Dereference(isDereference) {}
 	SSA *Render() override;
 	const std::string &GetName() const { return Name; }
+	const bool &IsDereference() const { return Dereference; }
 };
 
 class DeclarationExpression : public Expression {

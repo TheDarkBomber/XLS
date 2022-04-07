@@ -208,6 +208,12 @@ UQP(Expression) ParseUnary() {
 
 	std::string operator_ = CurrentOperator;
 	GetNextToken();
+	if (CMP("*", operator_) && CurrentToken.Type == LEXEME_IDENTIFIER) {
+		std::string identifier = CurrentIdentifier;
+		GetNextToken();
+		return MUQ(VariableExpression, identifier, false, true);
+	}
+
 	if (UQP(Expression) operand = ParseUnary()) {
 		return MUQ(UnaryExpression, operator_, std::move(operand));
 	}
@@ -522,10 +528,20 @@ SSA *VariableExpression::Render() {
 		TypeAnnotation[gloadInstance] = global.Type;
 		return gloadInstance;
 	}
-	Alloca *value = AllonymousValues[Name].Value;
-	llvm::LoadInst *loadInstance = Builder->CreateLoad(AllonymousValues[Name].Type.Type, value, Name.c_str());
+	llvm::LoadInst *loadInstance;
+
+	AnnotatedValue A = AllonymousValues[Name];
+	if (Dereference) {
+		printf("Called %s\n", Name.c_str());
+		UQP(Expression) V = MUQ(VariableExpression, Name, Volatile, false);
+		UQP(UnaryExpression) U = MUQ(UnaryExpression, "*", std::move(V));
+		SSA *R = U->Render();
+		return R;
+	}
+
+	loadInstance = Builder->CreateLoad(A.Type.Type, A.Value, Name.c_str());
 	loadInstance->setVolatile(Volatile);
-	TypeAnnotation[loadInstance] = AllonymousValues[Name].Type;
+	TypeAnnotation[loadInstance] = A.Type;
 	return loadInstance;
 }
 
@@ -565,30 +581,20 @@ SSA *BinaryExpression::Render() {
 			return gstoreInstance;
 		}
 		aVariable = AllonymousValues[LAssignment->GetName()];
+		if (LAssignment->IsDereference()) {
+			if (!aVariable.Type.IsPointer) return CodeError("Non-pointer values cannot be dereferenced.");
+			llvm::StoreInst *dstoreInstance;
+			dstoreInstance = Builder->CreateStore(ImplicitCast(DefinedTypes[aVariable.Type.Dereference], value), Builder->CreateLoad(aVariable.Type.Type, aVariable.Value, "xls_assign_pointer"));
+			dstoreInstance->setVolatile(Volatile);
+			TypeAnnotation[dstoreInstance] = aVariable.Type;
+			return value;
+		}
 		variable = aVariable.Value;
 		llvm::StoreInst *storeInstance;
 		// llvm::StoreInst *storeInstance = Builder->CreateStore(value, variable);
 		storeInstance = Builder->CreateStore(ImplicitCast(aVariable.Type, value), variable);
 		storeInstance->setVolatile(Volatile);
 		TypeAnnotation[storeInstance] = aVariable.Type;
-		return value;
-	}
-
-	if (CMP("$=", Operator)) {
-		// TODO: Use C syntax, e.g. *x = 5;
-		VariableExpression *LAssignment = static_cast<VariableExpression*>(LHS.get());
-		if (!LAssignment) return CodeError("Assignment on fire.");
-		SSA *value = RHS->Render();
-		if (!value) return nullptr;
-		AnnotatedValue V;
-		if (AllonymousValues.find(LAssignment->GetName()) == AllonymousValues.end())
-			return CodeError("Unknown pointer name.");
-		V = AllonymousValues[LAssignment->GetName()];
-		if (!V.Type.IsPointer) return CodeError("Non-pointer values cannot be dereferenced.");
-		llvm::StoreInst *storeInstance;
-		storeInstance = Builder->CreateStore(ImplicitCast(DefinedTypes[V.Type.Dereference], value), Builder->CreateLoad(V.Type.Type, V.Value, "xls_assign_pointer"));
-		storeInstance->setVolatile(Volatile);
-		TypeAnnotation[storeInstance] = V.Type;
 		return value;
 	}
 
