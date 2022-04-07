@@ -107,7 +107,7 @@ UQP(Expression) ParseParenthetical() {
 
 UQP(Expression) ParseIdentifier(bool isVolatile) {
 	std::string identifier = CurrentIdentifier;
-	if (DefinedTypes.find(identifier) != DefinedTypes.end())
+	if (CheckTypeDefined(identifier))
 		return ParseDeclaration(DefinedTypes[identifier]);
 	GetNextToken();
 	if (CurrentToken.Value != '(') return MUQ(VariableExpression, identifier, isVolatile);
@@ -256,7 +256,7 @@ UQP(Expression) ParseSizeof() {
 	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected type name for sizeof.");
 	std::string type = CurrentIdentifier;
 	GetNextToken();
-	if (DefinedTypes.find(type) == DefinedTypes.end()) return ParseError("Unknown type to calculate the size of.");
+	if (!CheckTypeDefined(type)) return ParseError("Unknown type to calculate the size of.");
 	return MUQ(DwordExpression, DefinedTypes[type].Size / 8);
 }
 
@@ -405,8 +405,7 @@ UQP(SignatureNode) ParseSignature() {
 	if (CurrentToken.Value != ')') {
 		for(;;) {
 			XLSType currentType;
-			if (DefinedTypes.find(CurrentIdentifier) != DefinedTypes.end()) {
-				if (DefinedTypes.find(CurrentIdentifier) == DefinedTypes.end()) return ParseError("Unknown type in parameter list of function signature.", nullptr);
+			if (CheckTypeDefined(CurrentIdentifier)) {
 				currentType = DefinedTypes[CurrentIdentifier];
 				GetNextToken();
 			} else currentType = DefinedTypes["dword"];
@@ -423,7 +422,7 @@ UQP(SignatureNode) ParseSignature() {
 
 	if (CurrentToken.Value == ':') {
 		GetNextToken();
-		if (DefinedTypes.find(CurrentIdentifier) == DefinedTypes.end())
+		if (!CheckTypeDefined(CurrentIdentifier))
 			return ParseError("Unknown type in type signature.", nullptr);
 		type = DefinedTypes[CurrentIdentifier];
 		GetNextToken();
@@ -598,7 +597,7 @@ SSA *BinaryExpression::Render() {
 		if (!RFunction) return CodeError("Pipe on fire.");
 		SSA *lvalue = LHS->Render();
 		if (!lvalue) return nullptr;
-		if (DefinedTypes.find(RFunction->GetName()) != DefinedTypes.end()) {
+		if (CheckTypeDefined(RFunction->GetName())) {
 			return ImplicitCast(DefinedTypes[RFunction->GetName()], lvalue);
 		}
 		llvm::Function *pipe = getFunction(RFunction->GetName());
@@ -926,8 +925,7 @@ void InitialiseModule(std::string moduleName) {
 	Builder = MUQ(llvm::IRBuilder<>, *GlobalContext);
 
 	// Type definitions.
-	XLSType DwordType, WordType, ByteType, BooleType, VoidType;
-	XLSType BytePtr, WordPtr, ByteDP;
+	XLSType DwordType, WordType, ByteType, BooleType, VoidType, BoolePtrType, VoidPtrType;
 
 	DwordType.Size = 32;
 	DwordType.Type = llvm::Type::getInt32Ty(*GlobalContext);
@@ -949,42 +947,30 @@ void InitialiseModule(std::string moduleName) {
 	VoidType.Type = llvm::Type::getVoidTy(*GlobalContext);
 	VoidType.Name = "void";
 
-	// TODO: Automatically define pointer types.
-	BytePtr.Size = 64;
-	BytePtr.Type = llvm::Type::getInt8PtrTy(*GlobalContext);
-	BytePtr.Name = "byte*";
-	BytePtr.IsPointer = true;
-	BytePtr.Dereference = "byte";
+	BoolePtrType.Size = 64;
+	BoolePtrType.Type = llvm::Type::getInt1PtrTy(*GlobalContext);
+	BoolePtrType.Name = "boole*";
+	BoolePtrType.Dereference = "boole";
+	BoolePtrType.IsPointer = true;
 
-	WordPtr.Size = 64;
-	WordPtr.Type = llvm::Type::getInt16PtrTy(*GlobalContext);
-	WordPtr.Name = "word*";
-	WordPtr.IsPointer = true;
-	WordPtr.Dereference = "word";
-
-	ByteDP.Size = 64;
-	ByteDP.Type = BytePtr.Type->getPointerTo();
-	ByteDP.Name = "byte**";
-	ByteDP.IsPointer = true;
-	ByteDP.Dereference = "byte*";
+	VoidPtrType = BoolePtrType;
+	VoidPtrType.Name = "void*";
+	VoidPtrType.Dereference = "void";
 
 	DefinedTypes[DwordType.Name] = DwordType;
 	DefinedTypes[WordType.Name] = WordType;
 	DefinedTypes[ByteType.Name] = ByteType;
 	DefinedTypes[BooleType.Name] = BooleType;
 	DefinedTypes[VoidType.Name] = VoidType;
-	DefinedTypes[BytePtr.Name] = BytePtr;
-	DefinedTypes[WordPtr.Name] = WordPtr;
-	DefinedTypes[ByteDP.Name] = ByteDP;
+	DefinedTypes[BoolePtrType.Name] = BoolePtrType;
+	DefinedTypes[VoidPtrType.Name] = VoidPtrType;
 
 	TypeMap[DwordType.Type] = DwordType;
 	TypeMap[WordType.Type] = WordType;
 	TypeMap[ByteType.Type] = ByteType;
 	TypeMap[BooleType.Type] = BooleType;
 	TypeMap[VoidType.Type] = VoidType;
-	TypeMap[BytePtr.Type] = BytePtr;
-	TypeMap[WordPtr.Type] = WordPtr;
-	TypeMap[ByteDP.Type] = ByteDP;
+	TypeMap[BoolePtrType.Type] = BoolePtrType;
 }
 
 void PreinitialiseJIT() {
@@ -1046,6 +1032,25 @@ void HandleUnboundedExpression() {
 	if (UQP(FunctionNode) functionNode = ParseUnboundedExpression()) {
 		functionNode->Render();
 	} else GetNextToken();
+}
+
+bool CheckTypeDefined(std::string name) {
+	if (DefinedTypes.find(name) != DefinedTypes.end()) return true;
+	std::string dereference = name;
+	if (name.back() == '*') {
+		dereference.pop_back();
+		if (!CheckTypeDefined(dereference)) return false;
+		XLSType NEWType;
+		NEWType.Name = name;
+		NEWType.Type = DefinedTypes[dereference].Type->getPointerTo();
+		NEWType.IsPointer = true;
+		NEWType.Size = 64;
+		NEWType.Dereference = dereference;
+		DefinedTypes[name] = NEWType;
+		TypeMap[NEWType.Type] = NEWType;
+		return true;
+	}
+	return false;
 }
 
 

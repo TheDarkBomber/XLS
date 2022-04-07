@@ -262,4 +262,6 @@ void PreinitialiseJIT();
 void InitialiseModule(std::string moduleName);
 void InitialiseJIT();
 
+bool CheckTypeDefined(std::string name);
+
 #endif
