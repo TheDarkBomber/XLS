@@ -55,6 +55,8 @@ std::map<std::string, llvm::BasicBlock*> AllonymousLabels;
 std::map<std::string, AnnotatedValue> AllonymousValues;
 std::map<std::string, AnnotatedGlobal> GlobalValues;
 
+std::map<SSA*, XLSType> TypeAnnotation;
+
 void AlertError(const char *error) {
 	llvm::errs() <<
 		COLOUR_YELLOW <<
@@ -478,14 +480,26 @@ UQP(FunctionNode) ParseUnboundedExpression() {
 	return nullptr;
 }
 
+XLSType GetType(SSA *toType) {
+	if (TypeAnnotation.find(toType) == TypeAnnotation.end())
+		TypeAnnotation[toType] = TypeMap[toType->getType()];
+	return TypeAnnotation[toType];
+}
+
+bool operator== (XLSType A, XLSType B) {
+	return A.Name == B.Name;
+}
+
 SSA *ImplicitCast(XLSType type, SSA *toCast) {
-	if (type.Type == toCast->getType()) return toCast;
-	if (type.Name == "void" || TypeMap[toCast->getType()].Name == "void")
-		return llvm::Constant::getNullValue(type.Type);
-	if (type.IsPointer) return Builder->CreateIntToPtr(toCast, type.Type, "xls_itp_cast");
+	if (type == GetType(toCast)) return toCast;
+	SSA *casted;
+	TypeAnnotation[casted] = type;
+	if (type.Name == "void" || GetType(toCast).Name == "void")
+		return casted = llvm::Constant::getNullValue(type.Type);
+	if (type.IsPointer) return casted = Builder->CreateIntToPtr(toCast, type.Type, "xls_itp_cast");
 	if (toCast->getType()->isPointerTy())
-		return Builder->CreatePtrToInt(toCast, type.Type, "xls_pti_cast");
-	SSA *casted = Builder->CreateZExtOrTrunc(toCast, type.Type, "xls_implicit_cast");
+		return casted = Builder->CreatePtrToInt(toCast, type.Type, "xls_pti_cast");
+	casted = Builder->CreateZExtOrTrunc(toCast, type.Type, "xls_implicit_cast");
 	return casted;
 }
 
@@ -504,11 +518,15 @@ llvm::Function *getFunction(std::string name) {
 }
 
 SSA *DwordExpression::Render() {
-	return llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, Value, false));
+  SSA *R = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, Value, false));
+	TypeAnnotation[R] = DefinedTypes["dword"];
+  return R;
 }
 
 SSA *CharacterExpression::Render() {
-	return llvm::ConstantInt::get(*GlobalContext, llvm::APInt(8, Value, false));
+  SSA *R = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(8, Value, false));
+	TypeAnnotation[R] = DefinedTypes["byte"];
+  return R;
 }
 
 SSA *VariableExpression::Render() {
@@ -516,22 +534,26 @@ SSA *VariableExpression::Render() {
 		if (GlobalValues.find(Name) == GlobalValues.end()) CodeError("Reference to undeclared variable.");
 		AnnotatedGlobal global = GlobalValues[Name];
 		llvm::LoadInst *gloadInstance = Builder->CreateLoad(global.Type.Type, global.Value, Name.c_str());
+		TypeAnnotation[gloadInstance] = global.Type;
 		return gloadInstance;
 	}
 	Alloca *value = AllonymousValues[Name].Value;
 	llvm::LoadInst *loadInstance = Builder->CreateLoad(AllonymousValues[Name].Type.Type, value, Name.c_str());
 	loadInstance->setVolatile(Volatile);
+	TypeAnnotation[loadInstance] = AllonymousValues[Name].Type;
 	return loadInstance;
 }
 
 SSA *CastExpression::Render() {
 	SSA *toCast = Value->Render();
 	if (!toCast) return nullptr;
-	return ImplicitCast(Type, toCast);
+	SSA *R = ImplicitCast(Type, toCast);
+	TypeAnnotation[R] = Type;
+	return R;
 }
 
 SSA *PtrRHS(SSA *left, SSA *right) {
-  return Builder->CreateMul(right, llvm::ConstantInt::get(*GlobalContext, llvm::APInt(TypeMap[right->getType()].Size, DefinedTypes[TypeMap[left->getType()].Dereference].Size / 8)));
+  return Builder->CreateMul(right, llvm::ConstantInt::get(*GlobalContext, llvm::APInt(GetType(right).Size, DefinedTypes[GetType(left).Dereference].Size / 8)));
 }
 
 SSA *BinaryExpression::Render() {
@@ -554,6 +576,7 @@ SSA *BinaryExpression::Render() {
 				gstoreInstance = Builder->CreateStore(gcasted, variable);
 			} else gstoreInstance = Builder->CreateStore(value, variable);
 			gstoreInstance->setVolatile(Volatile);
+			TypeAnnotation[gstoreInstance] = global.Type;
 			return gstoreInstance;
 		}
 		aVariable = AllonymousValues[LAssignment->GetName()];
@@ -562,6 +585,7 @@ SSA *BinaryExpression::Render() {
 		// llvm::StoreInst *storeInstance = Builder->CreateStore(value, variable);
 		storeInstance = Builder->CreateStore(ImplicitCast(aVariable.Type, value), variable);
 		storeInstance->setVolatile(Volatile);
+		TypeAnnotation[storeInstance] = aVariable.Type;
 		return value;
 	}
 
@@ -579,6 +603,7 @@ SSA *BinaryExpression::Render() {
 		llvm::StoreInst *storeInstance;
 		storeInstance = Builder->CreateStore(ImplicitCast(DefinedTypes[V.Type.Dereference], value), Builder->CreateLoad(V.Type.Type, V.Value, "xls_assign_pointer"));
 		storeInstance->setVolatile(Volatile);
+		TypeAnnotation[storeInstance] = V.Type;
 		return value;
 	}
 
@@ -594,13 +619,15 @@ SSA *BinaryExpression::Render() {
 		if (!pipe) return CodeError("Unknown function name in pipe.");
 		if (pipe->arg_size() != 1) return CodeError("Can only pipe into function with one argument.");
 		llvm::Argument *piped = pipe->getArg(0);
-		llvm::CallInst *call = Builder->CreateCall(pipe, ImplicitCast(TypeMap[piped->getType()], lvalue), "xls_pipe");
+		llvm::CallInst *call = Builder->CreateCall(pipe, ImplicitCast(GetType(piped), lvalue), "xls_pipe");
 		call->setCallingConv(pipe->getCallingConv());
 		return call;
 	}
 
-#define RCAST ImplicitCast(TypeMap[left->getType()], right)
+#define RCAST ImplicitCast(GetType(left), right)
 #define RPTR left->getType()->isPointerTy() ? PtrRHS(left, right) : right
+	SSA *R;
+#define RET(V) R = V; TypeAnnotation[R] = GetType(left); return R
 	SSA *left = LHS->Render();
 	SSA *right = RHS->Render();
 	if (!left || !right) return nullptr;
@@ -623,48 +650,50 @@ SSA *BinaryExpression::Render() {
 	JMPIF(Operator, ">=", Operators_gte_compare);
 	goto Operators_end;
  Operators_plus:
-	return Builder->CreateAdd(left, RPTR, "xls_add");
+	RET(Builder->CreateAdd(left, RPTR, "xls_add"));
  Operators_minus:
-	return Builder->CreateSub(left, RPTR, "xls_subtract");
+	RET(Builder->CreateSub(left, RPTR, "xls_subtract"));
  Operators_multiply:
-	return Builder->CreateMul(left, RPTR, "xls_multiply");
+	RET(Builder->CreateMul(left, RPTR, "xls_multiply"));
  Operators_divide:
-	return Builder->CreateUDiv(left, RPTR, "xls_divide");
+	RET(Builder->CreateUDiv(left, RPTR, "xls_divide"));
  Operators_lt_compare:
-	return Builder->CreateICmpULT(left, RCAST, "xls_lt_compare");
+	RET(Builder->CreateICmpULT(left, RCAST, "xls_lt_compare"));
  Operators_gt_compare:
-	return Builder->CreateICmpUGT(left, RCAST, "xls_gt_compare");
+	RET(Builder->CreateICmpUGT(left, RCAST, "xls_gt_compare"));
  Operators_lte_compare:
-	return Builder->CreateICmpULE(left, RCAST, "xls_lte_compare");
+	RET(Builder->CreateICmpULE(left, RCAST, "xls_lte_compare"));
  Operators_gte_compare:
-	return Builder->CreateICmpUGE(left, RCAST, "xls_gte_compare");
+	RET(Builder->CreateICmpUGE(left, RCAST, "xls_gte_compare"));
  Operators_equal:
-	return Builder->CreateICmpEQ(left, RCAST, "xls_equal");
+	RET(Builder->CreateICmpEQ(left, RCAST, "xls_equal"));
  Operators_non_equal:
-	return Builder->CreateICmpNE(left, RCAST, "xls_non_equal");
+	RET(Builder->CreateICmpNE(left, RCAST, "xls_non_equal"));
  Operators_modulo:
-	return Builder->CreateURem(left, RPTR, "xls_modulo");
+	RET(Builder->CreateURem(left, RPTR, "xls_modulo"));
  Operators_bitwise_and:
-	return Builder->CreateAnd(left, right, "xls_bitwise_and");
+	RET(Builder->CreateAnd(left, right, "xls_bitwise_and"));
  Operators_bitwise_or:
-	return Builder->CreateOr(left, right, "xls_bitwise_or");
+	RET(Builder->CreateOr(left, right, "xls_bitwise_or"));
  Operators_bitwise_xor:
-	return Builder->CreateXor(left, right, "xls_bitwise_xor");
+	RET(Builder->CreateXor(left, right, "xls_bitwise_xor"));
  Operators_logical_and:
-	return Builder->CreateLogicalAnd(left, right, "xls_logical_and");
+	RET(Builder->CreateLogicalAnd(left, right, "xls_logical_and"));
  Operators_logical_or:
-	return Builder->CreateLogicalOr(left, right, "xls_logical_or");
+	RET(Builder->CreateLogicalOr(left, right, "xls_logical_or"));
  Operators_logical_xor:
-	return Builder->CreateICmpNE(Builder->CreateLogicalOr(left, right), Builder->CreateLogicalAnd(left, right), "xls_logical_xor");
+	RET(Builder->CreateICmpNE(Builder->CreateLogicalOr(left, right), Builder->CreateLogicalAnd(left, right), "xls_logical_xor"));
  Operators_end:
 #undef RCAST
 #undef RPTR
+#undef RET
 
 	llvm::Function *function = getFunction(std::string("#op::binary::#") + Operator);
 	if (!function) return CodeError("Unknown binary operator.");
 	SSA *Operands[2] = { left, right };
 	llvm::CallInst* callInstance = Builder->CreateCall(function, Operands, "xls_binary_operation");
 	callInstance->setCallingConv(function->getCallingConv());
+	TypeAnnotation[callInstance] = GetType(callInstance);
 	return callInstance;
  }
 
@@ -672,22 +701,26 @@ SSA *UnaryExpression::Render() {
 	SSA *operand = Operand->Render();
 	if (!operand) return nullptr;
 
+	SSA *R;
+#define RET(V) R = V; TypeAnnotation[R] = GetType(operand); return R
 	JMPIF(Operator, "!", Unary_not);
 	JMPIF(Operator, "~", Unary_ones_complement);
 	JMPIF(Operator, "*", Unary_dereference);
 	goto Unary_end;
  Unary_not:
 	operand = Builder->CreateZExt(operand, llvm::Type::getInt32Ty(*GlobalContext), "xls_cast_low_to_i32");
-	return Builder->CreateICmpEQ(operand, llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false)), "xls_unary_not");
+	RET(Builder->CreateICmpEQ(operand, llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false)), "xls_unary_not"));
  Unary_ones_complement:
-	return Builder->CreateNot(operand, "xls_ones_complement");
+	RET(Builder->CreateNot(operand, "xls_ones_complement"));
  Unary_dereference:
-	return Builder->CreateLoad(DefinedTypes[TypeMap[operand->getType()].Dereference].Type, operand, "xls_dereference");
+	RET(Builder->CreateLoad(DefinedTypes[TypeMap[operand->getType()].Dereference].Type, operand, "xls_dereference"));
  Unary_end:
 	llvm::Function *function = getFunction(std::string("#op::unary::#") + Operator);
 	if (!function) return CodeError("Unknown unary operator");
 	llvm::CallInst *callInstance = Builder->CreateCall(function, operand, "xls_unary_operation");
+#undef RET
 	callInstance->setCallingConv(function->getCallingConv());
+	TypeAnnotation[callInstance] = GetType(callInstance);
 	return callInstance;
 }
 
@@ -707,6 +740,7 @@ SSA *CallExpression::Render() {
 
 	llvm::CallInst* callInstance = Builder->CreateCall(called, ArgumentVector, "xls_call");
 	callInstance->setCallingConv(called->getCallingConv());
+	TypeAnnotation[callInstance] = GetType(callInstance);
 	return callInstance;
 }
 
@@ -766,7 +800,8 @@ SSA *IfExpression::Render() {
 	Builder->SetInsertPoint(afterBlock);
 	llvm::PHINode *phiNode = Builder->CreatePHI(thenBranch->getType(), 2, "xls_if_block");
 	phiNode->addIncoming(thenBranch, thenBlock);
-	phiNode->addIncoming(ImplicitCast(TypeMap[thenBranch->getType()], elseBranch), elseBlock);
+	phiNode->addIncoming(ImplicitCast(GetType(thenBranch), elseBranch), elseBlock);
+	TypeAnnotation[phiNode] = GetType(thenBranch);
 	return phiNode;
 }
 
@@ -794,7 +829,9 @@ SSA *WhileExpression::Render() {
 	Builder->CreateCondBr(condition, loopBlock, afterBlock);
 	Builder->SetInsertPoint(afterBlock);
 
-	return llvm::Constant::getNullValue(llvm::Type::getInt32Ty(*GlobalContext));
+	SSA *R = llvm::Constant::getNullValue(llvm::Type::getInt32Ty(*GlobalContext));
+	TypeAnnotation[R] = DefinedTypes["dword"];
+	return R;
 }
 
 SSA *DeclarationExpression::Render() {
@@ -818,16 +855,19 @@ SSA *DeclarationExpression::Render() {
 		AllonymousValues[variableName] = stored;
 	}
 
-	return llvm::ConstantInt::get(*GlobalContext, llvm::APInt(Type.Size, 0, false));
+	SSA *R = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(Type.Size, 0, false));
+	TypeAnnotation[R] = Type;
+	return R;
 }
 
 SSA *GlobalVariableNode::Render() {
-	llvm::GlobalVariable *global = new llvm::GlobalVariable(*GlobalModule, llvm::Type::getInt32Ty(*GlobalContext), false, llvm::GlobalValue::ExternalLinkage, 0, Name);
+	llvm::GlobalVariable *global = new llvm::GlobalVariable(*GlobalModule, Type.Type, false, llvm::GlobalValue::ExternalLinkage, 0, Name);
 	global->setInitializer(llvm::ConstantInt::get(*GlobalContext, llvm::APInt(Type.Size, Value, false)));
 	AnnotatedGlobal aGlobal;
 	aGlobal.Type = Type;
 	aGlobal.Value = global;
 	GlobalValues[Name] = aGlobal;
+	TypeAnnotation[global] = Type;
 	return global;
 }
 
@@ -861,6 +901,7 @@ llvm::Function *FunctionNode::Render() {
   Builder->SetInsertPoint(basicBlock);
 
   AllonymousValues.clear();
+	TypeAnnotation.clear();
   for (llvm::Argument &argument : function->args()) {
 		Alloca *alloca = createEntryBlockAlloca(function, argument.getName(), TypeMap[argument.getType()]);
 		Builder->CreateStore(&argument, alloca);
