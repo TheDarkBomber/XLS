@@ -97,7 +97,7 @@ UQP(Expression) ParseCharacterExpression() {
 }
 
 UQP(Expression) ParseStringExpression() {
-	UQP(StringExpression) result = MUQ(StringExpression, StringLiteral);
+	UQP(StringExpression) result = MUQ(StringExpression, StringLiteral, StringTerminator);
 	GetNextToken();
 	return std::move(result);
 }
@@ -280,7 +280,7 @@ UQP(Expression) ParseSizeof() {
 UQP(Expression) ParseMutable() {
 	GetNextToken();
 	if (CurrentToken.Type != LEXEME_STRING) return ParseError("Invalid combination of mutable and non-string literal");
-	UQP(StringExpression) result = MUQ(StringExpression, StringLiteral, ST_NULL, true);
+	UQP(StringExpression) result = MUQ(StringExpression, StringLiteral, StringTerminator, true);
 	GetNextToken();
 	return result;
 }

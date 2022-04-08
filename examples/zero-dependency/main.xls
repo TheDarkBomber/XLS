@@ -25,37 +25,13 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 extern printchar(byte ascii) : byte; // Defined manually in lib.asm
-
-impl say-hi() : void {
-	printchar('H');
-	printchar('e');
-	printchar('y');
-	printchar(' ');
-	printchar('t');
-	printchar('h');
-	printchar('e');
-	printchar('r');
-	printchar('e');
-	printchar(',');
-	printchar(' ');
-	printchar('g');
-	printchar('a');
-	printchar('l');
-	printchar('a');
-	printchar('x');
-	printchar('y');
-	printchar('!');
-	printchar('\n');
-}
+extern printstr(byte ascii, length) : void;
 
 impl main(argc) {
-	say-hi();
+	printstr(R"Hey there, Galaxy!", 18);
+	printchar('\n');
 	if (argc > 1) {
-		printchar('B');
-		printchar('A');
-		printchar('D');
-		printchar('!');
-		printchar('\n');
+		printstr(R"BAD!\n", 5);
 		1; // Return error, 1.
 	}
 }

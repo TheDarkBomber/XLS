@@ -55,5 +55,16 @@ printchar:
 	mov rax, rdi ; Set return value to value of RDI.
 	ret
 
+global printstr ; Function, mark global.
+printstr:
+	mov rdx, rsi ; Message length in RDX
+	mov rsi, rdi ; Message pointer in RSI
+
+	mov rdi, 1 ; STDOUT = 1
+	mov rax, 1 ; Indicate syscall 1, which is WRITE.
+	syscall ; Initiate the syscall.
+	xor rax, rax ; Return zero.
+	ret
+
 section .bss ; Section for uninitialised data.
 pchar_char:	resb 1 ; Reserve 1 byte, since we have one character.

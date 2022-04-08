@@ -27,6 +27,11 @@ enum Lexeme {
 	LEXEME_CHARACTER_LITERAL = 20
 };
 
+enum StringTermination {
+	ST_NULL = 0,
+	ST_RAW = 1
+};
+
 struct Token {
 	Lexeme Type;
 	Lexeme Subtype;
@@ -38,6 +43,7 @@ bool IsIdentifier(char c);
 bool IsRadix(char c, byte radix);
 void PrintToken(Token token);
 char LexCharacter(char LastCharacter);
+char LexString(char LastCharacter);
 Token GetToken();
 
 #endif

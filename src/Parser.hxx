@@ -2,6 +2,7 @@
 #define __PARSER_XLS_H_
 #include "num.def.h"
 #include "macros.def.h"
+#include "Lexer.hxx"
 #include <cassert>
 #include <llvm/ADT/StringRef.h>
 #include <llvm/IR/CallingConv.h>
@@ -33,11 +34,6 @@ enum SignatureType {
 	SIGNATURE_NON_BINARY = 0,
 	SIGNATURE_UNARY = 1,
 	SIGNATURE_BINARY = 2
-};
-
-enum StringTermination {
-	ST_NULL = 0,
-	ST_RAW = 1
 };
 
 struct ParserFlags {
@@ -236,6 +232,7 @@ extern dword CurrentRow;
 extern dword CurrentColumn;
 
 extern std::string StringLiteral;
+extern StringTermination StringTerminator;
 
 UQP(Expression) ParseExpression(bool isVolatile = false);
 UQP(Expression) ParseDwordExpression();

@@ -12,11 +12,12 @@ std::string CurrentIdentifier;
 std::string LError;
 dword CurrentInteger;
 
-qword CurrentRow = 1;
+dword CurrentRow = 1;
 dword CurrentColumn = 1;
 
 char CharacterLiteral;
 std::string StringLiteral;
+StringTermination StringTerminator;
 
 char advance() {
 	char next = getchar();
@@ -54,6 +55,15 @@ Token GetToken() {
 		CurrentIdentifier = LastCharacter;
 		while (IsIdentifier((LastCharacter = advance()))) {
 			CurrentIdentifier += LastCharacter;
+		}
+
+		if (CMP("R", CurrentIdentifier) && LastCharacter == '"') {
+			LastCharacter = LexString(LastCharacter);
+			if (LError != "") return LexicalError(LError.c_str());
+			LastCharacter = advance();
+			StringTerminator = ST_RAW;
+			output.Type = LEXEME_STRING;
+			return output;
 		}
 
 		JMPIF(CurrentIdentifier, "implement", GetToken_kw_implement);
@@ -181,15 +191,10 @@ Token GetToken() {
 	}
 
 	if (LastCharacter == '"') {
-		StringLiteral = "";
+		LastCharacter = LexString(LastCharacter);
+		if (LError != "") return LexicalError(LError.c_str());
 		LastCharacter = advance();
-		while (LastCharacter != '"') {
-			LastCharacter = LexCharacter(LastCharacter);
-			if (LError != "") return LexicalError(LError.c_str());
-			StringLiteral += CharacterLiteral;
-			LastCharacter = advance();
-		}
-		LastCharacter = advance();
+		StringTerminator = ST_NULL;
 		output.Type = LEXEME_STRING;
 		return output;
 	}
@@ -226,6 +231,18 @@ Token GetToken() {
 	output.Type = LEXEME_CHARACTER;
 	output.Value = current;
 	return output;
+}
+
+char LexString(char LastCharacter) {
+  StringLiteral = "";
+  LastCharacter = advance();
+  while (LastCharacter != '"') {
+    LastCharacter = LexCharacter(LastCharacter);
+    if (LError != "") return '\0';
+    StringLiteral += CharacterLiteral;
+    LastCharacter = advance();
+  }
+	return LastCharacter;
 }
 
 char LexCharacter(char LastCharacter) {
