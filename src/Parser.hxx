@@ -83,9 +83,10 @@ public:
 
 class StringExpression : public Expression {
 	std::string Value;
+	bool Mutable;
 	StringTermination Terminator;
 public:
-	StringExpression(std::string value, StringTermination terminator = ST_NULL) : Value(value), Terminator(terminator) {}
+	StringExpression(std::string value, StringTermination terminator = ST_NULL, bool _mutable = false) : Value(value), Terminator(terminator), Mutable(_mutable) {}
 	SSA *Render() override;
 };
 
@@ -251,6 +252,7 @@ UQP(Expression) ParseBlock();
 UQP(Expression) ParseLabel();
 UQP(Expression) ParseJump();
 UQP(Expression) ParseSizeof();
+UQP(Expression) ParseMutable();
 
 UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS, bool isVolatile = false);
 

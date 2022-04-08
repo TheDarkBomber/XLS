@@ -164,6 +164,8 @@ UQP(Expression) ParseDispatcher() {
 		return nullptr;
 	case LEXEME_SIZEOF:
 		return ParseSizeof();
+	case LEXEME_MUTABLE:
+		return ParseMutable();
 	case LEXEME_VOLATILE:
 		GetNextToken();
 		return ParseExpression(true);
@@ -273,6 +275,14 @@ UQP(Expression) ParseSizeof() {
 	GetNextToken();
 	if (!CheckTypeDefined(type)) return ParseError("Unknown type to calculate the size of.");
 	return MUQ(DwordExpression, DefinedTypes[type].Size / 8);
+}
+
+UQP(Expression) ParseMutable() {
+	GetNextToken();
+	if (CurrentToken.Type != LEXEME_STRING) return ParseError("Invalid combination of mutable and non-string literal");
+	UQP(StringExpression) result = MUQ(StringExpression, StringLiteral, ST_NULL, true);
+	GetNextToken();
+	return result;
 }
 
 UQP(Expression) ParseIf() {
@@ -542,6 +552,7 @@ SSA *StringExpression::Render() {
 
 	llvm::GlobalVariable* global = Builder->CreateGlobalString(llvm::StringRef(Value), "xls_string");
 	global->setInitializer(llvm::ConstantArray::get(strType, elements));
+	global->setConstant(!Mutable);
 	SSA *R = llvm::ConstantExpr::getBitCast(global, DefinedTypes["byte*"].Type);
 	TypeAnnotation[R] = DefinedTypes["byte*"];
 	return R;

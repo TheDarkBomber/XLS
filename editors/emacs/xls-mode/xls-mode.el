@@ -59,7 +59,8 @@
 												 "dowhile"
 												 "label"
 												 "jump"
-												 "volatile"))
+												 "volatile"
+												 "mutable"))
 					(x-types '("dword" "word" "byte" "boole" "void"))
 					(x-auxillary '("sizeof"))
 					(x-constants '())
