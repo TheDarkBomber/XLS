@@ -19,6 +19,7 @@
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Type.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/Support/Alignment.h>
 #include <llvm/Support/Error.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Transforms/InstCombine/InstCombine.h>
@@ -539,12 +540,8 @@ SSA *StringExpression::Render() {
 
 	llvm::ArrayType* strType = llvm::ArrayType::get(DefinedTypes["byte"].Type, elements.size());
 
-	llvm::GlobalVariable* global = (llvm::GlobalVariable*)GlobalModule->getOrInsertGlobal("xls_string", strType);
+	llvm::GlobalVariable* global = Builder->CreateGlobalString(llvm::StringRef(Value), "xls_string");
 	global->setInitializer(llvm::ConstantArray::get(strType, elements));
-	global->setConstant(true);
-	global->setLinkage(llvm::GlobalValue::PrivateLinkage);
-	global->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
-
 	SSA *R = llvm::ConstantExpr::getBitCast(global, DefinedTypes["byte*"].Type);
 	TypeAnnotation[R] = DefinedTypes["byte*"];
 	return R;
@@ -562,7 +559,6 @@ SSA *VariableExpression::Render() {
 
 	AnnotatedValue A = AllonymousValues[Name];
 	if (Dereference) {
-		printf("Called %s\n", Name.c_str());
 		UQP(Expression) V = MUQ(VariableExpression, Name, Volatile, false);
 		UQP(UnaryExpression) U = MUQ(UnaryExpression, "*", std::move(V));
 		SSA *R = U->Render();
@@ -779,6 +775,8 @@ SSA *CallExpression::Render() {
 	}
 
 	llvm::CallInst* callInstance = Builder->CreateCall(called, ArgumentVector, "xls_call");
+	if (called->getReturnType() == llvm::Type::getVoidTy(*GlobalContext))
+		callInstance->setName("");
 	callInstance->setCallingConv(called->getCallingConv());
 	TypeAnnotation[callInstance] = GetType(callInstance);
 	return callInstance;
@@ -838,7 +836,7 @@ SSA *IfExpression::Render() {
 
 	function->getBasicBlockList().push_back(afterBlock);
 	Builder->SetInsertPoint(afterBlock);
-	llvm::PHINode *phiNode = Builder->CreatePHI(thenBranch->getType(), 2, "xls_if_block");
+	llvm::PHINode *phiNode = Builder->CreatePHI(GetType(thenBranch).Type, 2, "xls_if_block");
 	phiNode->addIncoming(thenBranch, thenBlock);
 	phiNode->addIncoming(ImplicitCast(GetType(thenBranch), elseBranch), elseBlock);
 	TypeAnnotation[phiNode] = GetType(thenBranch);

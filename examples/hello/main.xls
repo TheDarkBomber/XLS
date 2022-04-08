@@ -24,24 +24,8 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Uses lib.cxx
-extern printd(numeral);
-extern puts(byte* str); // LIBC function.
-
-impl fizzbuzz(to) {
-	dword i = 1;
-	while (i <= to) {
-		if (i % 15 == 0) {
-			puts("FizzBuzz");
-		} else if (i % 3 == 0) {
-			puts("Fizz");
-		} else if (i % 5 == 0) {
-			puts("Buzz");
-		} else printd(i);
-		i = i + 1;
-	};
-}
+extern puts(byte* str) : void;
 
 impl main(argc) {
-	fizzbuzz(100); // Print fizzbuzz to 100.
+	puts("Hey there, Galaxy!");
 }
