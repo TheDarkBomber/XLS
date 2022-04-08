@@ -85,6 +85,7 @@ int main(int argc, char* argv[]) {
 
 	bool outputASM = false;
 	bool ignoreHandleErrors = false;
+	bool emitIR = false;
 	std::string targetTriple = llvm::sys::getDefaultTargetTriple();
 	std::string MTune = "generic";
 	std::string filename = "output.o";
@@ -116,7 +117,7 @@ int main(int argc, char* argv[]) {
 		}
 
 		PARSE_ARGV("ir") {
-			Flags.EmitIRToSTDOUT = 1;
+			emitIR = true;
 			END_ARGV;
 		}
 
@@ -192,8 +193,10 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 
+	if (emitIR) GlobalModule->print(llvm::outs(), nullptr);
 	pass.run(*GlobalModule);
 	destination.flush();
+
 
 	llvm::errs() << COLOUR_GREEN << "Wrote " << filename << " for " << MTune << "\n" << COLOUR_END;
 

@@ -1050,7 +1050,6 @@ void InitialiseJIT() {
 void HandleImplementation() {
 	if (UQP(FunctionNode) functionNode = ParseImplementation()) {
 		if (llvm::Function* functionIR = functionNode->Render()) {
-			if (Flags.EmitIRToSTDOUT) functionIR->print(llvm::outs());
 		}
 	} else GetNextToken();
 }
@@ -1058,7 +1057,6 @@ void HandleImplementation() {
 void HandleOperatorDefinition() {
   if (UQP(FunctionNode) functionNode = ParseOperatorDefinition()) {
     if (llvm::Function *functionIR = functionNode->Render()) {
-			if (Flags.EmitIRToSTDOUT) functionIR->print(llvm::outs());
     }
   } else GetNextToken();
 }
@@ -1066,7 +1064,6 @@ void HandleOperatorDefinition() {
 void HandleExtern() {
 	if (UQP(SignatureNode) signature = ParseExtern()) {
 		if (llvm::Function* signatureIR = signature->Render()) {
-			if (Flags.EmitIRToSTDOUT) signatureIR->print(llvm::outs());
 			FunctionSignatures[signature->GetName()] = std::move(signature);
 		}
 	} else GetNextToken();
@@ -1075,8 +1072,6 @@ void HandleExtern() {
 void HandleGlobal() {
 	if (UQP(Statement) global = ParseGlobalVariable(DefinedTypes[CurrentIdentifier])) {
 		if (SSA *globalIR = global->Render()) {
-			if (Flags.EmitIRToSTDOUT)
-				globalIR->print(llvm::outs());
 		}
 	}
 }
