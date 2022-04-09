@@ -117,6 +117,14 @@ UQP(Expression) ParseIdentifier(bool isVolatile) {
 	if (CheckTypeDefined(identifier))
 		return ParseDeclaration(DefinedTypes[identifier]);
 	GetNextToken();
+	if (CurrentToken.Value == '[') {
+		GetNextToken();
+		UQP(Expression) offset = ParseExpression(isVolatile);
+		if (!offset) return nullptr;
+		if (CurrentToken.Value != ']') return ParseError("Expected close square parentheses in dereference offset.");
+		GetNextToken();
+		return MUQ(VariableExpression, identifier, isVolatile, false, std::move(offset));
+	}
 	if (CurrentToken.Value != '(') return MUQ(VariableExpression, identifier, isVolatile);
 
 	GetNextToken();
@@ -576,6 +584,17 @@ SSA *VariableExpression::Render() {
 		return R;
 	}
 
+	if (Offset) {
+		SSA *offset = Offset->Render();
+		if (!offset) return nullptr;
+		SSA *V = Builder->CreateLoad(A.Type.Type, A.Value, Name.c_str());
+		SSA *GEP = Builder->CreateInBoundsGEP(DefinedTypes[A.Type.Dereference].Type, V, offset);
+		loadInstance = Builder->CreateLoad(DefinedTypes[A.Type.Dereference].Type, GEP);
+		loadInstance->setVolatile(Volatile);
+		TypeAnnotation[loadInstance] = DefinedTypes[A.Type.Dereference];
+		return loadInstance;
+	}
+
 	loadInstance = Builder->CreateLoad(A.Type.Type, A.Value, Name.c_str());
 	loadInstance->setVolatile(Volatile);
 	TypeAnnotation[loadInstance] = A.Type;
@@ -618,6 +637,16 @@ SSA *BinaryExpression::Render() {
 			return gstoreInstance;
 		}
 		aVariable = AllonymousValues[LAssignment->GetName()];
+		if (LAssignment->GetOffset()) {
+			SSA *offset = LAssignment->GetOffset()->Render();
+			llvm::StoreInst *ostoreInstance;
+			SSA *V = Builder->CreateLoad(aVariable.Type.Type, aVariable.Value, LAssignment->GetName());
+			SSA *GEP = Builder->CreateInBoundsGEP(DefinedTypes[aVariable.Type.Dereference].Type, V, offset);
+			ostoreInstance = Builder->CreateStore(ImplicitCast(DefinedTypes[aVariable.Type.Dereference], value), GEP);
+			ostoreInstance->setVolatile(Volatile);
+			TypeAnnotation[ostoreInstance] = DefinedTypes[aVariable.Type.Dereference];
+			return ostoreInstance;
+		}
 		if (LAssignment->IsDereference()) {
 			if (!aVariable.Type.IsPointer) return CodeError("Non-pointer values cannot be dereferenced.");
 			llvm::StoreInst *dstoreInstance;

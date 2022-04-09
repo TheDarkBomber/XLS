@@ -90,11 +90,13 @@ class VariableExpression : public Expression {
 	std::string Name;
 	bool Volatile;
 	bool Dereference;
+	UQP(Expression) Offset;
 public:
-	VariableExpression(const std::string &name, bool isVolatile = false, bool isDereference = false) : Name(name), Volatile(isVolatile), Dereference(isDereference) {}
+	VariableExpression(const std::string &name, bool isVolatile = false, bool isDereference = false, UQP(Expression) offset = nullptr) : Name(name), Volatile(isVolatile), Dereference(isDereference), Offset(std::move(offset)) {}
 	SSA *Render() override;
 	const std::string &GetName() const { return Name; }
 	const bool &IsDereference() const { return Dereference; }
+	const UQP(Expression) &GetOffset() const { return std::move(Offset); }
 };
 
 class DeclarationExpression : public Expression {
