@@ -2,7 +2,6 @@ BUILD=build
 SOURCES=src
 
 CXX=g++
-# CXXFLAGS=-march=x86-64 -mtune=generic -O2 -pipe -fno-plt -fexceptions -Wp,-D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security -fstack-clash-protection -fcf-protection -flto -ffat-lto-objects -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64 -D_THREAD_SAFE -D_REENTRANT
 CXXFLAGS=$(shell llvm-config --cxxflags --ldflags --system-libs --libs core)
 CXXFLAGS+= -rdynamic
 LD=$(CXX)
@@ -13,6 +12,11 @@ CXX_OBJECTS=$(patsubst $(SOURCES)/%.cxx, $(OBJ_LOCATION)/%.o, $(CXX_SOURCES))
 OBJ_LOCATION=$(BUILD)
 
 all: xls
+
+nxlib: $(BUILD)/nxlib.so
+
+$(BUILD)/nxlib.so: always
+	$(MAKE) -C $(SOURCES)/nxlib BUILD=$(abspath $(BUILD))
 
 xls: $(BUILD)/xls
 
@@ -31,4 +35,4 @@ always:
 
 clean:
 	rm -fv $(BUILD)/xls
-	rm -fv $(OBJ_LOCATION)/*
+	rm -rfv $(OBJ_LOCATION)/*

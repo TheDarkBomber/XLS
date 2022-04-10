@@ -95,4 +95,7 @@
 ;;;###autoload
 (add-to-list 'auto-mode-alist '("\\.xls\\'" . xls-mode))
 
+;;;###autoload
+(add-to-list 'auto-mode-alist '("\\.xlh\\'" . xls-mode))
+
 (provide 'xls-mode)
