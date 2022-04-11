@@ -1,4 +1,6 @@
 extern READ(FD, byte* LOCATION, COUNT);
 extern WRITE(FD, byte* MESSAGE, LENGTH);
+extern GETPID();
 extern FORK();
 extern EXIT(result);
+extern TERMINATE(PID, SIGNAL);
