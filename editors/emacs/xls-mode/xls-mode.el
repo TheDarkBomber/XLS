@@ -69,11 +69,13 @@
 					(x-types-regex (regexp-opt x-types 'words))
 					(x-auxillary-regex (regexp-opt x-auxillary 'words))
 					(x-constants-regex (regexp-opt x-constants 'words))
+					(x-directive-regex "^[[:space:]]*#.*$")
 					(x-variables-regex "[A-Za-z_][A-Za-z0-9\-+/*:@=?!_]*")
 					(x-pipef-regex "|>[[:space:]]\\([A-Za-z_][A-Za-z0-9\-+/*:@=?!_]*\\)")
 					(x-functions-regex "\\([A-Za-z_][A-Za-z0-9\-+/*:@=?!_]*\\)\(")) ;; )
 
 		`(
+			 (,x-directive-regex . font-lock-preprocessor-face)
 			 (,x-keywords-regex . font-lock-keyword-face)
 			 (,x-types-regex . font-lock-type-face)
 			 (,x-auxillary-regex . font-lock-builtin-face)

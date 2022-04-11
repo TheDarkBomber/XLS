@@ -9,4 +9,5 @@ global %1
 section .text
 defsyscall READ, 0
 defsyscall WRITE, 1
+defsyscall FORK, 57
 defsyscall EXIT, 60

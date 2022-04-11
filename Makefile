@@ -18,6 +18,11 @@ nxlib: $(BUILD)/nxlib.so
 $(BUILD)/nxlib.so: always
 	$(MAKE) -C $(SOURCES)/nxlib BUILD=$(abspath $(BUILD))
 
+xpp: $(BUILD)/xpp
+
+$(BUILD)/xpp: always
+	$(MAKE) -C $(SOURCES)/preprocessor BUILD=$(abspath $(BUILD))
+
 xls: $(BUILD)/xls
 
 $(BUILD)/xls: $(CXX_OBJECTS)
