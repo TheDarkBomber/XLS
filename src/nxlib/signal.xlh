@@ -63,6 +63,6 @@
 #define SIGRTMAX-1 0x3F
 #define SIGRTMAX 0x40
 
-extern Abort() : void;
+extern Abort(byte* why) : void;
 extern AbnormalExit(signal) : void;
 
