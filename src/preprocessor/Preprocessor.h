@@ -4,5 +4,6 @@
 
 void Preprocess(FILE* stream);
 void PreprocessInclude(FILE* stream);
+void PreprocessDefine(FILE* stream);
 
 #endif

@@ -1,0 +1,68 @@
+#define SIGHUP 0x01
+#define SIGINT 0x02
+#define SIGQUIT 0x03
+#define SIGILL 0x04
+#define SIGTRAP 0x05
+#define SIGABRT 0x06
+#define SIGBUS 0x07
+#define SIGFPE 0x08
+#define SIGKILL 0x09
+#define SIGUSR1 0x0A
+#define SIGSEGV 0x0B
+#define SIGUSR2 0x0C
+#define SIGPIPE 0x0D
+#define SIGALRM 0x0E
+#define SIGTERM 0x0F
+#define SIGSTKFLT 0x10
+#define SIGCHLD 0x11
+#define SIGCONT 0x12
+#define SIGSTOP 0x13
+#define SIGTSTP 0x14
+#define SIGTTIN 0x15
+#define SIGTTOU 0x16
+#define SIGURG 0x17
+#define SIGXCPU 0x18
+#define SIGXFSZ 0x19
+#define SIGVTALRM 0x1A
+#define SIGPROF 0x1B
+#define SIGWINCH 0x1C
+#define SIGIO 0x1D
+#define SIGPWR 0x1E
+#define SIGSYS 0x1F
+
+
+#define SIGRTMIN 0x22
+#define SIGRTMIN+1 0x23
+#define SIGRTMIN+2 0x24
+#define SIGRTMIN+3 0x25
+#define SIGRTMIN+4 0x26
+#define SIGRTMIN+5 0x27
+#define SIGRTMIN+6 0x28
+#define SIGRTMIN+7 0x29
+#define SIGRTMIN+8 0x2A
+#define SIGRTMIN+9 0x2B
+#define SIGRTMIN+10 0x2C
+#define SIGRTMIN+11 0x2D
+#define SIGRTMIN+12 0x2E
+#define SIGRTMIN+13 0x2F
+#define SIGRTMIN+14 0x30
+#define SIGRTMIN+15 0x31
+#define SIGRTMAX-14 0x32
+#define SIGRTMAX-13 0x33
+#define SIGRTMAX-12 0x34
+#define SIGRTMAX-11 0x35
+#define SIGRTMAX-10 0x36
+#define SIGRTMAX-9 0x37
+#define SIGRTMAX-8 0x38
+#define SIGRTMAX-7 0x39
+#define SIGRTMAX-6 0x3A
+#define SIGRTMAX-5 0x3B
+#define SIGRTMAX-4 0x3C
+#define SIGRTMAX-3 0x3D
+#define SIGRTMAX-2 0x3E
+#define SIGRTMAX-1 0x3F
+#define SIGRTMAX 0x40
+
+extern Abort() : void;
+extern AbnormalExit(signal) : void;
+
