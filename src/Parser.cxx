@@ -57,6 +57,7 @@ std::map<std::string, AnnotatedValue> AllonymousValues;
 std::map<std::string, AnnotatedGlobal> GlobalValues;
 
 std::map<SSA*, XLSType> TypeAnnotation;
+std::map<llvm::Function*, XLSType> ReturnTypeAnnotation;
 
 void AlertError(const char *error) {
 	llvm::errs() <<
@@ -517,6 +518,7 @@ SSA *ImplicitCast(XLSType type, SSA *toCast) {
 	if (type.IsPointer) return casted = Builder->CreateIntToPtr(toCast, type.Type, "xls_itp_cast");
 	if (toCast->getType()->isPointerTy())
 		return casted = Builder->CreatePtrToInt(toCast, type.Type, "xls_pti_cast");
+	if (type.Signed) return casted = Builder->CreateSExtOrTrunc(toCast, type.Type, "xls_simplicit_cast");
 	casted = Builder->CreateZExtOrTrunc(toCast, type.Type, "xls_implicit_cast");
 	return casted;
 }
@@ -684,7 +686,7 @@ SSA *BinaryExpression::Render() {
 #define RCAST ImplicitCast(GetType(left), right)
 #define RPTR left->getType()->isPointerTy() ? PtrRHS(left, right) : right
 	SSA *R;
-#define RET(V) R = V; TypeAnnotation[R] = GetType(left); return R
+#define RET(V) do { R = V; TypeAnnotation[R] = GetType(left); return R; } while(0)
 	SSA *left = LHS->Render();
 	SSA *right = RHS->Render();
 	if (!left || !right) return nullptr;
@@ -715,12 +717,20 @@ SSA *BinaryExpression::Render() {
  Operators_divide:
 	RET(Builder->CreateUDiv(left, RPTR, "xls_divide"));
  Operators_lt_compare:
+	if (GetType(left).Signed || GetType(right).Signed)
+		RET(Builder->CreateICmpSLT(left, RCAST, "xls_slt_compare"));
 	RET(Builder->CreateICmpULT(left, RCAST, "xls_lt_compare"));
  Operators_gt_compare:
+	if (GetType(left).Signed || GetType(right).Signed)
+		RET(Builder->CreateICmpSLT(left, RCAST, "xls_sgt_compare"));
 	RET(Builder->CreateICmpUGT(left, RCAST, "xls_gt_compare"));
  Operators_lte_compare:
+	if (GetType(left).Signed || GetType(right).Signed)
+		RET(Builder->CreateICmpSLT(left, RCAST, "xls_slte_compare"));
 	RET(Builder->CreateICmpULE(left, RCAST, "xls_lte_compare"));
  Operators_gte_compare:
+	if (GetType(left).Signed || GetType(right).Signed)
+		RET(Builder->CreateICmpSLT(left, RCAST, "xls_sgte_compare"));
 	RET(Builder->CreateICmpUGE(left, RCAST, "xls_gte_compare"));
  Operators_equal:
 	RET(Builder->CreateICmpEQ(left, RCAST, "xls_equal"));
@@ -810,7 +820,7 @@ SSA *CallExpression::Render() {
 	uint index = 0;
 
 	for (llvm::Argument &argument : called->args()) {
-		ArgumentVector.push_back(ImplicitCast(TypeMap[argument.getType()], Arguments[index++]->Render()));
+		ArgumentVector.push_back(ImplicitCast(GetType((SSA*)&argument), Arguments[index++]->Render()));
 		if (!ArgumentVector.back()) return nullptr;
 	}
 
@@ -818,7 +828,7 @@ SSA *CallExpression::Render() {
 	if (called->getReturnType() == llvm::Type::getVoidTy(*GlobalContext))
 		callInstance->setName("");
 	callInstance->setCallingConv(called->getCallingConv());
-	TypeAnnotation[callInstance] = GetType(callInstance);
+	TypeAnnotation[callInstance] = ReturnTypeAnnotation[called];
 	return callInstance;
 }
 
@@ -963,6 +973,7 @@ llvm::Function *SignatureNode::Render() {
 	for (llvm::Argument &argument : function->args())
 		argument.setName(Arguments[index++].first);
 
+	ReturnTypeAnnotation[function] = Type;
 	return function;
 }
 
@@ -981,10 +992,10 @@ llvm::Function *FunctionNode::Render() {
   AllonymousValues.clear();
 	TypeAnnotation.clear();
   for (llvm::Argument &argument : function->args()) {
-		Alloca *alloca = createEntryBlockAlloca(function, argument.getName(), TypeMap[argument.getType()]);
+		Alloca *alloca = createEntryBlockAlloca(function, argument.getName(), GetType((SSA*)&argument));
 		Builder->CreateStore(&argument, alloca);
 		AnnotatedValue stored;
-		stored.Type = TypeMap[argument.getType()];
+		stored.Type = GetType((SSA*)&argument);
 		stored.Value = alloca;
 		AllonymousValues[std::string(argument.getName())] = stored;
 	}
@@ -1050,6 +1061,24 @@ void InitialiseModule(std::string moduleName) {
 	VoidPtrType.Name = "void*";
 	VoidPtrType.Dereference = "void";
 
+	// Signed types
+	XLSType SdwordType, SwordType, SbyteType;
+
+	SdwordType.Size = 32;
+	SdwordType.Type = llvm::Type::getInt32Ty(*GlobalContext);
+	SdwordType.Signed = true;
+	SdwordType.Name = "sdword";
+
+	SwordType.Size = 16;
+	SwordType.Type = llvm::Type::getInt32Ty(*GlobalContext);
+	SwordType.Signed = true;
+	SwordType.Name = "sword";
+
+	SbyteType.Size = 8;
+	SbyteType.Type = llvm::Type::getInt32Ty(*GlobalContext);
+	SbyteType.Signed = true;
+	SbyteType.Name = "sbyte";
+
 	DefinedTypes[DwordType.Name] = DwordType;
 	DefinedTypes[WordType.Name] = WordType;
 	DefinedTypes[ByteType.Name] = ByteType;
@@ -1057,6 +1086,10 @@ void InitialiseModule(std::string moduleName) {
 	DefinedTypes[VoidType.Name] = VoidType;
 	DefinedTypes[BoolePtrType.Name] = BoolePtrType;
 	DefinedTypes[VoidPtrType.Name] = VoidPtrType;
+
+	DefinedTypes[SdwordType.Name] = SdwordType;
+	DefinedTypes[SwordType.Name] = SwordType;
+	DefinedTypes[SbyteType.Name] = SbyteType;
 
 	TypeMap[DwordType.Type] = DwordType;
 	TypeMap[WordType.Type] = WordType;
@@ -1132,6 +1165,7 @@ bool CheckTypeDefined(std::string name) {
 		NEWType.Name = name;
 		NEWType.Type = DefinedTypes[dereference].Type->getPointerTo();
 		NEWType.IsPointer = true;
+		NEWType.Signed = false;
 		NEWType.Size = 64;
 		NEWType.Dereference = dereference;
 		DefinedTypes[name] = NEWType;

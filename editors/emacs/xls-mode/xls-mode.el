@@ -61,7 +61,7 @@
 												 "jump"
 												 "volatile"
 												 "mutable"))
-					(x-types '("dword" "word" "byte" "boole" "void"))
+					(x-types '("dword" "word" "byte" "boole" "void" "sdword" "sword" "sbyte"))
 					(x-auxillary '("sizeof"))
 					(x-constants '())
 

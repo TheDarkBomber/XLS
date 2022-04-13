@@ -1,6 +1,6 @@
-extern READ(FD, byte* LOCATION, COUNT);
-extern WRITE(FD, byte* MESSAGE, LENGTH);
-extern GETPID();
-extern FORK();
+extern READ(FD, byte* LOCATION, COUNT) : sdword;
+extern WRITE(FD, byte* MESSAGE, LENGTH) : sdword;
+extern GETPID() : sdword;
+extern FORK() : sdword;
 extern EXIT(result);
 extern TERMINATE(PID, SIGNAL);

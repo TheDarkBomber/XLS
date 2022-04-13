@@ -50,6 +50,7 @@ struct XLSType {
   llvm::Type *Type;
 	std::string Name;
 	bool IsPointer = false;
+	bool Signed = false;
 	std::string Dereference = "void";
 };
 
