@@ -58,6 +58,7 @@ std::map<std::string, AnnotatedGlobal> GlobalValues;
 
 std::map<SSA*, XLSType> TypeAnnotation;
 std::map<llvm::Function*, XLSType> ReturnTypeAnnotation;
+std::map<llvm::Argument*, XLSType> ArgumentTypeAnnotation;
 
 void AlertError(const char *error) {
 	llvm::errs() <<
@@ -722,15 +723,15 @@ SSA *BinaryExpression::Render() {
 	RET(Builder->CreateICmpULT(left, RCAST, "xls_lt_compare"));
  Operators_gt_compare:
 	if (GetType(left).Signed || GetType(right).Signed)
-		RET(Builder->CreateICmpSLT(left, RCAST, "xls_sgt_compare"));
+		RET(Builder->CreateICmpSGT(left, RCAST, "xls_sgt_compare"));
 	RET(Builder->CreateICmpUGT(left, RCAST, "xls_gt_compare"));
  Operators_lte_compare:
 	if (GetType(left).Signed || GetType(right).Signed)
-		RET(Builder->CreateICmpSLT(left, RCAST, "xls_slte_compare"));
+		RET(Builder->CreateICmpSLE(left, RCAST, "xls_slte_compare"));
 	RET(Builder->CreateICmpULE(left, RCAST, "xls_lte_compare"));
  Operators_gte_compare:
 	if (GetType(left).Signed || GetType(right).Signed)
-		RET(Builder->CreateICmpSLT(left, RCAST, "xls_sgte_compare"));
+		RET(Builder->CreateICmpSGE(left, RCAST, "xls_sgte_compare"));
 	RET(Builder->CreateICmpUGE(left, RCAST, "xls_gte_compare"));
  Operators_equal:
 	RET(Builder->CreateICmpEQ(left, RCAST, "xls_equal"));
@@ -820,7 +821,8 @@ SSA *CallExpression::Render() {
 	uint index = 0;
 
 	for (llvm::Argument &argument : called->args()) {
-		ArgumentVector.push_back(ImplicitCast(GetType((SSA*)&argument), Arguments[index++]->Render()));
+		ArgumentVector.push_back(ImplicitCast(ArgumentTypeAnnotation[called->getArg(index)], Arguments[index]->Render()));
+		index++;
 		if (!ArgumentVector.back()) return nullptr;
 	}
 
@@ -970,8 +972,11 @@ llvm::Function *SignatureNode::Render() {
 	function->setCallingConv(Convention);
 
 	uint index = 0;
-	for (llvm::Argument &argument : function->args())
-		argument.setName(Arguments[index++].first);
+	for (llvm::Argument &argument : function->args()) {
+		argument.setName(Arguments[index].first);
+		ArgumentTypeAnnotation[function->getArg(index)] = Arguments[index].second;
+		index++;
+	}
 
 	ReturnTypeAnnotation[function] = Type;
 	return function;
@@ -991,11 +996,12 @@ llvm::Function *FunctionNode::Render() {
 
   AllonymousValues.clear();
 	TypeAnnotation.clear();
+	uint index = 0;
   for (llvm::Argument &argument : function->args()) {
-		Alloca *alloca = createEntryBlockAlloca(function, argument.getName(), GetType((SSA*)&argument));
+		Alloca *alloca = createEntryBlockAlloca(function, argument.getName(), ArgumentTypeAnnotation[function->getArg(index)]);
 		Builder->CreateStore(&argument, alloca);
 		AnnotatedValue stored;
-		stored.Type = GetType((SSA*)&argument);
+		stored.Type = ArgumentTypeAnnotation[function->getArg(index++)];
 		stored.Value = alloca;
 		AllonymousValues[std::string(argument.getName())] = stored;
 	}
@@ -1070,12 +1076,12 @@ void InitialiseModule(std::string moduleName) {
 	SdwordType.Name = "sdword";
 
 	SwordType.Size = 16;
-	SwordType.Type = llvm::Type::getInt32Ty(*GlobalContext);
+	SwordType.Type = llvm::Type::getInt16Ty(*GlobalContext);
 	SwordType.Signed = true;
 	SwordType.Name = "sword";
 
 	SbyteType.Size = 8;
-	SbyteType.Type = llvm::Type::getInt32Ty(*GlobalContext);
+	SbyteType.Type = llvm::Type::getInt8Ty(*GlobalContext);
 	SbyteType.Signed = true;
 	SbyteType.Name = "sbyte";
 
