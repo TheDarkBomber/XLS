@@ -3,6 +3,7 @@ ASM=nasm
 ASMFLAGS=-f elf64
 LD=ld
 LDFLAGS=-shared
+LDSCRIPTS=$(wildcard *.ld)
 
 XLC=$(BUILD)/xls
 XLCFLAGS=module NXLib
@@ -21,7 +22,7 @@ all: nxlib
 nxlib: $(BUILD)/nxlib.so $(XLC) $(XPP)
 
 $(BUILD)/nxlib.so: $(ASM_OBJECTS) $(XLS_OBJECTS)
-	$(LD) $(LDFLAGS) -o $@ $(ASM_LINKED_OBJECTS) $(XLS_OBJECTS)
+	$(LD) $(LDSCRIPTS) $(LDFLAGS) -o $@ $(ASM_LINKED_OBJECTS) $(XLS_OBJECTS)
 	mv -v $(OBJ_LOCATION)/xrt.a64 $(BUILD)/xrt.o
 	@echo "[NXLIB] COMPILED nxlib.so"
 

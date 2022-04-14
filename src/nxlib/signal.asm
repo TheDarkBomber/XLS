@@ -4,9 +4,9 @@ default rel
 %include "streams.inc"
 %include "signals.inc"
 
-global Abort:function
+global i.abort:function
 section .text
-Abort:
+i.abort:
 	push rdi ; Save first argument, used as argument for strlen.
 	call strlen wrt ..plt
 	mov rdx, rax
@@ -20,8 +20,8 @@ Abort:
 	jmp TERMINATE wrt ..plt
 
 
-global AbnormalExit:function
-AbnormalExit:
+global i.raisesignal:function
+i.raisesignal:
 	call GETPID wrt ..plt
 	mov rsi, rdi
 	mov rdi, rax

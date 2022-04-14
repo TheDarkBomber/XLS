@@ -1028,6 +1028,7 @@ void InitialiseModule(std::string moduleName) {
 		GlobalFPM->add(llvm::createReassociatePass());
 		GlobalFPM->add(llvm::createGVNPass());
 		GlobalFPM->add(llvm::createCFGSimplificationPass());
+		GlobalFPM->add(llvm::createTailCallEliminationPass());
 	}
 
 	GlobalFPM->doInitialization();
