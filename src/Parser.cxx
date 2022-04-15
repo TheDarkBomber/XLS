@@ -686,6 +686,7 @@ SSA *BinaryExpression::Render() {
 
 #define RCAST ImplicitCast(GetType(left), right)
 #define RPTR left->getType()->isPointerTy() ? PtrRHS(left, right) : right
+#define RPCAST left->getType()->isPointerTy() ? PtrRHS(left, RCAST) : RCAST
 	SSA *R;
 #define RET(V) do { R = V; TypeAnnotation[R] = GetType(left); return R; } while(0)
 	SSA *left = LHS->Render();
@@ -738,7 +739,7 @@ SSA *BinaryExpression::Render() {
  Operators_non_equal:
 	RET(Builder->CreateICmpNE(left, RCAST, "xls_non_equal"));
  Operators_modulo:
-	RET(Builder->CreateURem(left, RPTR, "xls_modulo"));
+	RET(Builder->CreateURem(left, RPCAST, "xls_modulo"));
  Operators_bitwise_and:
 	RET(Builder->CreateAnd(left, right, "xls_bitwise_and"));
  Operators_bitwise_or:
@@ -752,6 +753,7 @@ SSA *BinaryExpression::Render() {
  Operators_logical_xor:
 	RET(Builder->CreateICmpNE(Builder->CreateLogicalOr(left, right), Builder->CreateLogicalAnd(left, right), "xls_logical_xor"));
  Operators_end:
+#undef RPCAST
 #undef RCAST
 #undef RPTR
 #undef RET
