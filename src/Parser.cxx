@@ -330,6 +330,15 @@ UQP(Expression) ParseWhile(bool doWhile) {
 
 UQP(Expression) ParseDeclaration(XLSType type) {
 	GetNextToken();
+	if (CurrentToken.Type == LEXEME_CHARACTER && CurrentToken.Value == '[') {
+		GetNextToken();
+		if (CurrentToken.Type != LEXEME_INTEGER) return ParseError("Expected integer size to statically allocate.");
+		UQP(MutableArrayExpression) result = MUQ(MutableArrayExpression, CurrentInteger, type);
+		GetNextToken();
+		if (CurrentToken.Value != ']') return ParseError("Expected close square parenthesis in mutable array expression.");
+		GetNextToken();
+		return result;
+	}
 	if (CurrentToken.Type == LEXEME_CHARACTER && CurrentToken.Value == '(') {
 		GetNextToken();
 		UQP(Expression) toCast = ParseExpression();
@@ -561,11 +570,19 @@ SSA *StringExpression::Render() {
 
 	llvm::ArrayType* strType = llvm::ArrayType::get(DefinedTypes["byte"].Type, elements.size());
 
-	llvm::GlobalVariable* global = Builder->CreateGlobalString(llvm::StringRef(Value), "xls_string");
-	global->setInitializer(llvm::ConstantArray::get(strType, elements));
-	global->setConstant(!Mutable);
+	llvm::GlobalVariable* global = new llvm::GlobalVariable(*GlobalModule, strType, !Mutable, llvm::GlobalValue::PrivateLinkage, llvm::ConstantArray::get(strType, elements), "xls_string");
 	SSA *R = llvm::ConstantExpr::getBitCast(global, DefinedTypes["byte*"].Type);
 	TypeAnnotation[R] = DefinedTypes["byte*"];
+	return R;
+}
+
+SSA *MutableArrayExpression::Render() {
+	if (!CheckTypeDefined(Type.Name + "*")) return nullptr;
+	llvm::ArrayType* maType = llvm::ArrayType::get(Type.Type, Size);
+	llvm::GlobalVariable* global = new llvm::GlobalVariable(*GlobalModule, maType, false, llvm::GlobalValue::PrivateLinkage, llvm::Constant::getNullValue(maType), "xls_mutable_array");
+	global->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+	SSA *R = llvm::ConstantExpr::getBitCast(global, DefinedTypes[Type.Name + "*"].Type);
+	TypeAnnotation[R] = DefinedTypes[Type.Name + "*"];
 	return R;
 }
 

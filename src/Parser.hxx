@@ -109,6 +109,14 @@ public:
 	SSA *Render() override;
 };
 
+class MutableArrayExpression : public Expression {
+	dword Size;
+	XLSType Type;
+public:
+	MutableArrayExpression(dword size, XLSType type) : Size(size), Type(type) {}
+	SSA *Render() override;
+};
+
 class CastExpression : public Expression {
 	XLSType Type;
 	UQP(Expression) Value;
