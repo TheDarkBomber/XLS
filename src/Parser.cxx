@@ -284,11 +284,13 @@ UQP(Expression) ParseJump() {
 
 UQP(Expression) ParseSizeof() {
 	GetNextToken();
-	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected type name for sizeof.");
-	std::string type = CurrentIdentifier;
-	GetNextToken();
-	if (!CheckTypeDefined(type)) return ParseError("Unknown type to calculate the size of.");
-	return MUQ(DwordExpression, DefinedTypes[type].Size / 8);
+	if (CurrentToken.Type == LEXEME_IDENTIFIER && CheckTypeDefined(CurrentIdentifier)) {
+		std::string type = CurrentIdentifier;
+		GetNextToken();
+		return MUQ(DwordExpression, DefinedTypes[type].Size / 8);
+	}
+	UQP(Expression) sized = ParseExpression();
+	return MUQ(SizeofExpression, std::move(sized));
 }
 
 UQP(Expression) ParseTypeof() {
@@ -890,6 +892,14 @@ SSA *LabelExpression::Render() {
 SSA *JumpExpression::Render() {
 	if (AllonymousLabels.find(Label) == AllonymousLabels.end()) return CodeError("Cannot find label.");
 	return Builder->CreateBr(AllonymousLabels[Label]);
+}
+
+SSA *SizeofExpression::Render() {
+	SSA *value = Sized->Render();
+	XLSType type = TypeAnnotation[value];
+	SSA *R = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, type.Size / 8, false));
+	TypeAnnotation[R] = DefinedTypes["dword"];
+	return R;
 }
 
 SSA *TypeofExpression::Render() {
