@@ -62,7 +62,7 @@
 												 "volatile"
 												 "mutable"))
 					(x-types '("dword" "word" "byte" "boole" "void" "sdword" "sword" "sbyte"))
-					(x-auxillary '("sizeof"))
+					(x-auxillary '("sizeof" "typeof"))
 					(x-constants '())
 
 					(x-keywords-regex (regexp-opt x-keywords 'words))

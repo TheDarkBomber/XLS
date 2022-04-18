@@ -36,6 +36,8 @@ static llvm::ExitOnError ExitIfError;
 
 ParserFlags Flags;
 
+dword CurrentUID = 0;
+
 Token CurrentToken;
 Token GetNextToken() { return CurrentToken = GetToken(); }
 
@@ -174,6 +176,8 @@ UQP(Expression) ParseDispatcher() {
 		return nullptr;
 	case LEXEME_SIZEOF:
 		return ParseSizeof();
+	case LEXEME_TYPEOF:
+		return ParseTypeof();
 	case LEXEME_MUTABLE:
 		return ParseMutable();
 	case LEXEME_VOLATILE:
@@ -285,6 +289,17 @@ UQP(Expression) ParseSizeof() {
 	GetNextToken();
 	if (!CheckTypeDefined(type)) return ParseError("Unknown type to calculate the size of.");
 	return MUQ(DwordExpression, DefinedTypes[type].Size / 8);
+}
+
+UQP(Expression) ParseTypeof() {
+	GetNextToken();
+	if (CurrentToken.Type == LEXEME_IDENTIFIER && CheckTypeDefined(CurrentIdentifier)) {
+		std::string type = CurrentIdentifier;
+		GetNextToken();
+		return MUQ(DwordExpression, DefinedTypes[type].UID);
+	}
+	UQP(Expression) typed = ParseExpression();
+	return MUQ(TypeofExpression, std::move(typed));
 }
 
 UQP(Expression) ParseMutable() {
@@ -877,6 +892,14 @@ SSA *JumpExpression::Render() {
 	return Builder->CreateBr(AllonymousLabels[Label]);
 }
 
+SSA *TypeofExpression::Render() {
+	SSA *value = Typed->Render();
+	XLSType type = TypeAnnotation[value];
+	SSA *R = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, type.UID, false));
+	TypeAnnotation[R] = DefinedTypes["dword"];
+	return R;
+}
+
 SSA *IfExpression::Render() {
 	SSA *condition = Condition->Render();
 	if (!condition) return nullptr;
@@ -1060,32 +1083,39 @@ void InitialiseModule(std::string moduleName) {
 	DwordType.Size = 32;
 	DwordType.Type = llvm::Type::getInt32Ty(*GlobalContext);
 	DwordType.Name = "dword";
+	DwordType.UID = CurrentUID++;
 
 	WordType.Size = 16;
 	WordType.Type = llvm::Type::getInt16Ty(*GlobalContext);
 	WordType.Name = "word";
+	WordType.UID = CurrentUID++;
 
 	ByteType.Size = 8;
 	ByteType.Type = llvm::Type::getInt8Ty(*GlobalContext);
 	ByteType.Name = "byte";
+	ByteType.UID = CurrentUID++;
 
 	BooleType.Size = 1;
 	BooleType.Type = llvm::Type::getInt1Ty(*GlobalContext);
 	BooleType.Name = "boole";
+	BooleType.UID = CurrentUID++;
 
 	VoidType.Size = 0;
 	VoidType.Type = llvm::Type::getVoidTy(*GlobalContext);
 	VoidType.Name = "void";
+	VoidType.UID = CurrentUID++;
 
 	BoolePtrType.Size = 64;
 	BoolePtrType.Type = llvm::Type::getInt1PtrTy(*GlobalContext);
 	BoolePtrType.Name = "boole*";
 	BoolePtrType.Dereference = "boole";
 	BoolePtrType.IsPointer = true;
+	BoolePtrType.UID = CurrentUID++;
 
 	VoidPtrType = BoolePtrType;
 	VoidPtrType.Name = "void*";
 	VoidPtrType.Dereference = "void";
+	VoidPtrType.UID = CurrentUID++;
 
 	// Signed types
 	XLSType SdwordType, SwordType, SbyteType;
@@ -1094,16 +1124,19 @@ void InitialiseModule(std::string moduleName) {
 	SdwordType.Type = llvm::Type::getInt32Ty(*GlobalContext);
 	SdwordType.Signed = true;
 	SdwordType.Name = "sdword";
+	SdwordType.UID = CurrentUID++;
 
 	SwordType.Size = 16;
 	SwordType.Type = llvm::Type::getInt16Ty(*GlobalContext);
 	SwordType.Signed = true;
 	SwordType.Name = "sword";
+	SwordType.UID = CurrentUID++;
 
 	SbyteType.Size = 8;
 	SbyteType.Type = llvm::Type::getInt8Ty(*GlobalContext);
 	SbyteType.Signed = true;
 	SbyteType.Name = "sbyte";
+	SbyteType.UID = CurrentUID++;
 
 	DefinedTypes[DwordType.Name] = DwordType;
 	DefinedTypes[WordType.Name] = WordType;
@@ -1194,6 +1227,7 @@ bool CheckTypeDefined(std::string name) {
 		NEWType.Signed = false;
 		NEWType.Size = 64;
 		NEWType.Dereference = dereference;
+		NEWType.UID = CurrentUID++;
 		DefinedTypes[name] = NEWType;
 		TypeMap[NEWType.Type] = NEWType;
 		return true;

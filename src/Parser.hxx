@@ -52,6 +52,7 @@ struct XLSType {
 	bool IsPointer = false;
 	bool Signed = false;
 	std::string Dereference = "void";
+	dword UID;
 };
 
 class Expression {
@@ -164,6 +165,13 @@ public:
 	SSA *Render() override;
 };
 
+class TypeofExpression : public Expression {
+	UQP(Expression) Typed;
+public:
+	TypeofExpression(UQP(Expression) typed) : Typed(std::move(typed)) {}
+	SSA *Render() override;
+};
+
 class BlockExpression : public Expression {
 	std::vector<UQP(Expression)> Expressions;
 public:
@@ -260,6 +268,7 @@ UQP(Expression) ParseBlock();
 UQP(Expression) ParseLabel();
 UQP(Expression) ParseJump();
 UQP(Expression) ParseSizeof();
+UQP(Expression) ParseTypeof();
 UQP(Expression) ParseMutable();
 
 UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS, bool isVolatile = false);

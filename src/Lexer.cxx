@@ -85,6 +85,7 @@ Token GetToken() {
 		JMPIF(CurrentIdentifier, "volatile", GetToken_kw_volatile);
 		JMPIF(CurrentIdentifier, "sizeof", GetToken_kw_sizeof);
 		JMPIF(CurrentIdentifier, "mutable", GetToken_kw_mutable);
+		JMPIF(CurrentIdentifier, "typeof", GetToken_kw_typeof);
 		goto GetToken_end_kw;
 
 	GetToken_kw_implement:
@@ -104,6 +105,9 @@ Token GetToken() {
 		return output;
 	GetToken_kw_sizeof:
 		output.Type = LEXEME_SIZEOF;
+		return output;
+	GetToken_kw_typeof:
+		output.Type = LEXEME_TYPEOF;
 		return output;
 	GetToken_kw_calling:
 		output.Type = LEXEME_IDENTIFIER;
