@@ -2,6 +2,7 @@
 #include "Parser.hxx"
 #include "colours.def.h"
 #include <llvm/ADT/Optional.h>
+#include <llvm/IR/DataLayout.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/CodeGen.h>
@@ -16,6 +17,7 @@
 #include <stdio.h>
 #include <system_error>
 
+extern llvm::DataLayout* GlobalLayout;
 extern ParserFlags Flags;
 
 extern std::map<std::string, Precedence> BinaryPrecedence;
@@ -143,6 +145,22 @@ int main(int argc, char* argv[]) {
 	#undef SET_ARGV
 	#undef END_ARGV
 
+	std::string error;
+	const llvm::Target *target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
+
+	if (!target) {
+		llvm::errs() << COLOUR_RED_BOLD << error << COLOUR_END;
+		return 1;
+	}
+	std::string features = "";
+
+	llvm::TargetOptions options;
+	llvm::Optional<llvm::Reloc::Model> RM = llvm::Reloc::DynamicNoPIC;
+	llvm::TargetMachine *targetMachine = target->createTargetMachine(targetTriple, MTune, features, options, RM);
+
+	llvm::DataLayout layout = targetMachine->createDataLayout();
+	GlobalLayout = &layout;
+
 	PreinitialiseJIT();
 	InitialiseModule(moduleName);
 	GetNextToken();
@@ -159,23 +177,9 @@ int main(int argc, char* argv[]) {
 	}
 
 	llvm::errs() << COLOUR_BLUE << "Building for " << COLOUR_BLUE_BOLD << targetTriple << COLOUR_END << "\n";
+
 	GlobalModule->setTargetTriple(targetTriple);
-
-	std::string error;
-	const llvm::Target *target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
-
-	if (!target) {
-		llvm::errs() << COLOUR_RED_BOLD << error << COLOUR_END;
-		return 1;
-	}
-
-	std::string features = "";
-
-	llvm::TargetOptions options;
-	llvm::Optional<llvm::Reloc::Model> RM = llvm::Reloc::DynamicNoPIC;
-	llvm::TargetMachine *targetMachine = target->createTargetMachine(targetTriple, MTune, features, options, RM);
-
-	GlobalModule->setDataLayout(targetMachine->createDataLayout());
+	GlobalModule->setDataLayout(layout);
 
 	std::error_code errorCode;
 	llvm::raw_fd_ostream destination(filename, errorCode, llvm::sys::fs::OF_None);

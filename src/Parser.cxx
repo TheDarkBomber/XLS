@@ -9,6 +9,7 @@
 #include <llvm/IR/CallingConv.h>
 #include <llvm/IR/Constant.h>
 #include <llvm/IR/Constants.h>
+#include <llvm/IR/DataLayout.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/GlobalVariable.h>
@@ -33,6 +34,8 @@
 #include <string>
 
 static llvm::ExitOnError ExitIfError;
+
+llvm::DataLayout* GlobalLayout;
 
 ParserFlags Flags;
 
@@ -1115,7 +1118,7 @@ void InitialiseModule(std::string moduleName) {
 	VoidType.Name = "void";
 	VoidType.UID = CurrentUID++;
 
-	BoolePtrType.Size = 64;
+	BoolePtrType.Size = GlobalLayout->getPointerSizeInBits();
 	BoolePtrType.Type = llvm::Type::getInt1PtrTy(*GlobalContext);
 	BoolePtrType.Name = "boole*";
 	BoolePtrType.Dereference = "boole";
@@ -1235,7 +1238,7 @@ bool CheckTypeDefined(std::string name) {
 		NEWType.Type = DefinedTypes[dereference].Type->getPointerTo();
 		NEWType.IsPointer = true;
 		NEWType.Signed = false;
-		NEWType.Size = 64;
+		NEWType.Size = GlobalLayout->getPointerSizeInBits();
 		NEWType.Dereference = dereference;
 		NEWType.UID = CurrentUID++;
 		DefinedTypes[name] = NEWType;
