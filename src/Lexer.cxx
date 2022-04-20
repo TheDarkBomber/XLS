@@ -86,6 +86,10 @@ Token GetToken() {
 		JMPIF(CurrentIdentifier, "sizeof", GetToken_kw_sizeof);
 		JMPIF(CurrentIdentifier, "mutable", GetToken_kw_mutable);
 		JMPIF(CurrentIdentifier, "typeof", GetToken_kw_typeof);
+		JMPIF(CurrentIdentifier, "struct", GetToken_kw_struct);
+		JMPIF(CurrentIdentifier, "padded", GetToken_kw_structmode);
+		JMPIF(CurrentIdentifier, "practical", GetToken_kw_structmode);
+		JMPIF(CurrentIdentifier, "packed", GetToken_kw_structmode);
 		goto GetToken_end_kw;
 
 	GetToken_kw_implement:
@@ -113,6 +117,10 @@ Token GetToken() {
 		output.Type = LEXEME_IDENTIFIER;
 		output.Subtype = LEXEME_CALLING_CONVENTION;
 		return output;
+	GetToken_kw_structmode:
+		output.Type = LEXEME_IDENTIFIER;
+		output.Subtype = LEXEME_STRUCT_MODE;
+		return output;
 	GetToken_kw_while:
 		output.Type = LEXEME_WHILE;
 		return output;
@@ -131,6 +139,9 @@ Token GetToken() {
 		return output;
 	GetToken_kw_volatile:
 		output.Type = LEXEME_VOLATILE;
+		return output;
+	GetToken_kw_struct:
+		output.Type = LEXEME_STRUCT;
 		return output;
 	GetToken_end_kw:
 		output.Type = LEXEME_IDENTIFIER;

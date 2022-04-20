@@ -60,7 +60,8 @@
 												 "label"
 												 "jump"
 												 "volatile"
-												 "mutable"))
+												 "mutable"
+												 "struct"))
 					(x-types '("dword" "word" "byte" "boole" "void" "sdword" "sword" "sbyte"))
 					(x-auxillary '("sizeof" "typeof"))
 					(x-constants '())

@@ -392,6 +392,39 @@ UQP(Expression) ParseDeclaration(XLSType type) {
 	return MUQ(DeclarationExpression, std::move(variableNames), type);
 }
 
+UQP(Statement) ParseStruct() {
+	GetNextToken();
+	StructMode mode = STRUCT_PRACTICAL;
+	if (CurrentToken.Subtype == LEXEME_STRUCT_MODE) {
+		if (CMP("packed", CurrentIdentifier)) mode = STRUCT_PACKED;
+		else if (CMP("practical", CurrentIdentifier)) mode = STRUCT_PRACTICAL;
+		else if (CMP("padded", CurrentIdentifier)) mode = STRUCT_PADDED;
+		GetNextToken();
+	}
+	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected structure name.", nullptr, nullptr);
+	std::string name = CurrentIdentifier;
+	GetNextToken();
+	if (CurrentToken.Value != '(') return ParseError("Expected open parenthesis in structure definition.", nullptr, nullptr);
+	GetNextToken();
+	if (CurrentToken.Type != LEXEME_IDENTIFIER || !CheckTypeDefined(CurrentIdentifier)) return ParseError("Expected at least one field in struct.", nullptr, nullptr);
+	std::vector<XLSType> types;
+	types.push_back(DefinedTypes[CurrentIdentifier]);
+	GetNextToken();
+	if (CurrentToken.Value == ',') {
+		GetNextToken();
+		for(;;) {
+			if (CurrentToken.Type != LEXEME_IDENTIFIER || !CheckTypeDefined(CurrentIdentifier)) return ParseError("Expected field in struct.", nullptr, nullptr);
+			types.push_back(DefinedTypes[CurrentIdentifier]);
+			GetNextToken();
+			if (CurrentToken.Value == ')') break;
+			if (CurrentToken.Value != ',') return ParseError("Expected comma in struct definition's field list.", nullptr, nullptr);
+			GetNextToken();
+		}
+	}
+	GetNextToken();
+	return MUQ(StructDefinition, types, name, mode);
+}
+
 UQP(Statement) ParseGlobalVariable(XLSType type) {
 	GetNextToken();
 	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier after global variable declaration.", nullptr, nullptr);
@@ -539,6 +572,14 @@ bool operator== (XLSType A, XLSType B) {
 	return A.Name == B.Name;
 }
 
+bool operator< (XLSType A, XLSType B) {
+	return A.Size < B.Size;
+}
+
+bool operator<= (XLSType A, XLSType B) {
+	return A.Size <= B.Size;
+}
+
 SSA *ImplicitCast(XLSType type, SSA *toCast) {
 	if (type == GetType(toCast)) return toCast;
 	SSA *casted;
@@ -548,6 +589,7 @@ SSA *ImplicitCast(XLSType type, SSA *toCast) {
 	if (type.IsPointer) return casted = Builder->CreateIntToPtr(toCast, type.Type, "xls_itp_cast");
 	if (toCast->getType()->isPointerTy())
 		return casted = Builder->CreatePtrToInt(toCast, type.Type, "xls_pti_cast");
+	if (type.IsStruct) return casted = Builder->CreateBitCast(toCast, type.Type, "xls_bitcast");
 	if (type.Signed) return casted = Builder->CreateSExtOrTrunc(toCast, type.Type, "xls_simplicit_cast");
 	casted = Builder->CreateZExtOrTrunc(toCast, type.Type, "xls_implicit_cast");
 	return casted;
@@ -1005,6 +1047,28 @@ SSA *DeclarationExpression::Render() {
 	return R;
 }
 
+SSA *StructDefinition::Render() {
+  XLSType NEWType;
+  StructData NEWStruct;
+  NEWType.Name = Name;
+  if (Mode == STRUCT_PRACTICAL) std::sort(Types.begin(), Types.end());
+  std::vector<llvm::Type *> fields;
+  for (unsigned i = 0; i < Types.size(); i++) {
+    fields.push_back(Types[i].Type);
+    NEWStruct.LiteralSize += Types[i].Size;
+  }
+  NEWType.Type = llvm::StructType::create(*GlobalContext, llvm::ArrayRef<llvm::Type *>(fields), Name, Mode == STRUCT_PACKED);
+  NEWStruct.Layout = (llvm::StructLayout *)GlobalLayout->getStructLayout((llvm::StructType *)NEWType.Type);
+  NEWStruct.Size = NEWStruct.Layout->getSizeInBits();
+  NEWType.Size = NEWStruct.Size;
+  NEWType.IsStruct = true;
+  DefinedTypes[Name] = NEWType;
+  TypeMap[NEWType.Type] = NEWType;
+  SSA *R = llvm::Constant::getNullValue(llvm::Type::getInt32Ty(*GlobalContext));
+  TypeAnnotation[R] = DefinedTypes["dword"];
+  return R;
+}
+
 SSA *GlobalVariableNode::Render() {
 	llvm::GlobalVariable *global = new llvm::GlobalVariable(*GlobalModule, Type.Type, false, llvm::GlobalValue::ExternalLinkage, 0, Name);
 	global->setInitializer(llvm::ConstantInt::get(*GlobalContext, llvm::APInt(Type.Size, Value, false)));
@@ -1219,6 +1283,12 @@ void HandleGlobal() {
 		if (SSA *globalIR = global->Render()) {
 		}
 	}
+}
+
+void HandleStruct() {
+	if (UQP(Statement) definition = ParseStruct()) {
+		definition->Render();
+	} else GetNextToken();
 }
 
 void HandleUnboundedExpression() {

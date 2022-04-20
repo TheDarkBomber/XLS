@@ -6,6 +6,7 @@
 #include <cassert>
 #include <llvm/ADT/StringRef.h>
 #include <llvm/IR/CallingConv.h>
+#include <llvm/IR/DataLayout.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/Value.h>
@@ -36,6 +37,12 @@ enum SignatureType {
 	SIGNATURE_BINARY = 2
 };
 
+enum StructMode {
+	STRUCT_PACKED = 0,
+	STRUCT_PRACTICAL = 1,
+	STRUCT_PADDED = 2
+};
+
 struct ParserFlags {
 	uint Unused : 3;
 	uint NoOptimise : 1;
@@ -45,13 +52,22 @@ struct ParserFlags {
 	uint ParseError : 1;
 } __attribute__((packed));
 
+struct StructData {
+	llvm::StructLayout* Layout = nullptr;
+	bool Packed = false;
+	dword LiteralSize;
+	dword Size;
+};
+
 struct XLSType {
   dword Size;
   llvm::Type *Type;
 	std::string Name;
 	bool IsPointer = false;
+	bool IsStruct = false;
 	bool Signed = false;
 	std::string Dereference = "void";
+	StructData Structure;
 	dword UID;
 };
 
@@ -231,6 +247,16 @@ public:
 	llvm::Function *Render();
 };
 
+class StructDefinition : public Statement {
+  std::vector<XLSType> Types;
+  std::string Name;
+  StructMode Mode;
+
+public:
+  StructDefinition(std::vector<XLSType> types, std::string name, StructMode mode = STRUCT_PRACTICAL) : Types(types), Name(name), Mode(mode) {}
+  SSA *Render() override;
+};
+
 class GlobalVariableNode : public Statement {
 	std::string Name;
 	dword Value;
@@ -280,6 +306,7 @@ UQP(Expression) ParseMutable();
 
 UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS, bool isVolatile = false);
 
+UQP(Statement) ParseStruct();
 UQP(Statement) ParseGlobalVariable(XLSType type);
 
 UQP(SignatureNode) ParseSignature();
@@ -298,6 +325,7 @@ void HandleOperatorDefinition();
 void HandleImplementation();
 void HandleExtern();
 void HandleGlobal();
+void HandleStruct();
 void HandleUnboundedExpression();
 
 void PreinitialiseJIT();
