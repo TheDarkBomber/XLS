@@ -52,11 +52,14 @@ struct ParserFlags {
 	uint ParseError : 1;
 } __attribute__((packed));
 
+struct XLSType;
+
 struct StructData {
 	llvm::StructLayout* Layout = nullptr;
 	bool Packed = false;
 	dword LiteralSize;
 	dword Size;
+	std::map<std::string, SDX(dword, XLSType)> Fields;
 };
 
 struct XLSType {
@@ -109,12 +112,14 @@ class VariableExpression : public Expression {
 	bool Volatile;
 	bool Dereference;
 	UQP(Expression) Offset;
+	std::string Field;
 public:
-	VariableExpression(const std::string &name, bool isVolatile = false, bool isDereference = false, UQP(Expression) offset = nullptr) : Name(name), Volatile(isVolatile), Dereference(isDereference), Offset(std::move(offset)) {}
+	VariableExpression(const std::string &name, bool isVolatile = false, bool isDereference = false, UQP(Expression) offset = nullptr, std::string field = "") : Name(name), Volatile(isVolatile), Dereference(isDereference), Offset(std::move(offset)), Field(field) {}
 	SSA *Render() override;
 	const std::string &GetName() const { return Name; }
 	const bool &IsDereference() const { return Dereference; }
 	const UQP(Expression) &GetOffset() const { return std::move(Offset); }
+	const std::string &GetField() const { return Field; }
 };
 
 class DeclarationExpression : public Expression {
@@ -248,12 +253,12 @@ public:
 };
 
 class StructDefinition : public Statement {
-  std::vector<XLSType> Types;
+	VDX(XLSType, std::string) Types;
   std::string Name;
   StructMode Mode;
 
 public:
-  StructDefinition(std::vector<XLSType> types, std::string name, StructMode mode = STRUCT_PRACTICAL) : Types(types), Name(name), Mode(mode) {}
+  StructDefinition(VDX(XLSType, std::string) types, std::string name, StructMode mode = STRUCT_PRACTICAL) : Types(types), Name(name), Mode(mode) {}
   SSA *Render() override;
 };
 

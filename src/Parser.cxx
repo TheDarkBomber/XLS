@@ -124,16 +124,24 @@ UQP(Expression) ParseIdentifier(bool isVolatile) {
 	if (CheckTypeDefined(identifier))
 		return ParseDeclaration(DefinedTypes[identifier]);
 	GetNextToken();
+	UQP(Expression) offset;
 	if (CurrentToken.Value == '[') {
 		GetNextToken();
-		UQP(Expression) offset = ParseExpression(isVolatile);
+		offset = ParseExpression(isVolatile);
 		if (!offset) return nullptr;
 		if (CurrentToken.Value != ']') return ParseError("Expected close square parentheses in dereference offset.");
 		GetNextToken();
-		return MUQ(VariableExpression, identifier, isVolatile, false, std::move(offset));
 	}
+	if (CurrentToken.Value == '.') {
+		GetNextToken();
+		if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected field name.");
+		std::string field = CurrentIdentifier;
+		GetNextToken();
+		if (offset) return MUQ(VariableExpression, identifier, isVolatile, false, std::move(offset), field);
+		return MUQ(VariableExpression, identifier, isVolatile, false, nullptr, field);
+	}
+	if (offset) return MUQ(VariableExpression, identifier, isVolatile, false, std::move(offset));
 	if (CurrentToken.Value != '(') return MUQ(VariableExpression, identifier, isVolatile);
-
 	GetNextToken();
 	std::vector<UQP(Expression)> arguments;
 	if (CurrentToken.Value != ')') {
@@ -407,14 +415,20 @@ UQP(Statement) ParseStruct() {
 	if (CurrentToken.Value != '(') return ParseError("Expected open parenthesis in structure definition.", nullptr, nullptr);
 	GetNextToken();
 	if (CurrentToken.Type != LEXEME_IDENTIFIER || !CheckTypeDefined(CurrentIdentifier)) return ParseError("Expected at least one field in struct.", nullptr, nullptr);
-	std::vector<XLSType> types;
-	types.push_back(DefinedTypes[CurrentIdentifier]);
+	VDX(XLSType, std::string) types;
+	XLSType currentType = DefinedTypes[CurrentIdentifier];
+	GetNextToken();
+	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected at least one named field in struct.", nullptr, nullptr);
+	types.push_back(SDX(XLSType, std::string)(currentType, CurrentIdentifier));
 	GetNextToken();
 	if (CurrentToken.Value == ',') {
 		GetNextToken();
 		for(;;) {
 			if (CurrentToken.Type != LEXEME_IDENTIFIER || !CheckTypeDefined(CurrentIdentifier)) return ParseError("Expected field in struct.", nullptr, nullptr);
-			types.push_back(DefinedTypes[CurrentIdentifier]);
+			currentType = DefinedTypes[CurrentIdentifier];
+			GetNextToken();
+			if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected named field in struct.", nullptr, nullptr);
+			types.push_back(SDX(XLSType, std::string)(currentType, CurrentIdentifier));
 			GetNextToken();
 			if (CurrentToken.Value == ')') break;
 			if (CurrentToken.Value != ',') return ParseError("Expected comma in struct definition's field list.", nullptr, nullptr);
@@ -580,6 +594,14 @@ bool operator<= (XLSType A, XLSType B) {
 	return A.Size <= B.Size;
 }
 
+bool operator< (SDX(XLSType, std::string) A, SDX(XLSType, std::string) B) {
+	return A.first.Size < B.first.Size;
+}
+
+bool operator<= (SDX(XLSType, std::string) A, SDX(XLSType, std::string) B) {
+  return A.first.Size <= B.first.Size;
+}
+
 SSA *ImplicitCast(XLSType type, SSA *toCast) {
 	if (type == GetType(toCast)) return toCast;
 	SSA *casted;
@@ -666,6 +688,20 @@ SSA *VariableExpression::Render() {
 		return R;
 	}
 
+	if (Field != "") {
+		if (!A.Type.IsStruct) return nullptr;
+		if (A.Type.Structure.Fields.find(Field) == A.Type.Structure.Fields.end()) return CodeError("Unknown field.");
+		dword fieldOffset = A.Type.Structure.Fields[Field].first;
+		XLSType fieldType = A.Type.Structure.Fields[Field].second;
+		std::vector<SSA*> GEPIndex(2);
+		GEPIndex[0] = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false));
+		GEPIndex[1] = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, fieldOffset, false));
+		SSA *GEP = Builder->CreateGEP(A.Type.Type, A.Value, GEPIndex, "xls_gep");
+		loadInstance = Builder->CreateLoad(fieldType.Type, GEP, Name.c_str());
+		TypeAnnotation[loadInstance] = fieldType;
+		return loadInstance;
+	}
+
 	if (Offset) {
 		SSA *offset = Offset->Render();
 		if (!offset) return nullptr;
@@ -719,6 +755,21 @@ SSA *BinaryExpression::Render() {
 			return gstoreInstance;
 		}
 		aVariable = AllonymousValues[LAssignment->GetName()];
+		if (LAssignment->GetField() != "") {
+			if (!aVariable.Type.IsStruct) return nullptr;
+			if (aVariable.Type.Structure.Fields.find(LAssignment->GetField()) == aVariable.Type.Structure.Fields.end()) return CodeError("Unknown field to assign.");
+			dword fieldOffset = aVariable.Type.Structure.Fields[LAssignment->GetField()].first;
+			XLSType fieldType = aVariable.Type.Structure.Fields[LAssignment->GetField()].second;
+			std::vector<SSA*> GEPIndex(2);
+			GEPIndex[0] = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false));
+			GEPIndex[1] = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, fieldOffset, false));
+			SSA *GEP = Builder->CreateGEP(aVariable.Type.Type, aVariable.Value, GEPIndex, "xls_assign_gep");
+			llvm::StoreInst* fstoreInstance;
+			fstoreInstance = Builder->CreateStore(ImplicitCast(fieldType, value), GEP);
+			fstoreInstance->setVolatile(Volatile);
+			TypeAnnotation[fstoreInstance] = fieldType;
+			return fstoreInstance;
+		}
 		if (LAssignment->GetOffset()) {
 			SSA *offset = LAssignment->GetOffset()->Render();
 			llvm::StoreInst *ostoreInstance;
@@ -1054,14 +1105,17 @@ SSA *StructDefinition::Render() {
   if (Mode == STRUCT_PRACTICAL) std::sort(Types.begin(), Types.end());
   std::vector<llvm::Type *> fields;
   for (unsigned i = 0; i < Types.size(); i++) {
-    fields.push_back(Types[i].Type);
-    NEWStruct.LiteralSize += Types[i].Size;
+    fields.push_back(Types[i].first.Type);
+    NEWStruct.LiteralSize += Types[i].first.Size;
+		NEWStruct.Fields[Types[i].second] = SDX(dword, XLSType)(i, Types[i].first);
   }
   NEWType.Type = llvm::StructType::create(*GlobalContext, llvm::ArrayRef<llvm::Type *>(fields), Name, Mode == STRUCT_PACKED);
   NEWStruct.Layout = (llvm::StructLayout *)GlobalLayout->getStructLayout((llvm::StructType *)NEWType.Type);
   NEWStruct.Size = NEWStruct.Layout->getSizeInBits();
   NEWType.Size = NEWStruct.Size;
   NEWType.IsStruct = true;
+	NEWType.UID = CurrentUID++;
+	NEWType.Structure = NEWStruct;
   DefinedTypes[Name] = NEWType;
   TypeMap[NEWType.Type] = NEWType;
   SSA *R = llvm::Constant::getNullValue(llvm::Type::getInt32Ty(*GlobalContext));
