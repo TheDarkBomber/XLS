@@ -1,0 +1,45 @@
+struct padded Display(dword screen, dword window);
+struct padded GC(dword context);
+
+extern XOpenDisplay(byte* name) : Display*;
+extern XDefaultScreen(Display* display);
+extern XRootWindow(Display* display, screen-number);
+extern XBlackPixel(Display* display, screen-number);
+extern XWhitePixel(Display* display, screen-number);
+extern XCreateSimpleWindow(Display* display, parent, x, y, width, height, border-width, border, background);
+extern XMapWindow(Display* display, window) : void;
+extern XSelectInput(Display* display, dword window, dword mask) : void;
+extern XFillRectangle(Display* display, window, GC* gc, x, y, width, height) : void;
+extern XDrawString(Display* display, window, GC* gc, x, y, byte* str, length) : void;
+extern XDefaultGC(Display* display, screen) : GC*;
+extern XNextEvent(Display* display, dword* event) : void;
+extern XStoreName(Display* display, window, byte* title);
+extern XCloseDisplay(Display* display);
+
+extern puts(byte* str);
+extern exit(code);
+
+impl main(argc) {
+	Display* d = XOpenDisplay(byte*(0));
+	if (d == 0) {
+		puts("Cannot open X display. (are you on a TTY?)");
+		exit(1);
+	};
+	dword screen = XDefaultScreen(d);
+	dword window = XCreateSimpleWindow(d, XRootWindow(d, screen), 10, 10, 220, 100, 1, XBlackPixel(d, screen), XWhitePixel(d, screen));
+	XSelectInput(d, window, 32769);
+	XMapWindow(d, window);
+	XStoreName(d, window, "X11 using XLS!");
+	byte* message = "Hey there, Galaxy, on X11!";
+	dword* e = dword[1];
+	boole a = 1;
+	while (a) {
+		XNextEvent(d, e);
+		if (e[0] == 12) {
+			XFillRectangle(d, window, XDefaultGC(d, screen), 10, 20, 154, 10);
+			XDrawString(d, window, XDefaultGC(d, screen), 10, 50, message, 26) |> dword;
+		};
+		a = if (e[0] == 2) 0 else 1;
+	};
+	XCloseDisplay(d);
+}
