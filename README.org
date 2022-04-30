@@ -56,6 +56,121 @@ As a result of compilation to LLVM bytecode, XLS inherits the portability featur
 		 };
 		 // Function above uses a block expression, which is a sequence of expressions.
 	 #+END_SRC
+
+	 By default, the types of function arguments and the return types of functions are ~dword~.
+	 To specify the types of function arguments and its return type:
+	 #+BEGIN_SRC xls
+		 impl caesar(byte ascii, byte cipher) : byte {
+			cipher = cipher % 26;
+			if (ascii >= 'a' && ascii <= 'z') ascii = ((ascii + cipher) % 26) + 'a'
+			else if (ascii >= 'A' && ascii <= 'Z') ascii = ((ascii + cipher) % 26) + 'A'
+			else ascii;
+		 }
+	 #+END_SRC
+	 The general format is ~impl function(type argument1, type argument2) : return-type~.
+
+** Forward declared functions.
+	To link a function either defined externally or later in the source file, use the ~extern~
+	top-level statement.
+	#+BEGIN_SRC xls
+		extern FORK() : sdword; // FORK(), as defined in a standard library.
+		extern abort!(byte* message) : void; // abort!(), as defined in a standard library.
+		extern thing(bee);
+
+		impl first() {
+			sdword pid = FORK();
+			if (pid < 0) abort!("Failed to fork.\n");
+			if (pid == 0) thing(0xBEE)
+			else thing(0n2CU);
+		}
+
+		impl thing(bee) // insert implementation of thing() here.
+	#+END_SRC
+
+** If expressions.
+	XLS is a largely expression-oriented language. This means that, whenever possible, XLS interprets
+	a value for each logical execution block, or, expression. The only statements that exist are top-level
+	and cannot be used within functions.
+
+	All ~if~ expressions follow a logical ~if-then-else~ structure. The value of the ~else~ branch is
+	always implicitly casted to the type of the ~then~ branch, allowing the expression to be well-typed.
+
+	The ~else~ branch of an ~if~ expression can be omitted, in which case, it returns the value ~0~,
+	a null value. XLS has no null keyword, as its semantics can be entirely implemented using ~0~ and
+	casting operations upon it.
+
+	#+BEGIN_SRC xls
+		impl letter?(byte ascii) : boole {
+			if ((ascii >= 'a' && ascii <= 'z') || (ascii >= 'A' && ascii <= 'Z')) 1;
+			// Note the lack of an else branch, since an unspecified else branch always evaluates to 0.
+			// Also note that currently there are no true or false keywords.
+			// true is equivalent to boole(1) and false is equivalent to boole(0).
+			// However, since this function already returns boole, no explicit cast operation is necessary.
+		}
+
+		impl triple-less-than-five(numeral) {
+			if (numeral >= 5) numeral * 3
+			else numeral;
+			// Note the lack of a semicolon on the then branch.
+			// Since if-then-else is a complete expression, the entire expression must terminate with a semicolon.
+			// If the then branch was terminated with a semicolon, it would become an if-then-else-0 expression.
+			// The remaining else keyword would not be a complete expression, it is erroneous.
+		}
+	#+END_SRC
+
+** While & Dowhile expressions.
+	These expressions always return ~0~ and behave like ~while~ and ~do { /* block */ } while~ in C.
+	#+BEGIN_SRC xls
+		impl main(argc, byte** argv) {
+			dowhile (0) argc = argc + 1; // argc is incremented, dowhile will be optimised away.
+			while (0) argc = argc + 1; // argc is not incremented, while will be optimised away.
+		}
+	#+END_SRC
+
+** Structures.
+	To define a structure, one would use the ~struct~ top-level statement.
+	For example:
+	#+BEGIN_SRC xls
+		struct Bee(byte a, dword b, byte c);
+	#+END_SRC
+
+	Members of a structure can be accessed using dot-notation.
+	#+BEGIN_SRC xls
+		// insert structure definition from above here.
+		impl main(argc, byte** argv) {
+			Bee bee;
+			bee.a = 'a';
+			bee.b = 3054;
+			bee.c = 'b';
+		}
+	#+END_SRC
+
+	Structure definitions provide options to be aligned. The options are, ~padded~, which pads out the
+	structure for maximum speed whilst wasting memory space, and allowing compatibility between structures
+	used in functions from libraries implemented in other languages such as C.
+
+	~practical~ is like ~padded~ except it re-orders the fields of the struct from smallest-to-largest,
+	which provides the optimal memory space usage whilst also providing the maximum speed, not counting cache.
+	It is the default struct alignment.
+
+	~packed~ does not pad the structure whatsoever. It wastes no memory space, however it is generally slower
+	to access. Useful for situations in which the continuity of the structure matters more than padding the structure
+	for speed, or in situations with high-speed processors with small amounts of memory.
+
+	The size difference of these alignment options may be observed using ~sizeof~.
+	#+BEGIN_SRC xls
+		extern printd(numeral) : void; // Magical function which prints an integer to standard output.
+		struct padded PaddedBee(byte a, dword b, byte c);
+		struct practical PracticalBee(byte a, dword b, byte c);
+		struct packed PackedBee(byte a, dword b, byte c);
+
+		impl main(argc, byte** argv) {
+				 printd(sizeof PaddedBee); // 12
+				 printd(sizeof PracticalBee); // 8
+				 printd(sizeof PackedBee); // 6
+		}
+	#+END_SRC
+
 * Building
 	To build XLS, you require the following dependencies:
 		- Core utilities and binary utilities.

@@ -1,6 +1,5 @@
 #include "Parser.hxx"
 #include "Lexer.hxx"
-#include "JIT.hxx"
 #include "colours.def.h"
 #include <llvm/ADT/APInt.h>
 #include <llvm/ExecutionEngine/Orc/ThreadSafeModule.h>
@@ -50,7 +49,6 @@ UQP(llvm::LLVMContext) GlobalContext;
 UQP(llvm::IRBuilder<>) Builder;
 UQP(llvm::Module) GlobalModule;
 UQP(llvm::legacy::FunctionPassManager) GlobalFPM;
-UQP(JITCompiler) GlobalJIT;
 
 std::map<std::string, XLSType> DefinedTypes;
 std::map<llvm::Type*, XLSType> TypeMap;
@@ -606,7 +604,7 @@ SSA *ImplicitCast(XLSType type, SSA *toCast) {
 	if (type == GetType(toCast)) return toCast;
 	SSA *casted;
 	TypeAnnotation[casted] = type;
-	if (type.Name == "void" || GetType(toCast).Name == "void")
+	if (type.Type->isVoidTy() || toCast->getType()->isVoidTy())
 		return casted = llvm::Constant::getNullValue(type.Type);
 	if (type.IsPointer) return casted = Builder->CreateIntToPtr(toCast, type.Type, "xls_itp_cast");
 	if (toCast->getType()->isPointerTy())
@@ -738,62 +736,54 @@ SSA *BinaryExpression::Render() {
 		SSA *value = RHS->Render();
 		if (!value) return nullptr;
 		SSA *variable;
-		AnnotatedValue aVariable;
+		llvm::StoreInst *storeInstance;
+		AnnotatedValue A;
 		if (AllonymousValues.find(LAssignment->GetName()) == AllonymousValues.end()) {
 			if (GlobalValues.find(LAssignment->GetName()) == GlobalValues.end()) return CodeError("Unknown variable name.");
 			AnnotatedGlobal global = GlobalValues[LAssignment->GetName()];
-			variable = global.Value;
-			llvm::Type *gltype = global.Type.Type;
-			llvm::Type *grtype = value->getType();
-			llvm::StoreInst *gstoreInstance;
-			if (gltype != grtype) {
-				SSA *gcasted = Builder->CreateZExtOrTrunc(value, gltype, "xls_global_cast");
-				gstoreInstance = Builder->CreateStore(gcasted, variable);
-			} else gstoreInstance = Builder->CreateStore(value, variable);
-			gstoreInstance->setVolatile(Volatile);
-			TypeAnnotation[gstoreInstance] = global.Type;
-			return gstoreInstance;
+			SSA *castedValue = ImplicitCast(global.Type, value);
+			storeInstance = Builder->CreateStore(castedValue, global.Value);
+			storeInstance->setVolatile(Volatile);
+			TypeAnnotation[castedValue] = global.Type;
+			return castedValue;
 		}
-		aVariable = AllonymousValues[LAssignment->GetName()];
+		A = AllonymousValues[LAssignment->GetName()];
 		if (LAssignment->GetField() != "") {
-			if (!aVariable.Type.IsStruct) return nullptr;
-			if (aVariable.Type.Structure.Fields.find(LAssignment->GetField()) == aVariable.Type.Structure.Fields.end()) return CodeError("Unknown field to assign.");
-			dword fieldOffset = aVariable.Type.Structure.Fields[LAssignment->GetField()].first;
-			XLSType fieldType = aVariable.Type.Structure.Fields[LAssignment->GetField()].second;
+			if (!A.Type.IsStruct) return nullptr;
+			if (A.Type.Structure.Fields.find(LAssignment->GetField()) == A.Type.Structure.Fields.end()) return CodeError("Unknown field to assign.");
+			dword fieldOffset = A.Type.Structure.Fields[LAssignment->GetField()].first;
+			XLSType fieldType = A.Type.Structure.Fields[LAssignment->GetField()].second;
 			std::vector<SSA*> GEPIndex(2);
 			GEPIndex[0] = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false));
 			GEPIndex[1] = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, fieldOffset, false));
-			SSA *GEP = Builder->CreateGEP(aVariable.Type.Type, aVariable.Value, GEPIndex, "xls_assign_gep");
-			llvm::StoreInst* fstoreInstance;
-			fstoreInstance = Builder->CreateStore(ImplicitCast(fieldType, value), GEP);
-			fstoreInstance->setVolatile(Volatile);
-			TypeAnnotation[fstoreInstance] = fieldType;
-			return fstoreInstance;
+			SSA *GEP = Builder->CreateGEP(A.Type.Type, A.Value, GEPIndex, "xls_assign_gep");
+			SSA *castedValue = ImplicitCast(fieldType, value);
+			storeInstance = Builder->CreateStore(castedValue, GEP);
+			storeInstance->setVolatile(Volatile);
+			TypeAnnotation[castedValue] = fieldType;
+			return castedValue;
 		}
 		if (LAssignment->GetOffset()) {
 			SSA *offset = LAssignment->GetOffset()->Render();
-			llvm::StoreInst *ostoreInstance;
-			SSA *V = Builder->CreateLoad(aVariable.Type.Type, aVariable.Value, LAssignment->GetName());
-			SSA *GEP = Builder->CreateInBoundsGEP(DefinedTypes[aVariable.Type.Dereference].Type, V, offset);
-			ostoreInstance = Builder->CreateStore(ImplicitCast(DefinedTypes[aVariable.Type.Dereference], value), GEP);
-			ostoreInstance->setVolatile(Volatile);
-			TypeAnnotation[ostoreInstance] = DefinedTypes[aVariable.Type.Dereference];
-			return ostoreInstance;
+			SSA *castedValue = ImplicitCast(DefinedTypes[A.Type.Dereference], value);
+			SSA *V = Builder->CreateLoad(A.Type.Type, A.Value, LAssignment->GetName());
+			SSA *GEP = Builder->CreateInBoundsGEP(DefinedTypes[A.Type.Dereference].Type, V, offset);
+			storeInstance = Builder->CreateStore(castedValue, GEP);
+			storeInstance->setVolatile(Volatile);
+			TypeAnnotation[castedValue] = DefinedTypes[A.Type.Dereference];
+			return castedValue;
 		}
 		if (LAssignment->IsDereference()) {
-			if (!aVariable.Type.IsPointer) return CodeError("Non-pointer values cannot be dereferenced.");
-			llvm::StoreInst *dstoreInstance;
-			dstoreInstance = Builder->CreateStore(ImplicitCast(DefinedTypes[aVariable.Type.Dereference], value), Builder->CreateLoad(aVariable.Type.Type, aVariable.Value, "xls_assign_pointer"));
-			dstoreInstance->setVolatile(Volatile);
-			TypeAnnotation[dstoreInstance] = aVariable.Type;
-			return value;
+			if (!A.Type.IsPointer) return CodeError("Non-pointer values cannot be dereferenced.");
+			storeInstance = Builder->CreateStore(ImplicitCast(DefinedTypes[A.Type.Dereference], value), Builder->CreateLoad(A.Type.Type, A.Value, "xls_assign_pointer"));
+			storeInstance->setVolatile(Volatile);
+			TypeAnnotation[value] = DefinedTypes[A.Type.Dereference];
+			return ImplicitCast(DefinedTypes[A.Type.Dereference], value);
 		}
-		variable = aVariable.Value;
-		llvm::StoreInst *storeInstance;
-		// llvm::StoreInst *storeInstance = Builder->CreateStore(value, variable);
-		storeInstance = Builder->CreateStore(ImplicitCast(aVariable.Type, value), variable);
+		variable = A.Value;
+		storeInstance = Builder->CreateStore(ImplicitCast(A.Type, value), variable);
 		storeInstance->setVolatile(Volatile);
-		TypeAnnotation[storeInstance] = aVariable.Type;
+		TypeAnnotation[storeInstance] = A.Type;
 		return value;
 	}
 
@@ -1011,7 +1001,7 @@ SSA *IfExpression::Render() {
 	if (!condition) return nullptr;
 
 	if (condition->getType() != llvm::Type::getInt1Ty(*GlobalContext))
-		condition = Builder->CreateICmpNE(condition, llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false)), "xls_if_condition");
+		condition = Builder->CreateICmpNE(condition, llvm::Constant::getNullValue(condition->getType()), "xls_if_condition");
 	llvm::Function *function = Builder->GetInsertBlock()->getParent();
 	llvm::BasicBlock *thenBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_then", function);
 	llvm::BasicBlock *elseBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_else");
@@ -1036,6 +1026,7 @@ SSA *IfExpression::Render() {
 
 	function->getBasicBlockList().push_back(afterBlock);
 	Builder->SetInsertPoint(afterBlock);
+
 	llvm::PHINode *phiNode = Builder->CreatePHI(GetType(thenBranch).Type, 2, "xls_if_block");
 	phiNode->addIncoming(thenBranch, thenBlock);
 	phiNode->addIncoming(ImplicitCast(GetType(thenBranch), elseBranch), elseBlock);
@@ -1287,27 +1278,6 @@ void InitialiseModule(std::string moduleName) {
 	TypeMap[BooleType.Type] = BooleType;
 	TypeMap[VoidType.Type] = VoidType;
 	TypeMap[BoolePtrType.Type] = BoolePtrType;
-}
-
-void PreinitialiseJIT() {
-	GlobalJIT = ExitIfError(JITCompiler::Create());
-}
-
-void InitialiseJIT() {
-  GlobalContext = MUQ(llvm::LLVMContext);
-  GlobalModule = MUQ(llvm::Module, "XLS-JIT", *GlobalContext);
-	GlobalModule->setDataLayout(GlobalJIT->GetDataLayout());
-  GlobalFPM = MUQ(llvm::legacy::FunctionPassManager, GlobalModule.get());
-
-  Builder = MUQ(llvm::IRBuilder<>, *GlobalContext);
-
-	GlobalFPM->add(llvm::createPromoteMemoryToRegisterPass());
-  GlobalFPM->add(llvm::createInstructionCombiningPass());
-  GlobalFPM->add(llvm::createReassociatePass());
-  GlobalFPM->add(llvm::createGVNPass());
-  GlobalFPM->add(llvm::createCFGSimplificationPass());
-
-  GlobalFPM->doInitialization();
 }
 
 void HandleImplementation() {

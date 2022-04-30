@@ -164,7 +164,6 @@ int main(int argc, char* argv[]) {
 	llvm::DataLayout layout = targetMachine->createDataLayout();
 	GlobalLayout = &layout;
 
-	PreinitialiseJIT();
 	InitialiseModule(moduleName);
 	GetNextToken();
 	Handle();
