@@ -62,7 +62,7 @@
 												 "volatile"
 												 "mutable"
 												 "struct"))
-					(x-types '("dword" "word" "byte" "boole" "void" "sdword" "sword" "sbyte"))
+					(x-types '("dword" "word" "byte" "boole" "void" "sdword" "sword" "sbyte" "N/A"))
 					(x-auxillary '("sizeof" "typeof"))
 					(x-constants '())
 

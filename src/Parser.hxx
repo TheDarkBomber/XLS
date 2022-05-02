@@ -67,10 +67,12 @@ struct XLSType {
   llvm::Type *Type;
 	std::string Name;
 	bool IsPointer = false;
+	bool IsFP = false;
 	bool IsStruct = false;
 	bool Signed = false;
 	std::string Dereference = "void";
 	StructData Structure;
+	std::vector<XLSType> FPData;
 	dword UID;
 };
 
@@ -337,6 +339,7 @@ void PreinitialiseJIT();
 void InitialiseModule(std::string moduleName);
 void InitialiseJIT();
 
+bool DefineFPType(std::string function, XLSType* outtype);
 bool CheckTypeDefined(std::string name);
 
 #endif

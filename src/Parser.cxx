@@ -25,10 +25,10 @@
 #include <llvm/Transforms/InstCombine/InstCombine.h>
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Scalar/GVN.h>
+#include <llvm/Transforms/Scalar/SROA.h>
 #include <llvm/Transforms/Utils.h>
 #include <llvm/Transforms/Utils/Mem2Reg.h>
 #include <map>
-#include <ctype.h>
 #include <stdio.h>
 #include <string>
 
@@ -120,7 +120,7 @@ UQP(Expression) ParseParenthetical() {
 UQP(Expression) ParseIdentifier(bool isVolatile) {
 	std::string identifier = CurrentIdentifier;
 	if (CheckTypeDefined(identifier))
-		return ParseDeclaration(DefinedTypes[identifier]);
+		return ParseDeclaration(DefinedTypes[CurrentIdentifier]);
 	GetNextToken();
 	UQP(Expression) offset;
 	if (CurrentToken.Value == '[') {
@@ -374,7 +374,7 @@ UQP(Expression) ParseDeclaration(XLSType type) {
 		return MUQ(CastExpression, type, std::move(toCast));
 	}
 	if (CurrentToken.Type != LEXEME_IDENTIFIER) return MUQ(VariableExpression, type.Name);
-	if (type.Name == "void") return ParseError("Cannot declare variable of type void.");
+	if (type.Size == 0) return ParseError("Cannot declare variable of type void, or any similar type with size zero.");
 	VDX(std::string, UQP(Expression)) variableNames;
 
 	for (;;) {
@@ -604,8 +604,11 @@ SSA *ImplicitCast(XLSType type, SSA *toCast) {
 	if (type == GetType(toCast)) return toCast;
 	SSA *casted;
 	TypeAnnotation[casted] = type;
+	if (!type.UID || !GetType(toCast).UID) return casted = llvm::PoisonValue::get(type.Type);
 	if (type.Type->isVoidTy() || toCast->getType()->isVoidTy())
 		return casted = llvm::Constant::getNullValue(type.Type);
+	if (type.IsPointer && toCast->getType()->isPointerTy())
+		return casted = Builder->CreateBitCast(toCast, type.Type, "xls_ptp_cast");
 	if (type.IsPointer) return casted = Builder->CreateIntToPtr(toCast, type.Type, "xls_itp_cast");
 	if (toCast->getType()->isPointerTy())
 		return casted = Builder->CreatePtrToInt(toCast, type.Type, "xls_pti_cast");
@@ -670,6 +673,13 @@ SSA *MutableArrayExpression::Render() {
 
 SSA *VariableExpression::Render() {
 	if (AllonymousValues.find(Name) == AllonymousValues.end()) {
+		if (FunctionSignatures.find(Name) != FunctionSignatures.end()) {
+			llvm::Function *pointed = getFunction(Name);
+			XLSType FPType;
+			if (!DefineFPType(Name, &FPType)) return nullptr;
+			TypeAnnotation[pointed] = FPType;
+			return pointed;
+		}
 		if (GlobalValues.find(Name) == GlobalValues.end()) CodeError("Reference to undeclared variable.");
 		AnnotatedGlobal global = GlobalValues[Name];
 		llvm::LoadInst *gloadInstance = Builder->CreateLoad(global.Type.Type, global.Value, Name.c_str());
@@ -735,6 +745,7 @@ SSA *BinaryExpression::Render() {
 		if (!LAssignment) return CodeError("Assignment on fire.");
 		SSA *value = RHS->Render();
 		if (!value) return nullptr;
+		if (!GetType(value).UID) value = llvm::PoisonValue::get(value->getType());
 		SSA *variable;
 		llvm::StoreInst *storeInstance;
 		AnnotatedValue A;
@@ -801,6 +812,7 @@ SSA *BinaryExpression::Render() {
 		llvm::Argument *piped = pipe->getArg(0);
 		llvm::CallInst *call = Builder->CreateCall(pipe, ImplicitCast(GetType(piped), lvalue), "xls_pipe");
 		call->setCallingConv(pipe->getCallingConv());
+		call->setAttributes(pipe->getAttributes());
 		return call;
 	}
 
@@ -831,13 +843,13 @@ SSA *BinaryExpression::Render() {
 	JMPIF(Operator, ">=", Operators_gte_compare);
 	goto Operators_end;
  Operators_plus:
-	RET(Builder->CreateAdd(left, RPTR, "xls_add"));
+	RET(Builder->CreateAdd(left, RPCAST, "xls_add"));
  Operators_minus:
-	RET(Builder->CreateSub(left, RPTR, "xls_subtract"));
+	RET(Builder->CreateSub(left, RPCAST, "xls_subtract"));
  Operators_multiply:
-	RET(Builder->CreateMul(left, RPTR, "xls_multiply"));
+	RET(Builder->CreateMul(left, RPCAST, "xls_multiply"));
  Operators_divide:
-	RET(Builder->CreateUDiv(left, RPTR, "xls_divide"));
+	RET(Builder->CreateUDiv(left, RPCAST, "xls_divide"));
  Operators_lt_compare:
 	if (GetType(left).Signed || GetType(right).Signed)
 		RET(Builder->CreateICmpSLT(left, RCAST, "xls_slt_compare"));
@@ -896,11 +908,13 @@ SSA *UnaryExpression::Render() {
 			return CodeError("Unknown variable name to address.");
 		V = AllonymousValues[LAssignment->GetName()];
 		SSA *value;
-		XLSType PtrType = V.Type;
-		PtrType.Dereference = PtrType.Name;
+		XLSType PtrType;
+		PtrType.Dereference = V.Type.Name;
+		PtrType.Name = V.Type.Name;
 		PtrType.Name.push_back('*');
 		PtrType.IsPointer = true;
-		PtrType.Type = PtrType.Type->getPointerTo();
+		PtrType.Type = V.Type.Type->getPointerTo();
+		PtrType.Size = GlobalLayout->getPointerSizeInBits();
 		if (!CheckTypeDefined(PtrType.Name)) return nullptr;
 		TypeAnnotation[value] = PtrType;
 		value = V.Value;
@@ -935,7 +949,30 @@ SSA *UnaryExpression::Render() {
 
 SSA *CallExpression::Render() {
 	llvm::Function *called = getFunction(Called);
-	if (!called) return CodeError("Call to undeclared function.");
+	if (!called) {
+		if (AllonymousValues.find(Called) == AllonymousValues.end())
+			return CodeError("Call to undeclared function.");
+
+		AnnotatedValue A = AllonymousValues[Called];
+		if (!A.Type.IsFP) return CodeError("Call to non-function pointer.");
+		llvm::LoadInst* FP = Builder->CreateLoad(A.Type.Type, A.Value, "xls_fp_load");
+
+		if (A.Type.FPData.size() != Arguments.size() + 1) return CodeError("Argument call size mismatch with type argument size.");
+
+		std::vector<SSA*> FPArguments;
+		for (uint i = 0; i < Arguments.size(); i++)
+			FPArguments.push_back(ImplicitCast(A.Type.FPData[i + 1], Arguments[i]->Render()));
+
+		std::vector<llvm::Type*> FPParams;
+		for (uint i = 1; i < A.Type.FPData.size(); i++)
+			FPParams.push_back(A.Type.FPData[i].Type);
+
+		llvm::FunctionType* FPType = llvm::FunctionType::get(A.Type.FPData[0].Type, llvm::ArrayRef<llvm::Type*>(FPParams), false);
+		llvm::CallInst* callInstance = Builder->CreateCall(FPType, FP, FPArguments, "xls_fp_call");
+		if (A.Type.FPData[0].UID == DefinedTypes["void"].UID) callInstance->setName("");
+		TypeAnnotation[callInstance] = A.Type.FPData[0];
+		return callInstance;
+	}
 
 	if (called->arg_size() != Arguments.size()) return CodeError("Argument call size mismatch with real argument size.");
 
@@ -952,6 +989,7 @@ SSA *CallExpression::Render() {
 	if (called->getReturnType() == llvm::Type::getVoidTy(*GlobalContext))
 		callInstance->setName("");
 	callInstance->setCallingConv(called->getCallingConv());
+	callInstance->setAttributes(called->getAttributes());
 	TypeAnnotation[callInstance] = ReturnTypeAnnotation[called];
 	return callInstance;
 }
@@ -1134,6 +1172,7 @@ llvm::Function *SignatureNode::Render() {
 
 	llvm::Function *function = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, Name, GlobalModule.get());
 	function->setCallingConv(Convention);
+	if (!Type.UID) function->setDoesNotReturn();
 
 	uint index = 0;
 	for (llvm::Argument &argument : function->args()) {
@@ -1170,11 +1209,12 @@ llvm::Function *FunctionNode::Render() {
 		AllonymousValues[std::string(argument.getName())] = stored;
 	}
 
-  if (SSA *returnValue = Body->Render()) {
-    Builder->CreateRet(ImplicitCast(signature.GetType(), returnValue));
-    llvm::verifyFunction(*function);
-    GlobalFPM->run(*function);
-    return function;
+	if (SSA *returnValue = Body->Render()) {
+		if (signature.GetType().Name != "void") Builder->CreateRet(ImplicitCast(signature.GetType(), returnValue));
+		else Builder->CreateRetVoid();
+		llvm::verifyFunction(*function);
+		GlobalFPM->run(*function);
+		return function;
 	}
 
 	function->eraseFromParent();
@@ -1193,6 +1233,8 @@ void InitialiseModule(std::string moduleName) {
 		GlobalFPM->add(llvm::createGVNPass());
 		GlobalFPM->add(llvm::createCFGSimplificationPass());
 		GlobalFPM->add(llvm::createTailCallEliminationPass());
+		GlobalFPM->add(llvm::createSROAPass());
+		GlobalFPM->add(llvm::createVerifierPass());
 	}
 
 	GlobalFPM->doInitialization();
@@ -1200,6 +1242,20 @@ void InitialiseModule(std::string moduleName) {
 	Builder = MUQ(llvm::IRBuilder<>, *GlobalContext);
 
 	// Type definitions.
+	XLSType InvalidType;
+	InvalidType.Size = 0;
+	InvalidType.Type = llvm::Type::getInt1Ty(*GlobalContext);
+	InvalidType.Name = "N/A";
+	InvalidType.UID = CurrentUID++;
+
+	DefinedTypes[InvalidType.Name] = InvalidType;
+	XLSType InternalAddressSizeType;
+	InternalAddressSizeType.Size = GlobalLayout->getPointerSizeInBits();
+	InternalAddressSizeType.Type = llvm::Type::getInt64Ty(*GlobalContext);
+	InternalAddressSizeType.Name = "#addrsize";
+	InternalAddressSizeType.UID = CurrentUID++;
+	DefinedTypes[InternalAddressSizeType.Name] = InternalAddressSizeType;
+
 	XLSType DwordType, WordType, ByteType, BooleType, VoidType, BoolePtrType, VoidPtrType;
 
 	DwordType.Size = 32;
@@ -1339,7 +1395,82 @@ bool CheckTypeDefined(std::string name) {
 		TypeMap[NEWType.Type] = NEWType;
 		return true;
 	}
+
+	if (name == "fn:") {
+		std::string typeName;
+		std::vector<XLSType> constituentTypes;
+		typeName = "fn:(";
+		GetNextToken();
+		if (CurrentToken.Value != '(') return false;
+		GetNextToken();
+		while (CurrentToken.Value != ')') {
+			if (CurrentToken.Type != LEXEME_IDENTIFIER) return false;
+			if (!CheckTypeDefined(CurrentIdentifier)) return false;
+			typeName += CurrentIdentifier;
+			constituentTypes.push_back(DefinedTypes[CurrentIdentifier]);
+			GetNextToken();
+			if (CurrentToken.Value == ',') {
+				GetNextToken();
+				continue;
+			}
+		}
+		// '('
+		typeName += "):";
+		GetNextToken();
+		if (CurrentToken.Value != ':') return false;
+		GetNextToken();
+		if (CurrentToken.Type != LEXEME_IDENTIFIER) return false;
+		if (!CheckTypeDefined(CurrentIdentifier)) return false;
+		typeName += CurrentIdentifier;
+		constituentTypes.push_back(DefinedTypes[CurrentIdentifier]);
+
+		CurrentIdentifier = typeName;
+		if (CheckTypeDefined(typeName)) return true;
+		XLSType NEWType;
+		NEWType.Name = typeName;
+		std::vector<llvm::Type*> TypeArguments;
+		XLSType rType = constituentTypes.back();
+		constituentTypes.pop_back();
+		for (uint i = 0; i < constituentTypes.size(); i++)
+			TypeArguments.push_back(constituentTypes[i].Type);
+		llvm::FunctionType* functionType = llvm::FunctionType::get(rType.Type, TypeArguments, false);
+		llvm::PointerType* fpType = llvm::PointerType::get(functionType, 0);
+		NEWType.Type = fpType;
+		NEWType.Size = GlobalLayout->getPointerSizeInBits();
+		NEWType.IsPointer = true;
+		NEWType.IsFP = true;
+		NEWType.Dereference = "#addrsize";
+		constituentTypes.insert(constituentTypes.begin(), rType);
+		NEWType.FPData = constituentTypes;
+		NEWType.UID = CurrentUID++;
+		DefinedTypes[typeName] = NEWType;
+		return true;
+	}
 	return false;
+}
+
+bool DefineFPType(std::string function, XLSType* outtype) {
+	if (FunctionSignatures.find(function) == FunctionSignatures.end()) return false;
+  llvm::Function *pointed = getFunction(function);
+  XLSType FPType;
+	FPType.Name = "fn:(";
+  FPType.Type = pointed->getType();
+  FPType.Size = GlobalLayout->getPointerSizeInBits();
+  FPType.Dereference = "#addrsize";
+  FPType.IsPointer = true;
+	FPType.IsFP = true;
+	FPType.FPData.push_back(ReturnTypeAnnotation[pointed]);
+	for (uint i = 0; i < pointed->arg_size(); i++) {
+		FPType.Name += ArgumentTypeAnnotation[pointed->getArg(i)].Name;
+		FPType.FPData.push_back(ArgumentTypeAnnotation[pointed->getArg(i)]);
+		if (i + 1 != pointed->arg_size()) FPType.Name += ", ";
+	}
+	FPType.Name += "):" + FPType.FPData[0].Name;
+	FPType.UID = CurrentUID++;
+  DefinedTypes[FPType.Name] = FPType;
+  TypeMap[FPType.Type] = FPType;
+	*outtype = FPType;
+	return true;
 }
 
 
