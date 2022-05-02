@@ -90,6 +90,7 @@ Token GetToken() {
 		JMPIF(CurrentIdentifier, "padded", GetToken_kw_structmode);
 		JMPIF(CurrentIdentifier, "practical", GetToken_kw_structmode);
 		JMPIF(CurrentIdentifier, "packed", GetToken_kw_structmode);
+		JMPIF(CurrentIdentifier, "typedef", GetToken_kw_typedef);
 		goto GetToken_end_kw;
 
 	GetToken_kw_implement:
@@ -142,6 +143,9 @@ Token GetToken() {
 		return output;
 	GetToken_kw_struct:
 		output.Type = LEXEME_STRUCT;
+		return output;
+	GetToken_kw_typedef:
+		output.Type = LEXEME_TYPEDEF;
 		return output;
 	GetToken_end_kw:
 		output.Type = LEXEME_IDENTIFIER;

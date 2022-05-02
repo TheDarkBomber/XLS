@@ -437,6 +437,28 @@ UQP(Statement) ParseStruct() {
 	return MUQ(StructDefinition, types, name, mode);
 }
 
+UQP(Statement) ParseTypedef() {
+	GetNextToken();
+	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier after typedef.", nullptr, nullptr);
+	if (CMP(CurrentIdentifier, "alias")) {
+		GetNextToken();
+		if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected typename to alias.", nullptr, nullptr);
+		if (CheckTypeDefined(CurrentIdentifier)) return ParseError("Type already exists, cannot be aliased.", nullptr, nullptr);
+		std::string destinationName = CurrentIdentifier;
+		XLSType destination;
+		GetNextToken();
+		if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier to alias type to.", nullptr, nullptr);
+		if (!CheckTypeDefined(CurrentIdentifier)) return ParseError("Expected type to act as source for alias.", nullptr, nullptr);
+		XLSType source = DefinedTypes[CurrentIdentifier];
+		destination = source;
+		destination.Name = destinationName;
+		DefinedTypes[destination.Name] = destination;
+		GetNextToken();
+		return MUQ(NullNode);
+	}
+	return ParseError("Unknown typedef operand.", nullptr, nullptr);
+}
+
 UQP(Statement) ParseGlobalVariable(XLSType type) {
 	GetNextToken();
 	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier after global variable declaration.", nullptr, nullptr);
@@ -1221,6 +1243,10 @@ llvm::Function *FunctionNode::Render() {
 	return nullptr;
 }
 
+SSA* NullNode::Render() {
+	return CodeError("Rendering a null node is invalid.");
+}
+
 void InitialiseModule(std::string moduleName) {
 	GlobalContext = MUQ(llvm::LLVMContext);
 	GlobalModule = MUQ(llvm::Module, moduleName, *GlobalContext);
@@ -1369,6 +1395,10 @@ void HandleStruct() {
 	if (UQP(Statement) definition = ParseStruct()) {
 		definition->Render();
 	} else GetNextToken();
+}
+
+void HandleTypedef() {
+	if (!ParseTypedef()) GetNextToken();
 }
 
 void HandleUnboundedExpression() {

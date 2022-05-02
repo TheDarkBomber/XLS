@@ -61,7 +61,9 @@
 												 "jump"
 												 "volatile"
 												 "mutable"
-												 "struct"))
+												 "struct"
+												 "typedef alias"
+												 "typedef"))
 					(x-types '("dword" "word" "byte" "boole" "void" "sdword" "sword" "sbyte" "N/A"))
 					(x-auxillary '("sizeof" "typeof"))
 					(x-constants '())

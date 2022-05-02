@@ -273,6 +273,12 @@ public:
 	SSA *Render() override;
 };
 
+class NullNode : public Statement {
+public:
+	NullNode() {}
+	SSA *Render() override;
+};
+
 struct AnnotatedValue {
 	XLSType Type;
 	Alloca* Value;
@@ -315,6 +321,7 @@ UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS, bool isV
 
 UQP(Statement) ParseStruct();
 UQP(Statement) ParseGlobalVariable(XLSType type);
+UQP(Statement) ParseTypedef();
 
 UQP(SignatureNode) ParseSignature();
 UQP(SignatureNode) ParseExtern();
@@ -333,6 +340,7 @@ void HandleImplementation();
 void HandleExtern();
 void HandleGlobal();
 void HandleStruct();
+void HandleTypedef();
 void HandleUnboundedExpression();
 
 void PreinitialiseJIT();
