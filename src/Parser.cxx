@@ -28,6 +28,7 @@
 #include <llvm/Transforms/Scalar/SROA.h>
 #include <llvm/Transforms/Utils.h>
 #include <llvm/Transforms/Utils/Mem2Reg.h>
+#include <stack>
 #include <map>
 #include <stdio.h>
 #include <string>
@@ -62,6 +63,9 @@ std::map<std::string, AnnotatedGlobal> GlobalValues;
 std::map<SSA*, XLSType> TypeAnnotation;
 std::map<llvm::Function*, XLSType> ReturnTypeAnnotation;
 std::map<llvm::Argument*, XLSType> ArgumentTypeAnnotation;
+
+std::stack<llvm::BasicBlock*> BreakStack;
+std::stack<llvm::BasicBlock*> ContinueStack;
 
 void AlertError(const char *error) {
 	llvm::errs() <<
@@ -189,6 +193,10 @@ UQP(Expression) ParseDispatcher() {
 		return ParseTypeof();
 	case LEXEME_MUTABLE:
 		return ParseMutable();
+	case LEXEME_BREAK:
+		return ParseBreak();
+	case LEXEME_CONTINUE:
+		return ParseContinue();
 	case LEXEME_VOLATILE:
 		GetNextToken();
 		return ParseExpression(true);
@@ -319,6 +327,26 @@ UQP(Expression) ParseMutable() {
 	UQP(StringExpression) result = MUQ(StringExpression, StringLiteral, StringTerminator, true);
 	GetNextToken();
 	return result;
+}
+
+UQP(Expression) ParseBreak() {
+	GetNextToken();
+	if (CurrentToken.Type == LEXEME_INTEGER) {
+		dword nest = CurrentInteger;
+		GetNextToken();
+		return MUQ(BreakExpression, nest);
+	}
+	return MUQ(BreakExpression, 0);
+}
+
+UQP(Expression) ParseContinue() {
+  GetNextToken();
+  if (CurrentToken.Type == LEXEME_INTEGER) {
+		dword nest = CurrentInteger;
+		GetNextToken();
+		return MUQ(ContinueExpression, nest);
+	}
+  return MUQ(ContinueExpression, 0);
 }
 
 UQP(Expression) ParseIf() {
@@ -1016,6 +1044,46 @@ SSA *CallExpression::Render() {
 	return callInstance;
 }
 
+SSA *BreakExpression::Render() {
+	llvm::BasicBlock* location;
+	std::stack<llvm::BasicBlock*> preserve;
+	for (uint i = 0; i <= Nest; i++) {
+		if (BreakStack.empty()) return CodeError("Break stack is empty.");
+		location = BreakStack.top();
+		preserve.push(BreakStack.top());
+		BreakStack.pop();
+	}
+	Builder->CreateBr(location);
+	RESOW_BASIC_BLOCK;
+	for (uint i = 0; i < preserve.size(); i++) {
+		BreakStack.push(preserve.top());
+		preserve.pop();
+	}
+	SSA *R = llvm::Constant::getNullValue(DefinedTypes["dword"].Type);
+	TypeAnnotation[R] = DefinedTypes["dword"];
+	return R;
+}
+
+SSA *ContinueExpression::Render() {
+  llvm::BasicBlock *location;
+	std::stack<llvm::BasicBlock*> preserve;
+  for (uint i = 0; i <= Nest; i++) {
+    if (ContinueStack.empty()) return CodeError("Continue stack is empty.");
+    location = ContinueStack.top();
+		preserve.push(ContinueStack.top());
+    ContinueStack.pop();
+  }
+  Builder->CreateBr(location);
+	RESOW_BASIC_BLOCK;
+	for (uint i = 0; i < preserve.size(); i++) {
+		ContinueStack.push(preserve.top());
+		preserve.pop();
+	}
+  SSA *R = llvm::Constant::getNullValue(DefinedTypes["dword"].Type);
+  TypeAnnotation[R] = DefinedTypes["dword"];
+  return R;
+}
+
 SSA *BlockExpression::Render() {
 	std::vector<SSA*> ExpressionVector;
 	for (uint i = 0, e = Expressions.size(); i != e; i++) {
@@ -1096,27 +1164,32 @@ SSA *IfExpression::Render() {
 
 SSA *WhileExpression::Render() {
 	llvm::Function *function = Builder->GetInsertBlock()->getParent();
+	llvm::BasicBlock *conditionBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_while_check", function);
 	llvm::BasicBlock *loopBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_loop", function);
 	llvm::BasicBlock *afterBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_after_loop", function);
+	BreakStack.push(afterBlock);
+	ContinueStack.push(conditionBlock);
 
-	SSA *condition;
-	if (!DoWhile) {
-		condition = Condition->Render();
-		if (!condition) return nullptr;
-		if (condition->getType() != llvm::Type::getInt1Ty(*GlobalContext))
-			condition = Builder->CreateICmpNE(condition, llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false)), "xls_while_condition");
-		Builder->CreateCondBr(condition, loopBlock, afterBlock);
-	} else Builder->CreateBr(loopBlock);
-	Builder->SetInsertPoint(loopBlock);
-	if (!Body->Render()) return nullptr;
 
-	condition = Condition->Render();
+	if (!DoWhile)Builder->CreateBr(conditionBlock);
+	else Builder->CreateBr(loopBlock);
+
+	Builder->SetInsertPoint(conditionBlock);
+	SSA *condition = Condition->Render();
 	if (!condition) return nullptr;
 	if (condition->getType() != llvm::Type::getInt1Ty(*GlobalContext))
 		condition = Builder->CreateICmpNE( condition, llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false)), "xls_while_condition");
-
 	Builder->CreateCondBr(condition, loopBlock, afterBlock);
+
+	Builder->SetInsertPoint(loopBlock);
+	if (!Body->Render()) return nullptr;
+
+
+	Builder->CreateBr(conditionBlock);
 	Builder->SetInsertPoint(afterBlock);
+
+	BreakStack.pop();
+	ContinueStack.pop();
 
 	SSA *R = llvm::Constant::getNullValue(llvm::Type::getInt32Ty(*GlobalContext));
 	TypeAnnotation[R] = DefinedTypes["dword"];

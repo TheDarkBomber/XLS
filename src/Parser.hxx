@@ -15,6 +15,8 @@
 #include <vector>
 #include <memory>
 
+#define RESOW_BASIC_BLOCK do { llvm::BasicBlock *resow = llvm::BasicBlock::Create(*GlobalContext, "xls_rs", Builder->GetInsertBlock()->getParent()); Builder->SetInsertPoint(resow); } while (0)
+
 typedef llvm::Value SSA;
 typedef llvm::AllocaInst Alloca;
 
@@ -174,6 +176,20 @@ public:
 	SSA *Render() override;
 };
 
+class BreakExpression : public Expression {
+  dword Nest;
+public:
+  BreakExpression(dword nest) : Nest(nest) {}
+  SSA *Render() override;
+};
+
+class ContinueExpression : public Expression {
+	dword Nest;
+public:
+	ContinueExpression(dword nest) : Nest(nest) {}
+	SSA *Render() override;
+};
+
 class LabelExpression : public Expression {
 	std::string Name;
 public:
@@ -316,6 +332,8 @@ UQP(Expression) ParseJump();
 UQP(Expression) ParseSizeof();
 UQP(Expression) ParseTypeof();
 UQP(Expression) ParseMutable();
+UQP(Expression) ParseBreak();
+UQP(Expression) ParseContinue();
 
 UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS, bool isVolatile = false);
 

@@ -63,7 +63,9 @@
 												 "mutable"
 												 "struct"
 												 "typedef alias"
-												 "typedef"))
+												 "typedef"
+												 "break"
+												 "continue"))
 					(x-types '("dword" "word" "byte" "boole" "void" "sdword" "sword" "sbyte" "N/A"))
 					(x-auxillary '("sizeof" "typeof"))
 					(x-constants '())
