@@ -1096,16 +1096,24 @@ SSA *BlockExpression::Render() {
 
 SSA *LabelExpression::Render() {
 	llvm::Function *function = Builder->GetInsertBlock()->getParent();
-	llvm::BasicBlock *label = llvm::BasicBlock::Create(*GlobalContext, Name, function);
+	if (AllonymousLabels.find(Name) == AllonymousLabels.end()) AllonymousLabels[Name] = llvm::BasicBlock::Create(*GlobalContext, "L#" + Name, function);
+	llvm::BasicBlock* label = AllonymousLabels[Name];
 	Builder->CreateBr(label);
 	Builder->SetInsertPoint(label);
-	AllonymousLabels[Name] = label;
-	return label;
+	SSA *R = llvm::Constant::getNullValue(DefinedTypes["dword"].Type);
+	TypeAnnotation[R] = DefinedTypes["dword"];
+	return R;
 }
 
 SSA *JumpExpression::Render() {
-	if (AllonymousLabels.find(Label) == AllonymousLabels.end()) return CodeError("Cannot find label.");
-	return Builder->CreateBr(AllonymousLabels[Label]);
+	llvm::Function *function = Builder->GetInsertBlock()->getParent();
+	if (AllonymousLabels.find(Label) == AllonymousLabels.end()) AllonymousLabels[Label] = llvm::BasicBlock::Create(*GlobalContext, "L#" + Label, function);
+	llvm::BasicBlock* label = AllonymousLabels[Label];
+	Builder->CreateBr(label);
+	RESOW_BASIC_BLOCK;
+	SSA *R = llvm::Constant::getNullValue(DefinedTypes["dword"].Type);
+	TypeAnnotation[R] = DefinedTypes["dword"];
+	return R;
 }
 
 SSA *SizeofExpression::Render() {
