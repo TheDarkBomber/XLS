@@ -67,7 +67,7 @@
 												 "break"
 												 "continue"
 												 "return"))
-					(x-types '("dword" "word" "byte" "boole" "void" "sdword" "sword" "sbyte" "N/A"))
+					(x-types '("dword" "word" "byte" "boole" "void" "sdword" "sword" "sbyte" "label&" "N/A"))
 					(x-auxillary '("sizeof" "typeof"))
 					(x-constants '())
 
@@ -82,8 +82,8 @@
 
 		`(
 			 (,x-directive-regex . font-lock-preprocessor-face)
-			 (,x-keywords-regex . font-lock-keyword-face)
 			 (,x-types-regex . font-lock-type-face)
+			 (,x-keywords-regex . font-lock-keyword-face)
 			 (,x-auxillary-regex . font-lock-builtin-face)
 			 (,x-constants-regex . font-lock-constant-face)
 			 (,x-functions-regex 1 font-lock-function-name-face)

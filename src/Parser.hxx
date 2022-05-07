@@ -71,6 +71,7 @@ struct XLSType {
 	bool IsPointer = false;
 	bool IsFP = false;
 	bool IsStruct = false;
+	bool IsLabel = false;
 	bool Signed = false;
 	std::string Dereference = "void";
 	StructData Structure;

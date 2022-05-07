@@ -981,6 +981,17 @@ SSA *UnaryExpression::Render() {
 		return value;
 	}
 
+	if(CMP("&&", Operator)) {
+		VariableExpression *LAssignment = static_cast<VariableExpression*>(Operand.get());
+		if (!LAssignment) return CodeError("Label address-of operation on fire.");
+		llvm::Function* function = Builder->GetInsertBlock()->getParent();
+		if (AllonymousLabels.find(LAssignment->GetName()) == AllonymousLabels.end()) AllonymousLabels[LAssignment->GetName()] = llvm::BasicBlock::Create(*GlobalContext, "L#" + LAssignment->GetName(), function);
+		llvm::BasicBlock* Label = AllonymousLabels[LAssignment->GetName()];
+		SSA *Address = llvm::BlockAddress::get(function, Label);
+		TypeAnnotation[Address] = DefinedTypes["label&"];
+		return Address;
+	}
+
 	SSA *operand = Operand->Render();
 	if (!operand) return nullptr;
 
@@ -1132,6 +1143,19 @@ SSA *LabelExpression::Render() {
 
 SSA *JumpExpression::Render() {
 	llvm::Function *function = Builder->GetInsertBlock()->getParent();
+	// TODO: Jump to any expression that returns a label pointer.
+	if (AllonymousValues.find(Label) != AllonymousValues.end()) {
+		AnnotatedValue A = AllonymousValues[Label];
+		llvm::LoadInst* V = Builder->CreateLoad(A.Type.Type, A.Value, "xls_jump&");
+		llvm::IndirectBrInst* B = Builder->CreateIndirectBr(V, AllonymousLabels.size());
+		for (std::pair<std::string, llvm::BasicBlock *> dest : AllonymousLabels) {
+			B->addDestination(dest.second);
+		}
+		RESOW_BASIC_BLOCK;
+		SSA *R = llvm::Constant::getNullValue(DefinedTypes["dword"].Type);
+		TypeAnnotation[R] = DefinedTypes["dword"];
+		return R;
+	}
 	if (AllonymousLabels.find(Label) == AllonymousLabels.end()) AllonymousLabels[Label] = llvm::BasicBlock::Create(*GlobalContext, "L#" + Label, function);
 	llvm::BasicBlock* label = AllonymousLabels[Label];
 	Builder->CreateBr(label);
@@ -1448,6 +1472,17 @@ void InitialiseModule(std::string moduleName) {
 	SbyteType.Name = "sbyte";
 	SbyteType.UID = CurrentUID++;
 
+
+	// Label type
+	XLSType LabelType;
+	LabelType.Size = GlobalLayout->getPointerSizeInBits();
+	LabelType.Type = llvm::Type::getInt8PtrTy(*GlobalContext);
+	LabelType.Name = "label&";
+	LabelType.Dereference = "void";
+	LabelType.IsPointer = true;
+	LabelType.IsLabel = true;
+	LabelType.UID = CurrentUID++;
+
 	DefinedTypes[DwordType.Name] = DwordType;
 	DefinedTypes[WordType.Name] = WordType;
 	DefinedTypes[ByteType.Name] = ByteType;
@@ -1459,6 +1494,8 @@ void InitialiseModule(std::string moduleName) {
 	DefinedTypes[SdwordType.Name] = SdwordType;
 	DefinedTypes[SwordType.Name] = SwordType;
 	DefinedTypes[SbyteType.Name] = SbyteType;
+
+	DefinedTypes[LabelType.Name] = LabelType;
 
 	TypeMap[DwordType.Type] = DwordType;
 	TypeMap[WordType.Type] = WordType;
