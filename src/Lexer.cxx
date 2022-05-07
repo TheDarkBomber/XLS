@@ -93,6 +93,7 @@ Token GetToken() {
 		JMPIF(CurrentIdentifier, "typedef", GetToken_kw_typedef);
 		JMPIF(CurrentIdentifier, "break", GetToken_kw_break);
 		JMPIF(CurrentIdentifier, "continue", GetToken_kw_continue);
+		JMPIF(CurrentIdentifier, "return", GetToken_kw_return);
 		goto GetToken_end_kw;
 
 	GetToken_kw_implement:
@@ -154,6 +155,9 @@ Token GetToken() {
 		return output;
 	GetToken_kw_continue:
 		output.Type = LEXEME_CONTINUE;
+		return output;
+	GetToken_kw_return:
+		output.Type = LEXEME_RETURN;
 		return output;
 	GetToken_end_kw:
 		output.Type = LEXEME_IDENTIFIER;

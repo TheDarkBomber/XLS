@@ -65,7 +65,8 @@
 												 "typedef alias"
 												 "typedef"
 												 "break"
-												 "continue"))
+												 "continue"
+												 "return"))
 					(x-types '("dword" "word" "byte" "boole" "void" "sdword" "sword" "sbyte" "N/A"))
 					(x-auxillary '("sizeof" "typeof"))
 					(x-constants '())

@@ -225,6 +225,13 @@ public:
 	SSA *Render() override;
 };
 
+class ReturnExpression : public Expression {
+	UQP(Expression) ReturnValue;
+public:
+	ReturnExpression(UQP(Expression) returnValue = nullptr) : ReturnValue(std::move(returnValue)) {}
+	SSA *Render() override;
+};
+
 class IfExpression : public Expression {
   UQP(Expression) Condition, ThenBranch, ElseBranch;
 public:
@@ -334,6 +341,7 @@ UQP(Expression) ParseTypeof();
 UQP(Expression) ParseMutable();
 UQP(Expression) ParseBreak();
 UQP(Expression) ParseContinue();
+UQP(Expression) ParseReturn();
 
 UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS, bool isVolatile = false);
 

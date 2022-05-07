@@ -197,6 +197,8 @@ UQP(Expression) ParseDispatcher() {
 		return ParseBreak();
 	case LEXEME_CONTINUE:
 		return ParseContinue();
+	case LEXEME_RETURN:
+		return ParseReturn();
 	case LEXEME_VOLATILE:
 		GetNextToken();
 		return ParseExpression(true);
@@ -206,6 +208,8 @@ UQP(Expression) ParseDispatcher() {
 			return ParseParenthetical();
 		case '{': // '}'
 			return ParseBlock();
+		case ';':
+			return nullptr;
 		default: PrintToken(CurrentToken); return ParseError("Unknown token value.");
 		}
 	}
@@ -347,6 +351,12 @@ UQP(Expression) ParseContinue() {
 		return MUQ(ContinueExpression, nest);
 	}
   return MUQ(ContinueExpression, 0);
+}
+
+UQP(Expression) ParseReturn() {
+	GetNextToken();
+	UQP(Expression) returnValue = ParseExpression();
+	return MUQ(ReturnExpression, std::move(returnValue));
 }
 
 UQP(Expression) ParseIf() {
@@ -1092,6 +1102,21 @@ SSA *BlockExpression::Render() {
 	}
 
 	return ExpressionVector.back();
+}
+
+SSA *ReturnExpression::Render() {
+	llvm::Function *function = Builder->GetInsertBlock()->getParent();
+	SSA *R = llvm::Constant::getNullValue(DefinedTypes["dword"].Type);
+	TypeAnnotation[R] = DefinedTypes["dword"];
+	SSA *returnValue;
+	if (!ReturnValue) returnValue = llvm::Constant::getNullValue(function->getReturnType());
+	else returnValue = ImplicitCast(ReturnTypeAnnotation[function], ReturnValue->Render());
+	if (!returnValue) return nullptr;
+
+	if (ReturnTypeAnnotation[function].UID == DefinedTypes["void"].UID) Builder->CreateRetVoid();
+	else Builder->CreateRet(returnValue);
+	RESOW_BASIC_BLOCK;
+	return R;
 }
 
 SSA *LabelExpression::Render() {
