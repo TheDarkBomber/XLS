@@ -45,6 +45,11 @@ enum StructMode {
 	STRUCT_PADDED = 2
 };
 
+enum LabelMode {
+	LABEL_DEFINE = 0,
+	LABEL_DECLARE = 1
+};
+
 struct ParserFlags {
 	uint Unused : 3;
 	uint NoOptimise : 1;
@@ -193,15 +198,18 @@ public:
 
 class LabelExpression : public Expression {
 	std::string Name;
+	dword AnonymousReferer;
+	LabelMode Mode;
 public:
-	LabelExpression(const std::string &name) : Name(name) {}
+	LabelExpression(const std::string &name, dword aref, LabelMode mode) : Name(name), AnonymousReferer(aref), Mode(mode) {}
 	SSA *Render() override;
 };
 
 class JumpExpression : public Expression {
 	std::string Label;
+	dword AnonymousReferer;
 public:
-	JumpExpression(const std::string &label) : Label(label) {}
+	JumpExpression(const std::string &label, dword aref) : Label(label), AnonymousReferer(aref) {}
 	SSA *Render() override;
 };
 

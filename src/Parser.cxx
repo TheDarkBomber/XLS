@@ -57,6 +57,9 @@ std::map<llvm::Type*, XLSType> TypeMap;
 std::map<std::string, UQP(SignatureNode)> FunctionSignatures;
 std::map<std::string, llvm::BasicBlock*> AllonymousLabels;
 
+std::vector<llvm::BasicBlock*> AnonymousLabels;
+std::string CurrentLabelIdentifier = "current";
+
 std::map<std::string, AnnotatedValue> AllonymousValues;
 std::map<std::string, AnnotatedGlobal> GlobalValues;
 
@@ -289,18 +292,44 @@ UQP(Expression) ParseBlock() {
 
 UQP(Expression) ParseLabel() {
 	GetNextToken();
-	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier name for label.");
-	std::string name = CurrentIdentifier;
+	if (CurrentToken.Type == LEXEME_IDENTIFIER) {
+		if (CurrentIdentifier == "declare") {
+			GetNextToken();
+			if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected label name to forward declare.");
+			std::string name = CurrentIdentifier;
+			GetNextToken();
+			return MUQ(LabelExpression, name, 0, LABEL_DECLARE);
+		} else if (CurrentIdentifier == "define") {
+			GetNextToken();
+			if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected label name to define.");
+		} else if (CurrentIdentifier == "set-current") {
+			GetNextToken();
+			if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected new name for current.");
+			CurrentLabelIdentifier = CurrentIdentifier;
+			GetNextToken();
+			return MUQ(DwordExpression, 0);
+		}
+		std::string name = CurrentIdentifier;
+		GetNextToken();
+		return MUQ(LabelExpression, name, 0, LABEL_DEFINE);
+	}
+	if (CurrentToken.Type != LEXEME_INTEGER) return ParseError("Expected integer for label.");
+	dword aref = CurrentInteger;
 	GetNextToken();
-	return MUQ(LabelExpression, name);
+	return MUQ(LabelExpression, "", aref, LABEL_DEFINE);
 }
 
 UQP(Expression) ParseJump() {
 	GetNextToken();
-	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier name for jump.");
-	std::string label = CurrentIdentifier;
+	if (CurrentToken.Type == LEXEME_IDENTIFIER) {
+		std::string label = CurrentIdentifier;
+		GetNextToken();
+		return MUQ(JumpExpression, label, 0);
+	}
+	if (CurrentToken.Type != LEXEME_INTEGER) return ParseError("Expected integer for jump.");
+	dword aref = CurrentInteger;
 	GetNextToken();
-	return MUQ(JumpExpression, label);
+	return MUQ(JumpExpression, "", aref);
 }
 
 UQP(Expression) ParseSizeof() {
@@ -985,6 +1014,12 @@ SSA *UnaryExpression::Render() {
 		VariableExpression *LAssignment = static_cast<VariableExpression*>(Operand.get());
 		if (!LAssignment) return CodeError("Label address-of operation on fire.");
 		llvm::Function* function = Builder->GetInsertBlock()->getParent();
+		if (LAssignment->GetName() == CurrentLabelIdentifier) {
+			llvm::BasicBlock* Label = AnonymousLabels.back();
+			SSA *Address = llvm::BlockAddress::get(function, Label);
+			TypeAnnotation[Address] = DefinedTypes["label&"];
+			return Address;
+		}
 		if (AllonymousLabels.find(LAssignment->GetName()) == AllonymousLabels.end()) AllonymousLabels[LAssignment->GetName()] = llvm::BasicBlock::Create(*GlobalContext, "L#" + LAssignment->GetName(), function);
 		llvm::BasicBlock* Label = AllonymousLabels[LAssignment->GetName()];
 		SSA *Address = llvm::BlockAddress::get(function, Label);
@@ -1132,36 +1167,71 @@ SSA *ReturnExpression::Render() {
 
 SSA *LabelExpression::Render() {
 	llvm::Function *function = Builder->GetInsertBlock()->getParent();
-	if (AllonymousLabels.find(Name) == AllonymousLabels.end()) AllonymousLabels[Name] = llvm::BasicBlock::Create(*GlobalContext, "L#" + Name, function);
-	llvm::BasicBlock* label = AllonymousLabels[Name];
-	Builder->CreateBr(label);
-	Builder->SetInsertPoint(label);
 	SSA *R = llvm::Constant::getNullValue(DefinedTypes["dword"].Type);
 	TypeAnnotation[R] = DefinedTypes["dword"];
+	if (Name == CurrentLabelIdentifier && Mode == LABEL_DECLARE) {
+		llvm::BasicBlock *NEW = llvm::BasicBlock::Create(*GlobalContext, "AL" + std::to_string(AnonymousLabels.size()), function);
+		AnonymousLabels.push_back(NEW);
+		return R;
+	} else if (Name == CurrentLabelIdentifier && Mode == LABEL_DEFINE) {
+		llvm::BasicBlock* label = AnonymousLabels.back();
+		Builder->CreateBr(label);
+		Builder->SetInsertPoint(label);
+		return R;
+	} else if (Name == "") {
+		if (AnonymousReferer > AnonymousLabels.size()) {
+			for(uint i = AnonymousLabels.size(); i <= AnonymousReferer; i++)
+				AnonymousLabels.push_back(llvm::BasicBlock::Create(*GlobalContext, "AL" + std::to_string(i), function));
+		}
+		llvm::BasicBlock* label = AnonymousLabels[AnonymousReferer];
+		Builder->CreateBr(label);
+		Builder->SetInsertPoint(label);
+		return R;
+	}
+	if (AllonymousLabels.find(Name) == AllonymousLabels.end()) AllonymousLabels[Name] = llvm::BasicBlock::Create(*GlobalContext, "L#" + Name, function);
+	if (Mode == LABEL_DEFINE) {
+		llvm::BasicBlock* label = AllonymousLabels[Name];
+		Builder->CreateBr(label);
+		Builder->SetInsertPoint(label);
+	}
 	return R;
 }
 
 SSA *JumpExpression::Render() {
 	llvm::Function *function = Builder->GetInsertBlock()->getParent();
+	SSA *R = llvm::Constant::getNullValue(DefinedTypes["dword"].Type);
+	TypeAnnotation[R] = DefinedTypes["dword"];
+	if (Label == CurrentLabelIdentifier) {
+		llvm::BasicBlock* label = AnonymousLabels.back();
+		Builder->CreateBr(label);
+		RESOW_BASIC_BLOCK;
+		return R;
+	} else if (Label == "") {
+		if (AnonymousReferer > AnonymousLabels.size()) {
+			for (uint i = AnonymousLabels.size(); i <= AnonymousReferer; i++)
+				AnonymousLabels.push_back(llvm::BasicBlock::Create(*GlobalContext, "AL" + std::to_string(i), function));
+		}
+		llvm::BasicBlock *label = AnonymousLabels[AnonymousReferer];
+		Builder->CreateBr(label);
+		RESOW_BASIC_BLOCK;
+		return R;
+	}
 	// TODO: Jump to any expression that returns a label pointer.
 	if (AllonymousValues.find(Label) != AllonymousValues.end()) {
 		AnnotatedValue A = AllonymousValues[Label];
 		llvm::LoadInst* V = Builder->CreateLoad(A.Type.Type, A.Value, "xls_jump&");
-		llvm::IndirectBrInst* B = Builder->CreateIndirectBr(V, AllonymousLabels.size());
+		llvm::IndirectBrInst* B = Builder->CreateIndirectBr(V, AllonymousLabels.size() + AnonymousLabels.size());
 		for (std::pair<std::string, llvm::BasicBlock *> dest : AllonymousLabels) {
 			B->addDestination(dest.second);
 		}
+		for (uint i = 0; i < AnonymousLabels.size(); i++) B->addDestination(AnonymousLabels[i]);
 		RESOW_BASIC_BLOCK;
-		SSA *R = llvm::Constant::getNullValue(DefinedTypes["dword"].Type);
-		TypeAnnotation[R] = DefinedTypes["dword"];
 		return R;
 	}
 	if (AllonymousLabels.find(Label) == AllonymousLabels.end()) AllonymousLabels[Label] = llvm::BasicBlock::Create(*GlobalContext, "L#" + Label, function);
 	llvm::BasicBlock* label = AllonymousLabels[Label];
 	Builder->CreateBr(label);
 	RESOW_BASIC_BLOCK;
-	SSA *R = llvm::Constant::getNullValue(DefinedTypes["dword"].Type);
-	TypeAnnotation[R] = DefinedTypes["dword"];
 	return R;
 }
 
@@ -1350,6 +1420,8 @@ llvm::Function *FunctionNode::Render() {
   Builder->SetInsertPoint(basicBlock);
 
   AllonymousValues.clear();
+	AllonymousLabels.clear();
+	AnonymousLabels.clear();
 	TypeAnnotation.clear();
 	uint index = 0;
   for (llvm::Argument &argument : function->args()) {
