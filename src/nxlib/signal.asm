@@ -1,4 +1,4 @@
-default rel
+%include "common.inc"
 %include "syscalls.inc"
 %include "string.inc"
 %include "streams.inc"

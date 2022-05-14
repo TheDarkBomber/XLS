@@ -1,0 +1,69 @@
+extern cpu-vendor(byte* output-vendor);
+extern cpuinfo(dword* output-edx-features, dword* output-ecx-features, dword* output-ebx-info)
+extern cpu-feature?(byte feature, boole set) : boole;
+
+#define CPU-FEATURE-X87 0, 0
+#define CPU-FEATURE-VME 1, 0
+#define CPU-FEATURE-DE 2, 0
+#define CPU-FEATURE-PSE 3, 0
+#define CPU-FEATURE-TSC 4, 0
+#define CPU-FEATURE-MSR 5, 0
+#define CPU-FEATURE-PAE 6, 0
+#define CPU-FEATURE-MCE 7, 0
+#define CPU-FEATURE-CX8 8, 0
+#define CPU-FEATURE-APIC 9, 0
+
+#define CPU-FEATURE-SEP 11, 0
+#define CPU-FEATURE-MTRR 12, 0
+#define CPU-FEATURE-PGE 13, 0
+#define CPU-FEATURE-MCA 14, 0
+#define CPU-FEATURE-CMOV 15, 0
+#define CPU-FEATURE-PAT 16, 0
+#define CPU-FEATURE-PSE-36 17, 0
+#define CPU-FEATURE-PSN 18, 0
+#define CPU-FEATURE-CLFSH 19, 0
+
+#define CPU-FEATURE-DS 21, 0
+#define CPU-FEATURE-ACPI 22, 0
+#define CPU-FEATURE-MMX 23, 0
+#define CPU-FEATURE-FXSR 24, 0
+#define CPU-FEATURE-SSE 25, 0
+#define CPU-FEATURE-SSE2 26, 0
+#define CPU-FEATURE-SS 27, 0
+#define CPU-FEATURE-HTT 28, 0
+#define CPU-FEATURE-TM 29, 0
+#define CPU-FEATURE-IA64 30, 0
+#define CPU-FEATURE-PBE 31, 0
+
+#define CPU-FEATURE-SSE3 0, 1
+#define CPU-FEATURE-PCLMULQDQ 1, 1
+#define CPU-FEATURE-DTRES64 2, 1
+#define CPU-FEATURE-MONITOR 3, 1
+#define CPU-FEATURE-DS-CPL 4, 1
+#define CPU-FEATURE-VMX 5, 1
+#define CPU-FEATURE-SMX 6, 1
+#define CPU-FEATURE-EST 7, 1
+#define CPU-FEATURE-TM2 8, 1
+#define CPU-FEATURE-SSSE3 9, 1
+#define CPU-FEATURE-CNXT-ID 10, 1
+#define CPU-FEATURE-SDBG 11, 1
+#define CPU-FEATURE-FMA 12, 1
+#define CPU-FEATURE-CX16 13, 1
+#define CPU-FEATURE-XTPR 14, 1
+#define CPU-FEATURE-PDCM 15, 1
+
+#define CPU-FEATURE-PCID 17, 1
+#define CPU-FEATURE-DCA 18, 1
+#define CPU-FEATURE-SSE41 19, 1
+#define CPU-FEATURE-SSE42 20, 1
+#define CPU-FEATURE-X2APIC 21, 1
+#define CPU-FEATURE-MOVBE 22, 1
+#define CPU-FEATURE-POPCNT 23, 1
+#define CPU-FEATURE-TSC-DEADLINE 24, 1
+#define CPU-FEATURE-AES 25, 1
+#define CPU-FEATURE-XSAVE 26, 1
+#define CPU-FEATURE-OSXSAVE 27, 1
+#define CPU-FEATURE-AVX 28, 1
+#define CPU-FEATURE-F16C 29, 1
+#define CPU-FEATURE-RDRAND 30, 1
+#define CPU-FEATURE-HYPERVISOR 31, 1

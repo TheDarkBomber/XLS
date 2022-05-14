@@ -1,4 +1,4 @@
-default rel
+%include "common.inc"
 global itoa
 section .text
 itoa:

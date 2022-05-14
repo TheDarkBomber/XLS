@@ -1,4 +1,4 @@
-default rel
+%include "common.inc"
 %macro defsyscall 2
 global %1:function
 %1:

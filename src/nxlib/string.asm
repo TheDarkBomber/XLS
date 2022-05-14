@@ -1,4 +1,4 @@
-default rel
+%include "common.inc"
 
 global strlen:function
 strlen:
