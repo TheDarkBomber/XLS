@@ -227,6 +227,13 @@ public:
 	SSA *Render() override;
 };
 
+class VariadicArgumentExpression : public Expression {
+	XLSType Type;
+public:
+	VariadicArgumentExpression(XLSType type) : Type(type) {}
+	SSA *Render() override;
+};
+
 class BlockExpression : public Expression {
 	std::vector<UQP(Expression)> Expressions;
 public:
@@ -263,11 +270,13 @@ class SignatureNode {
 	Precedence OperatorPrecedence;
 	llvm::CallingConv::ID Convention;
 	XLSType Type;
+	bool Variadic;
 public:
-	SignatureNode(const std::string &name, VDX(std::string, XLSType) arguments, const XLSType &type, llvm::CallingConv::ID convention = llvm::CallingConv::C, bool operator_ = false, Precedence precedence = PRECEDENCE_INVALID) : Name(name), Arguments(std::move(arguments)), Type(type), Convention(convention), Operator(operator_), OperatorPrecedence(precedence) {}
+	SignatureNode(const std::string &name, VDX(std::string, XLSType) arguments, const XLSType &type, bool variadic = false, llvm::CallingConv::ID convention = llvm::CallingConv::C, bool operator_ = false, Precedence precedence = PRECEDENCE_INVALID) : Name(name), Arguments(std::move(arguments)), Type(type), Variadic(variadic), Convention(convention), Operator(operator_), OperatorPrecedence(precedence) {}
 	llvm::Function *Render();
 	const std::string &GetName() const { return Name; }
 	const XLSType &GetType() const { return Type; }
+	bool GetVariadic() { return Variadic; }
 	bool Unary() const { return Operator && Arguments.size() == 1; }
 	bool Binary() const { return Operator && Arguments.size() == 2; }
 	std::string GetOperatorName() const {
@@ -350,6 +359,7 @@ UQP(Expression) ParseTypeof();
 UQP(Expression) ParseMutable();
 UQP(Expression) ParseBreak();
 UQP(Expression) ParseContinue();
+UQP(Expression) ParseVariadic();
 UQP(Expression) ParseReturn();
 
 UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS, bool isVolatile = false);

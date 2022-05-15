@@ -66,8 +66,9 @@
 												 "typedef"
 												 "break"
 												 "continue"
-												 "return"))
-					(x-types '("dword" "word" "byte" "boole" "void" "sdword" "sword" "sbyte" "label&" "N/A"))
+												 "return"
+												 "variadic"))
+					(x-types '("dword" "word" "byte" "boole" "void" "sdword" "sword" "sbyte" "label&" "valist" "N/A"))
 					(x-auxillary '("sizeof" "typeof"))
 					(x-constants '())
 

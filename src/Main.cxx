@@ -18,6 +18,7 @@
 #include <system_error>
 
 extern llvm::DataLayout* GlobalLayout;
+extern llvm::Triple* GlobalTriple;
 extern ParserFlags Flags;
 
 extern std::map<std::string, Precedence> BinaryPrecedence;
@@ -166,6 +167,7 @@ int main(int argc, char* argv[]) {
 
 	llvm::DataLayout layout = targetMachine->createDataLayout();
 	GlobalLayout = &layout;
+	GlobalTriple = (llvm::Triple*)&targetMachine->getTargetTriple();
 
 	InitialiseModule(moduleName);
 	GetNextToken();

@@ -2,6 +2,7 @@
 #include "Lexer.hxx"
 #include "colours.def.h"
 #include <llvm/ADT/APInt.h>
+#include <llvm/ADT/Triple.h>
 #include <llvm/ExecutionEngine/Orc/ThreadSafeModule.h>
 #include <llvm/IR/Argument.h>
 #include <llvm/IR/BasicBlock.h>
@@ -13,6 +14,8 @@
 #include <llvm/IR/Function.h>
 #include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/Instructions.h>
+#include <llvm/IR/IntrinsicInst.h>
+#include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Module.h>
@@ -36,6 +39,7 @@
 static llvm::ExitOnError ExitIfError;
 
 llvm::DataLayout* GlobalLayout;
+llvm::Triple* GlobalTriple;
 
 ParserFlags Flags;
 
@@ -202,6 +206,8 @@ UQP(Expression) ParseDispatcher() {
 		return ParseContinue();
 	case LEXEME_RETURN:
 		return ParseReturn();
+	case LEXEME_VARIADIC:
+		return ParseVariadic();
 	case LEXEME_VOLATILE:
 		GetNextToken();
 		return ParseExpression(true);
@@ -388,6 +394,15 @@ UQP(Expression) ParseReturn() {
 	return MUQ(ReturnExpression, std::move(returnValue));
 }
 
+UQP(Expression) ParseVariadic() {
+	GetNextToken();
+	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier after variadic.");
+	if (!CheckTypeDefined(CurrentIdentifier)) return ParseError("Expected type after variadic.");
+	XLSType type = DefinedTypes[CurrentIdentifier];
+	GetNextToken();
+	return MUQ(VariadicArgumentExpression, type);
+}
+
 UQP(Expression) ParseIf() {
 	GetNextToken();
 	if (CurrentToken.Value != '(') return ParseError("Expected open parenthesis in if condition.");
@@ -565,7 +580,7 @@ UQP(SignatureNode) ParseOperatorSignature() {
 	GetNextToken();
 
 	if (signatureType && argumentNames.size() != signatureType) return ParseError("Invalid number of operands for operator.", nullptr);
-	return MUQ(SignatureNode, functionName, std::move(argumentNames), DefinedTypes["dword"], llvm::CallingConv::Fast, true, precedence);
+	return MUQ(SignatureNode, functionName, std::move(argumentNames), DefinedTypes["dword"], false, llvm::CallingConv::Fast, true, precedence);
 }
 
 UQP(SignatureNode) ParseSignature() {
@@ -598,6 +613,7 @@ UQP(SignatureNode) ParseSignature() {
 	if (CurrentToken.Value != '(') return ParseError("Expected open parenthesis in function prototype", nullptr);
 
 	VDX(std::string, XLSType) argumentNames;
+	bool variadic;
 	GetNextToken();
 	// '('
 	if (CurrentToken.Value != ')') {
@@ -608,6 +624,13 @@ UQP(SignatureNode) ParseSignature() {
 				GetNextToken();
 			} else currentType = DefinedTypes["dword"];
 
+			if (CurrentToken.Type == LEXEME_VARIADIC) {
+				variadic = true;
+				GetNextToken();
+				// '('
+				if (CurrentToken.Value != ')') return ParseError("Expected close parenthesis after variadic.", nullptr);
+				break;
+			}
 			if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier in parameter list of function signature.", nullptr);
 			argumentNames.push_back(SDX(std::string, XLSType)(CurrentIdentifier, currentType));
 			GetNextToken();
@@ -626,7 +649,7 @@ UQP(SignatureNode) ParseSignature() {
 		GetNextToken();
 	}
 
-	return MUQ(SignatureNode, functionName, std::move(argumentNames), type, convention);
+	return MUQ(SignatureNode, functionName, std::move(argumentNames), type, variadic, convention);
 }
 
 UQP(FunctionNode) ParseImplementation() {
@@ -1080,7 +1103,8 @@ SSA *CallExpression::Render() {
 		return callInstance;
 	}
 
-	if (called->arg_size() != Arguments.size()) return CodeError("Argument call size mismatch with real argument size.");
+	if (called->arg_size() != Arguments.size() && !called->isVarArg()) return CodeError("Argument call size mismatch with real argument size.");
+	if (called->isVarArg() && called->arg_size() >= Arguments.size()) return CodeError("Argument call size mismatch with real argument size. (variadic)");
 
 	std::vector<SSA*> ArgumentVector;
 	uint index = 0;
@@ -1089,6 +1113,12 @@ SSA *CallExpression::Render() {
 		ArgumentVector.push_back(ImplicitCast(ArgumentTypeAnnotation[called->getArg(index)], Arguments[index]->Render()));
 		index++;
 		if (!ArgumentVector.back()) return nullptr;
+	}
+
+	if (called->isVarArg()) {
+		for (; index < Arguments.size(); index++) {
+			ArgumentVector.push_back(Arguments[index]->Render());
+		}
 	}
 
 	llvm::CallInst* callInstance = Builder->CreateCall(called, ArgumentVector, "xls_call");
@@ -1162,6 +1192,14 @@ SSA *ReturnExpression::Render() {
 	if (ReturnTypeAnnotation[function].UID == DefinedTypes["void"].UID) Builder->CreateRetVoid();
 	else Builder->CreateRet(returnValue);
 	RESOW_BASIC_BLOCK;
+	return R;
+}
+
+SSA *VariadicArgumentExpression::Render() {
+	AnnotatedValue VAListStore = AllonymousValues["variadic"];
+	SSA* VAList = Builder->CreateBitCast(VAListStore.Value, llvm::Type::getInt8PtrTy(*GlobalContext));
+	SSA* R = Builder->CreateVAArg(VAList, Type.Type, "xls_variadic_get");
+	TypeAnnotation[R] = Type;
 	return R;
 }
 
@@ -1390,7 +1428,7 @@ llvm::Function *SignatureNode::Render() {
 	for (uint i = 0; i < Arguments.size(); i++)
 		ArgumentType.push_back(Arguments[i].second.Type);
 
-	llvm::FunctionType *functionType = llvm::FunctionType::get(Type.Type, ArgumentType, false);
+	llvm::FunctionType *functionType = llvm::FunctionType::get(Type.Type, ArgumentType, Variadic);
 
 	llvm::Function *function = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, Name, GlobalModule.get());
 	function->setCallingConv(Convention);
@@ -1431,6 +1469,21 @@ llvm::Function *FunctionNode::Render() {
 		stored.Type = ArgumentTypeAnnotation[function->getArg(index++)];
 		stored.Value = alloca;
 		AllonymousValues[std::string(argument.getName())] = stored;
+	}
+
+	if (function->isVarArg()) {
+		Alloca *VAList = createEntryBlockAlloca(function, "variadic", DefinedTypes["valist"]);
+		AnnotatedValue VAListStore;
+		VAListStore.Type = DefinedTypes["valist"];
+		VAListStore.Value = VAList;
+		AllonymousValues["variadic"] = VAListStore;
+		std::vector<llvm::Type*> IType;
+		std::vector<SSA*> IArg;
+		IType.push_back(DefinedTypes["byte"].Type->getPointerTo());
+		IArg.push_back(Builder->CreateBitCast(VAList, IType[0]));
+		llvm::Function* VAStart = llvm::Intrinsic::getDeclaration(GlobalModule.get(), llvm::Intrinsic::vastart);
+		Builder->CreateCall(VAStart, llvm::ArrayRef<SSA*>(IArg));
+		// Builder->CreateIntrinsic(llvm::Intrinsic::vastart, llvm::ArrayRef<llvm::Type*>(IType), llvm::ArrayRef<SSA*>(IArg));
 	}
 
 	if (SSA *returnValue = Body->Render()) {
@@ -1575,6 +1628,43 @@ void InitialiseModule(std::string moduleName) {
 	TypeMap[BooleType.Type] = BooleType;
 	TypeMap[VoidType.Type] = VoidType;
 	TypeMap[BoolePtrType.Type] = BoolePtrType;
+
+
+	// Variadic type
+	XLSType VariadicType;
+	std::vector<llvm::Type*> VFields;
+
+	if (GlobalTriple->isX86() && GlobalLayout->getPointerSizeInBits() == 64) {
+		// Use variadic ABI for AMD64
+		// http://refspecs.linuxbase.org/elf/x86_64-abi-0.21.pdf
+		VFields.push_back(llvm::Type::getInt32Ty(*GlobalContext));
+		VFields.push_back(llvm::Type::getInt32Ty(*GlobalContext));
+		VFields.push_back(llvm::Type::getInt8PtrTy(*GlobalContext));
+		VFields.push_back(llvm::Type::getInt8PtrTy(*GlobalContext));
+	} else if (GlobalTriple->isSystemZ()) {
+		// Use variadic ABI for SystemZ
+		VFields.push_back(llvm::Type::getInt32Ty(*GlobalContext));
+		VFields.push_back(llvm::Type::getInt32Ty(*GlobalContext));
+		VFields.push_back(llvm::Type::getInt8PtrTy(*GlobalContext));
+		VFields.push_back(llvm::Type::getInt8PtrTy(*GlobalContext));
+	} else if (GlobalTriple->getArch() == llvm::Triple::ArchType::hexagon) {
+		// Use variadic ABI for Hexagon
+		VFields.push_back(llvm::Type::getInt8PtrTy(*GlobalContext));
+		VFields.push_back(llvm::Type::getInt8PtrTy(*GlobalContext));
+		VFields.push_back(llvm::Type::getInt8PtrTy(*GlobalContext));
+	} else {
+		// Use generic VALIST structure
+		VFields.push_back(llvm::Type::getInt8PtrTy(*GlobalContext));
+	}
+
+	VariadicType.Type = llvm::StructType::create(*GlobalContext, llvm::ArrayRef<llvm::Type*>(VFields), "valist");
+	VariadicType.Size = VariadicType.Type->getScalarSizeInBits();
+	VariadicType.Name = "valist";
+	VariadicType.IsStruct = true;
+	VariadicType.UID = CurrentUID++;
+
+	DefinedTypes[VariadicType.Name] = VariadicType;
+	TypeMap[VariadicType.Type] = VariadicType;
 }
 
 void HandleImplementation() {
