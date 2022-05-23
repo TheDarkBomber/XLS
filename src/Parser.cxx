@@ -61,6 +61,8 @@ std::map<llvm::Type*, XLSType> TypeMap;
 std::map<std::string, UQP(SignatureNode)> FunctionSignatures;
 std::map<std::string, llvm::BasicBlock*> AllonymousLabels;
 
+std::map<llvm::Function*, XLSFunctionInfo> FunctionInfo;
+
 std::vector<llvm::BasicBlock*> AnonymousLabels;
 std::string CurrentLabelIdentifier = "current";
 
@@ -101,7 +103,7 @@ UQP(Statement) ParseError(const char* error, void*, void*) DEFERROR(Flags.ParseE
 SSA *CodeError(const char* error) DEFERROR(Flags.CodeError);
 
 UQP(Expression) ParseDwordExpression() {
-	MDU(DwordExpression) result = MUQ(DwordExpression, CurrentInteger);
+	UQP(DwordExpression) result = MUQ(DwordExpression, CurrentInteger);
 	GetNextToken();
 	return std::move(result);
 }
@@ -206,6 +208,8 @@ UQP(Expression) ParseDispatcher() {
 		return ParseContinue();
 	case LEXEME_RETURN:
 		return ParseReturn();
+	case LEXEME_CVARIADIC:
+		return ParseCVariadic();
 	case LEXEME_VARIADIC:
 		return ParseVariadic();
 	case LEXEME_VOLATILE:
@@ -394,6 +398,15 @@ UQP(Expression) ParseReturn() {
 	return MUQ(ReturnExpression, std::move(returnValue));
 }
 
+UQP(Expression) ParseCVariadic() {
+	GetNextToken();
+	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier after C-style variadic.");
+	if (!CheckTypeDefined(CurrentIdentifier)) return ParseError("Expected type after C-style variadic.");
+	XLSType type = DefinedTypes[CurrentIdentifier];
+	GetNextToken();
+	return MUQ(CVariadicArgumentExpression, type);
+}
+
 UQP(Expression) ParseVariadic() {
 	GetNextToken();
 	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier after variadic.");
@@ -580,7 +593,7 @@ UQP(SignatureNode) ParseOperatorSignature() {
 	GetNextToken();
 
 	if (signatureType && argumentNames.size() != signatureType) return ParseError("Invalid number of operands for operator.", nullptr);
-	return MUQ(SignatureNode, functionName, std::move(argumentNames), DefinedTypes["dword"], false, llvm::CallingConv::Fast, true, precedence);
+	return MUQ(SignatureNode, functionName, std::move(argumentNames), DefinedTypes["dword"], VARIADIC_NONE, llvm::CallingConv::Fast, true, precedence);
 }
 
 UQP(SignatureNode) ParseSignature() {
@@ -613,7 +626,7 @@ UQP(SignatureNode) ParseSignature() {
 	if (CurrentToken.Value != '(') return ParseError("Expected open parenthesis in function prototype", nullptr);
 
 	VDX(std::string, XLSType) argumentNames;
-	bool variadic;
+	Variadism variadic;
 	GetNextToken();
 	// '('
 	if (CurrentToken.Value != ')') {
@@ -624,8 +637,8 @@ UQP(SignatureNode) ParseSignature() {
 				GetNextToken();
 			} else currentType = DefinedTypes["dword"];
 
-			if (CurrentToken.Type == LEXEME_VARIADIC) {
-				variadic = true;
+			if (CurrentToken.Subtype == LEXEME_VARIADIC) {
+				variadic = CurrentToken.Type == LEXEME_VARIADIC ? VARIADIC_XLS : VARIADIC_C;
 				GetNextToken();
 				// '('
 				if (CurrentToken.Value != ')') return ParseError("Expected close parenthesis after variadic.", nullptr);
@@ -680,7 +693,7 @@ UQP(SignatureNode) ParseExtern() {
 
 UQP(FunctionNode) ParseUnboundedExpression() {
 	if (UQP(Expression) expression = ParseExpression()) {
-		MDU(SignatureNode) signature = MUQ(SignatureNode, "__mistakeman", VDX(std::string, XLSType)(), DefinedTypes["dword"]);
+		UQP(SignatureNode) signature = MUQ(SignatureNode, "__mistakeman", VDX(std::string, XLSType)(), DefinedTypes["dword"]);
 		return MUQ(FunctionNode, std::move(signature), std::move(expression));
 	}
 	return nullptr;
@@ -1103,13 +1116,35 @@ SSA *CallExpression::Render() {
 		return callInstance;
 	}
 
-	if (called->arg_size() != Arguments.size() && !called->isVarArg()) return CodeError("Argument call size mismatch with real argument size.");
-	if (called->isVarArg() && called->arg_size() >= Arguments.size()) return CodeError("Argument call size mismatch with real argument size. (variadic)");
+	if (called->arg_size() != Arguments.size() && FunctionInfo[called].Variadic == VARIADIC_NONE) return CodeError("Argument call size mismatch with real argument size.");
 
 	std::vector<SSA*> ArgumentVector;
 	uint index = 0;
 
 	for (llvm::Argument &argument : called->args()) {
+		if (FunctionInfo[called].Variadic == VARIADIC_XLS && index == called->arg_size() - 1) {
+			std::vector<SSA*> HiveVector;
+			uint HiveBitLength = 0;
+			for(; index < Arguments.size(); index++) {
+				SSA* bee = Arguments[index]->Render();
+				if (!bee) return nullptr;
+				HiveVector.push_back(bee);
+				HiveBitLength += GetType(bee).Size;
+			}
+			llvm::Type* HiveType = llvm::Type::getIntNTy(*GlobalContext, HiveBitLength);
+			llvm::Function* function = Builder->GetInsertBlock()->getParent();
+			llvm::IRBuilder<> apiobuilder(&function->getEntryBlock(), function->getEntryBlock().begin());
+			SSA* Hive = apiobuilder.CreateAlloca(HiveType, nullptr, "xls_hive");
+			SSA *HivePTR = Builder->CreateBitCast(Hive, DefinedTypes["byte"].Type->getPointerTo());
+			for (uint i = 0, offset = 0; i < HiveVector.size(); i++) {
+				SSA* SOFFSET = llvm::ConstantInt::get(DefinedTypes["dword"].Type, llvm::APInt(32, offset, false));
+				SSA* GEP = Builder->CreateInBoundsGEP(DefinedTypes["byte"].Type, HivePTR, SOFFSET);
+				Builder->CreateStore(HiveVector[i], Builder->CreateBitCast(GEP, HiveVector[i]->getType()->getPointerTo()));
+				offset += GetType(HiveVector[i]).Size / 8;
+			}
+			ArgumentVector.push_back(HivePTR);
+			break;
+		}
 		ArgumentVector.push_back(ImplicitCast(ArgumentTypeAnnotation[called->getArg(index)], Arguments[index]->Render()));
 		index++;
 		if (!ArgumentVector.back()) return nullptr;
@@ -1195,10 +1230,21 @@ SSA *ReturnExpression::Render() {
 	return R;
 }
 
-SSA *VariadicArgumentExpression::Render() {
+SSA *CVariadicArgumentExpression::Render() {
 	AnnotatedValue VAListStore = AllonymousValues["variadic"];
 	SSA* VAList = Builder->CreateBitCast(VAListStore.Value, llvm::Type::getInt8PtrTy(*GlobalContext));
 	SSA* R = Builder->CreateVAArg(VAList, Type.Type, "xls_variadic_get");
+	TypeAnnotation[R] = Type;
+	return R;
+}
+
+SSA *VariadicArgumentExpression::Render() {
+	AnnotatedValue HiveStore = AllonymousValues["#hive"];
+	SSA* Hive = Builder->CreateLoad(HiveStore.Type.Type, HiveStore.Value, "xls_hive_value");
+	SSA* bee = Builder->CreateBitCast(Hive, Type.Type->getPointerTo());
+	SSA* R = Builder->CreateLoad(Type.Type, bee);
+	SSA* GEP = Builder->CreateInBoundsGEP(Type.Type, bee, llvm::ConstantInt::get(DefinedTypes["dword"].Type, llvm::APInt(32, 1, false)));
+	Builder->CreateStore(Builder->CreateBitCast(GEP, DefinedTypes["byte"].Type->getPointerTo()), HiveStore.Value);
 	TypeAnnotation[R] = Type;
 	return R;
 }
@@ -1428,7 +1474,13 @@ llvm::Function *SignatureNode::Render() {
 	for (uint i = 0; i < Arguments.size(); i++)
 		ArgumentType.push_back(Arguments[i].second.Type);
 
-	llvm::FunctionType *functionType = llvm::FunctionType::get(Type.Type, ArgumentType, Variadic);
+	if (Variadic == VARIADIC_XLS) {
+		if (!CheckTypeDefined("byte*")) return nullptr;
+		Arguments.push_back(SDX(std::string, XLSType)("#hive", DefinedTypes["byte*"]));
+		ArgumentType.push_back(DefinedTypes["byte*"].Type);
+	}
+
+	llvm::FunctionType *functionType = llvm::FunctionType::get(Type.Type, ArgumentType, Variadic == VARIADIC_C);
 
 	llvm::Function *function = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, Name, GlobalModule.get());
 	function->setCallingConv(Convention);
@@ -1441,6 +1493,10 @@ llvm::Function *SignatureNode::Render() {
 		index++;
 	}
 
+	XLSFunctionInfo info;
+	info.Variadic = Variadic;
+
+	FunctionInfo[function] = info;
 	ReturnTypeAnnotation[function] = Type;
 	return function;
 }

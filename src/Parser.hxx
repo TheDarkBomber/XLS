@@ -50,6 +50,12 @@ enum LabelMode {
 	LABEL_DECLARE = 1
 };
 
+enum Variadism {
+	VARIADIC_NONE = 0,
+	VARIADIC_C = 1,
+	VARIADIC_XLS = 2
+};
+
 struct ParserFlags {
 	uint Unused : 3;
 	uint NoOptimise : 1;
@@ -60,6 +66,7 @@ struct ParserFlags {
 } __attribute__((packed));
 
 struct XLSType;
+struct XLSFunctionInfo;
 
 struct StructData {
 	llvm::StructLayout* Layout = nullptr;
@@ -82,6 +89,10 @@ struct XLSType {
 	StructData Structure;
 	std::vector<XLSType> FPData;
 	dword UID;
+};
+
+struct XLSFunctionInfo {
+	Variadism Variadic;
 };
 
 class Expression {
@@ -227,6 +238,13 @@ public:
 	SSA *Render() override;
 };
 
+class CVariadicArgumentExpression : public Expression {
+	XLSType Type;
+public:
+	CVariadicArgumentExpression(XLSType type) : Type(type) {}
+	SSA *Render() override;
+};
+
 class VariadicArgumentExpression : public Expression {
 	XLSType Type;
 public:
@@ -270,13 +288,12 @@ class SignatureNode {
 	Precedence OperatorPrecedence;
 	llvm::CallingConv::ID Convention;
 	XLSType Type;
-	bool Variadic;
+	Variadism Variadic;
 public:
-	SignatureNode(const std::string &name, VDX(std::string, XLSType) arguments, const XLSType &type, bool variadic = false, llvm::CallingConv::ID convention = llvm::CallingConv::C, bool operator_ = false, Precedence precedence = PRECEDENCE_INVALID) : Name(name), Arguments(std::move(arguments)), Type(type), Variadic(variadic), Convention(convention), Operator(operator_), OperatorPrecedence(precedence) {}
+	SignatureNode(const std::string &name, VDX(std::string, XLSType) arguments, const XLSType &type, Variadism variadic = VARIADIC_NONE, llvm::CallingConv::ID convention = llvm::CallingConv::C, bool operator_ = false, Precedence precedence = PRECEDENCE_INVALID) : Name(name), Arguments(std::move(arguments)), Type(type), Variadic(variadic), Convention(convention), Operator(operator_), OperatorPrecedence(precedence) {}
 	llvm::Function *Render();
 	const std::string &GetName() const { return Name; }
 	const XLSType &GetType() const { return Type; }
-	bool GetVariadic() { return Variadic; }
 	bool Unary() const { return Operator && Arguments.size() == 1; }
 	bool Binary() const { return Operator && Arguments.size() == 2; }
 	std::string GetOperatorName() const {
@@ -359,6 +376,7 @@ UQP(Expression) ParseTypeof();
 UQP(Expression) ParseMutable();
 UQP(Expression) ParseBreak();
 UQP(Expression) ParseContinue();
+UQP(Expression) ParseCVariadic();
 UQP(Expression) ParseVariadic();
 UQP(Expression) ParseReturn();
 

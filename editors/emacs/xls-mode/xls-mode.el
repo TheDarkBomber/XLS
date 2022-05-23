@@ -67,6 +67,7 @@
 												 "break"
 												 "continue"
 												 "return"
+												 "c-variadic"
 												 "variadic"))
 					(x-types '("dword" "word" "byte" "boole" "void" "sdword" "sword" "sbyte" "label&" "valist" "N/A"))
 					(x-auxillary '("sizeof" "typeof"))
