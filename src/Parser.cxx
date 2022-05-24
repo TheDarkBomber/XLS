@@ -31,6 +31,7 @@
 #include <llvm/Transforms/Scalar/SROA.h>
 #include <llvm/Transforms/Utils.h>
 #include <llvm/Transforms/Utils/Mem2Reg.h>
+#include <llvm/Transforms/Vectorize.h>
 #include <stack>
 #include <map>
 #include <stdio.h>
@@ -409,11 +410,34 @@ UQP(Expression) ParseCVariadic() {
 
 UQP(Expression) ParseVariadic() {
 	GetNextToken();
-	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier after variadic.");
-	if (!CheckTypeDefined(CurrentIdentifier)) return ParseError("Expected type after variadic.");
-	XLSType type = DefinedTypes[CurrentIdentifier];
+	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier after variadic");
+	if (CheckTypeDefined(CurrentIdentifier)) {
+		XLSType type = DefinedTypes[CurrentIdentifier];
+		GetNextToken();
+		return MUQ(VariadicArgumentExpression, type);
+	}
+	std::string identifier = CurrentIdentifier;
 	GetNextToken();
-	return MUQ(VariadicArgumentExpression, type);
+	if (CurrentToken.Value != '(') return ParseError("Expected function call.");
+	GetNextToken();
+	std::vector<UQP(Expression)> arguments;
+	if (CurrentToken.Value != ')') {
+		for (;;) {
+			if (UQP(Expression) argument = ParseExpression())
+				arguments.push_back(std::move(argument));
+			else return nullptr;
+
+			// '('
+			if (CurrentToken.Value == ')') break;
+
+			if (CurrentToken.Value != ',')
+				return ParseError("Expected close parenthesis or comma in argument list of variadic call.");
+
+			GetNextToken();
+		}
+	}
+	GetNextToken();
+	return MUQ(CallExpression, identifier, std::move(arguments), true);
 }
 
 UQP(Expression) ParseIf() {
@@ -770,7 +794,6 @@ SSA *CharacterExpression::Render() {
 }
 
 SSA *StringExpression::Render() {
-	if (!CheckTypeDefined("byte*")) return nullptr;
 	std::vector<llvm::Constant*> elements(Value.size());
 	for (unsigned i = 0; i < Value.size(); i++) {
 		elements[i] = llvm::ConstantInt::get(DefinedTypes["byte"].Type, Value[i]);
@@ -1122,7 +1145,7 @@ SSA *CallExpression::Render() {
 	uint index = 0;
 
 	for (llvm::Argument &argument : called->args()) {
-		if (FunctionInfo[called].Variadic == VARIADIC_XLS && index == called->arg_size() - 1) {
+		if (!TailVariadic && FunctionInfo[called].Variadic == VARIADIC_XLS && index == called->arg_size() - 1) {
 			std::vector<SSA*> HiveVector;
 			uint HiveBitLength = 0;
 			for(; index < Arguments.size(); index++) {
@@ -1135,7 +1158,7 @@ SSA *CallExpression::Render() {
 			llvm::Function* function = Builder->GetInsertBlock()->getParent();
 			llvm::IRBuilder<> apiobuilder(&function->getEntryBlock(), function->getEntryBlock().begin());
 			SSA* Hive = apiobuilder.CreateAlloca(HiveType, nullptr, "xls_hive");
-			SSA *HivePTR = Builder->CreateBitCast(Hive, DefinedTypes["byte"].Type->getPointerTo());
+			SSA *HivePTR = Builder->CreateBitCast(Hive, DefinedTypes["byte*"].Type);
 			for (uint i = 0, offset = 0; i < HiveVector.size(); i++) {
 				SSA* SOFFSET = llvm::ConstantInt::get(DefinedTypes["dword"].Type, llvm::APInt(32, offset, false));
 				SSA* GEP = Builder->CreateInBoundsGEP(DefinedTypes["byte"].Type, HivePTR, SOFFSET);
@@ -1143,6 +1166,12 @@ SSA *CallExpression::Render() {
 				offset += GetType(HiveVector[i]).Size / 8;
 			}
 			ArgumentVector.push_back(HivePTR);
+			break;
+		} else if (TailVariadic && index == called->arg_size() - 1) {
+			if (FunctionInfo[called].Variadic != VARIADIC_XLS) return CodeError("Cannot pass the variadic hive to non-variadic function.");
+			AnnotatedValue HiveStore = AllonymousValues["#hive"];
+			SSA* Hive = Builder->CreateLoad(HiveStore.Type.Type, HiveStore.Value, "xls_pass_hive");
+			ArgumentVector.push_back(Hive);
 			break;
 		}
 		ArgumentVector.push_back(ImplicitCast(ArgumentTypeAnnotation[called->getArg(index)], Arguments[index]->Render()));
@@ -1244,7 +1273,7 @@ SSA *VariadicArgumentExpression::Render() {
 	SSA* bee = Builder->CreateBitCast(Hive, Type.Type->getPointerTo());
 	SSA* R = Builder->CreateLoad(Type.Type, bee);
 	SSA* GEP = Builder->CreateInBoundsGEP(Type.Type, bee, llvm::ConstantInt::get(DefinedTypes["dword"].Type, llvm::APInt(32, 1, false)));
-	Builder->CreateStore(Builder->CreateBitCast(GEP, DefinedTypes["byte"].Type->getPointerTo()), HiveStore.Value);
+	Builder->CreateStore(Builder->CreateBitCast(GEP, DefinedTypes["byte*"].Type), HiveStore.Value);
 	TypeAnnotation[R] = Type;
 	return R;
 }
@@ -1475,7 +1504,6 @@ llvm::Function *SignatureNode::Render() {
 		ArgumentType.push_back(Arguments[i].second.Type);
 
 	if (Variadic == VARIADIC_XLS) {
-		if (!CheckTypeDefined("byte*")) return nullptr;
 		Arguments.push_back(SDX(std::string, XLSType)("#hive", DefinedTypes["byte*"]));
 		ArgumentType.push_back(DefinedTypes["byte*"].Type);
 	}
@@ -1535,7 +1563,7 @@ llvm::Function *FunctionNode::Render() {
 		AllonymousValues["variadic"] = VAListStore;
 		std::vector<llvm::Type*> IType;
 		std::vector<SSA*> IArg;
-		IType.push_back(DefinedTypes["byte"].Type->getPointerTo());
+		IType.push_back(DefinedTypes["byte*"].Type);
 		IArg.push_back(Builder->CreateBitCast(VAList, IType[0]));
 		llvm::Function* VAStart = llvm::Intrinsic::getDeclaration(GlobalModule.get(), llvm::Intrinsic::vastart);
 		Builder->CreateCall(VAStart, llvm::ArrayRef<SSA*>(IArg));
@@ -1571,6 +1599,7 @@ void InitialiseModule(std::string moduleName) {
 		GlobalFPM->add(llvm::createCFGSimplificationPass());
 		GlobalFPM->add(llvm::createTailCallEliminationPass());
 		GlobalFPM->add(llvm::createSROAPass());
+		GlobalFPM->add(llvm::createLoopVectorizePass());
 		GlobalFPM->add(llvm::createVerifierPass());
 	}
 
@@ -1593,7 +1622,7 @@ void InitialiseModule(std::string moduleName) {
 	InternalAddressSizeType.UID = CurrentUID++;
 	DefinedTypes[InternalAddressSizeType.Name] = InternalAddressSizeType;
 
-	XLSType DwordType, WordType, ByteType, BooleType, VoidType, BoolePtrType, VoidPtrType;
+	XLSType DwordType, WordType, ByteType, BooleType, VoidType, BoolePtrType, VoidPtrType, BytePtrType;
 
 	DwordType.Size = 32;
 	DwordType.Type = llvm::Type::getInt32Ty(*GlobalContext);
@@ -1627,7 +1656,14 @@ void InitialiseModule(std::string moduleName) {
 	BoolePtrType.IsPointer = true;
 	BoolePtrType.UID = CurrentUID++;
 
-	VoidPtrType = BoolePtrType;
+	BytePtrType.Size = GlobalLayout->getPointerSizeInBits();
+	BytePtrType.Type = llvm::Type::getInt8PtrTy(*GlobalContext);
+	BytePtrType.Name = "byte*";
+	BytePtrType.Dereference = "byte";
+	BytePtrType.IsPointer = true;
+	BytePtrType.UID = CurrentUID++;
+
+	VoidPtrType = BytePtrType;
 	VoidPtrType.Name = "void*";
 	VoidPtrType.Dereference = "void";
 	VoidPtrType.UID = CurrentUID++;
@@ -1670,6 +1706,7 @@ void InitialiseModule(std::string moduleName) {
 	DefinedTypes[BooleType.Name] = BooleType;
 	DefinedTypes[VoidType.Name] = VoidType;
 	DefinedTypes[BoolePtrType.Name] = BoolePtrType;
+	DefinedTypes[BytePtrType.Name] = BytePtrType;
 	DefinedTypes[VoidPtrType.Name] = VoidPtrType;
 
 	DefinedTypes[SdwordType.Name] = SdwordType;
@@ -1684,9 +1721,9 @@ void InitialiseModule(std::string moduleName) {
 	TypeMap[BooleType.Type] = BooleType;
 	TypeMap[VoidType.Type] = VoidType;
 	TypeMap[BoolePtrType.Type] = BoolePtrType;
+	TypeMap[BytePtrType.Type] = BytePtrType;
 
-
-	// Variadic type
+	// C Variadic type
 	XLSType VariadicType;
 	std::vector<llvm::Type*> VFields;
 

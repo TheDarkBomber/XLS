@@ -188,8 +188,9 @@ public:
 class CallExpression : public Expression {
 	std::string Called;
 	std::vector<UQP(Expression)> Arguments;
+	bool TailVariadic;
 public:
-	CallExpression(const std::string &called, std::vector<UQP(Expression)> arguments) : Called(called), Arguments(std::move(arguments)) {}
+	CallExpression(const std::string &called, std::vector<UQP(Expression)> arguments, bool tailVariadic = false) : Called(called), Arguments(std::move(arguments)), TailVariadic(tailVariadic) {}
 	SSA *Render() override;
 };
 
