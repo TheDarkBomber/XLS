@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <map>
 
 #define RESOW_BASIC_BLOCK do { llvm::BasicBlock *resow = llvm::BasicBlock::Create(*GlobalContext, "xls_rs", Builder->GetInsertBlock()->getParent()); Builder->SetInsertPoint(resow); } while (0)
 
