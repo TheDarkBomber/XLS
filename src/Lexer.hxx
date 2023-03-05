@@ -30,7 +30,8 @@ enum Lexeme {
 	LEXEME_CONTINUE = 23,
 	LEXEME_RETURN = 24,
 	LEXEME_CVARIADIC = 25,
-	LEXEME_VARIADIC = 26
+	LEXEME_VARIADIC = 26,
+	LEXEME_SLJMP = 27
 };
 
 enum StringTermination {

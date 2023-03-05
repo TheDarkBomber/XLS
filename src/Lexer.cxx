@@ -96,6 +96,8 @@ Token GetToken() {
 		JMPIF(CurrentIdentifier, "return", GetToken_kw_return);
 		JMPIF(CurrentIdentifier, "c-variadic", GetToken_kw_cvariadic);
 		JMPIF(CurrentIdentifier, "variadic", GetToken_kw_variadic);
+		JMPIF(CurrentIdentifier, "setjump", GetToken_kw_setjump);
+		JMPIF(CurrentIdentifier, "longjump", GetToken_kw_longjump);
 		goto GetToken_end_kw;
 
 	GetToken_kw_implement:
@@ -168,6 +170,11 @@ Token GetToken() {
 	GetToken_kw_variadic:
 		output.Type = LEXEME_VARIADIC;
 		output.Subtype = LEXEME_VARIADIC;
+		return output;
+	GetToken_kw_longjump:
+		output.Subtype = LEXEME_ELSE;
+	GetToken_kw_setjump:
+		output.Type = LEXEME_SLJMP;
 		return output;
 	GetToken_end_kw:
 		output.Type = LEXEME_IDENTIFIER;

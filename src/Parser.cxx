@@ -213,6 +213,8 @@ UQP(Expression) ParseDispatcher() {
 		return ParseCVariadic();
 	case LEXEME_VARIADIC:
 		return ParseVariadic();
+	case LEXEME_SLJMP:
+		return ParseSetLongJump();
 	case LEXEME_VOLATILE:
 		GetNextToken();
 		return ParseExpression(true);
@@ -341,6 +343,15 @@ UQP(Expression) ParseJump() {
 	dword aref = CurrentInteger;
 	GetNextToken();
 	return MUQ(JumpExpression, "", aref);
+}
+
+UQP(Expression) ParseSetLongJump() {
+	bool useLongjump = CurrentToken.Subtype == LEXEME_ELSE;
+	GetNextToken();
+	UQP(Expression) jumpBuffer = ParseExpression();
+	if (useLongjump)
+		return MUQ(LongJumpExpression, std::move(jumpBuffer));
+	return MUQ(SetJumpExpression, std::move(jumpBuffer));
 }
 
 UQP(Expression) ParseSizeof() {
@@ -1348,6 +1359,47 @@ SSA *JumpExpression::Render() {
 	return R;
 }
 
+SSA* SetJumpExpression::Render() {
+  llvm::Function* SetJumpIntrinsic = llvm::Intrinsic::getDeclaration(GlobalModule.get(), llvm::Intrinsic::eh_sjlj_setjmp);
+	SetJumpIntrinsic->addFnAttr(llvm::Attribute::AlwaysInline);
+	SetJumpIntrinsic->addFnAttr(llvm::Attribute::ReturnsTwice);
+	llvm::Function* FrameAddrIntrinsic = llvm::Intrinsic::getDeclaration(GlobalModule.get(), llvm::Intrinsic::returnaddress);
+	FrameAddrIntrinsic->setName("llvm.frameaddress.p0"); // Necessary to prevent bug in LLVM where this specific intrinsic segmentationally faults when one tries to get its declaration.
+	FrameAddrIntrinsic->addFnAttr(llvm::Attribute::AlwaysInline);
+	llvm::Function* StackSaveIntrinsic = llvm::Intrinsic::getDeclaration(GlobalModule.get(), llvm::Intrinsic::stacksave); // Undocumented -_-: must also store the stack pointer in the third 'word' of the jump buffer
+	SSA* jumpBuffer = JumpBuffer->Render();
+	std::vector<llvm::Type*> IType;
+	std::vector<SSA*> IArg;
+	IType.push_back(DefinedTypes["dword"].Type);
+	IArg.push_back(llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false)));
+	SSA* frameAddr = Builder->CreateCall(FrameAddrIntrinsic, llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false)));
+	TypeAnnotation[frameAddr] = DefinedTypes["byte*"];
+	Builder->CreateStore(frameAddr, Builder->CreateBitCast(jumpBuffer, DefinedTypes["#addrsize"].Type->getPointerTo()));
+	SSA* stackAddr = Builder->CreateCall(StackSaveIntrinsic);
+	SSA* GEP = Builder->CreateInBoundsGEP(DefinedTypes["byte*"].Type, jumpBuffer, llvm::ConstantInt::get(*GlobalContext, llvm::APInt(64, 2, false)));
+	Builder->CreateStore(stackAddr, GEP);
+	IType.clear(); IArg.clear();
+	IType.push_back(DefinedTypes["byte*"].Type);
+	IArg.push_back(Builder->CreateBitCast(jumpBuffer, IType[0]));
+	SSA* setjmpcall = Builder->CreateCall(SetJumpIntrinsic, llvm::ArrayRef<SSA*>(IArg));
+	TypeAnnotation[setjmpcall] = DefinedTypes["dword"];
+	return setjmpcall;
+}
+
+SSA* LongJumpExpression::Render() {
+  llvm::Function *LongJumpIntrinsic = llvm::Intrinsic::getDeclaration(GlobalModule.get(), llvm::Intrinsic::eh_sjlj_longjmp);
+  LongJumpIntrinsic->addFnAttr(llvm::Attribute::AlwaysInline);
+  SSA *jumpBuffer = JumpBuffer->Render();
+  std::vector<llvm::Type *> IType;
+  std::vector<SSA *> IArg;
+  IType.push_back(DefinedTypes["byte*"].Type);
+  IArg.push_back(Builder->CreateBitCast(jumpBuffer, IType[0]));
+	Builder->CreateCall(LongJumpIntrinsic, llvm::ArrayRef<SSA*>(IArg));
+  SSA* R = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false));
+  TypeAnnotation[R] = DefinedTypes["dword"];
+  return R;
+}
+
 SSA *SizeofExpression::Render() {
 	SSA *value = Sized->Render();
 	XLSType type = TypeAnnotation[value];
@@ -1722,6 +1774,15 @@ void InitialiseModule(std::string moduleName) {
 	TypeMap[VoidType.Type] = VoidType;
 	TypeMap[BoolePtrType.Type] = BoolePtrType;
 	TypeMap[BytePtrType.Type] = BytePtrType;
+
+	XLSType JmpBufType;
+	JmpBufType.Size = 5 * GlobalLayout->getPointerSizeInBits();
+	JmpBufType.Type = llvm::Type::getIntNTy(*GlobalContext, JmpBufType.Size);
+	JmpBufType.Name = "jmpbuf";
+	JmpBufType.UID = CurrentUID++;
+
+	DefinedTypes[JmpBufType.Name] = JmpBufType;
+	TypeMap[JmpBufType.Type] = JmpBufType;
 
 	// C Variadic type
 	XLSType VariadicType;

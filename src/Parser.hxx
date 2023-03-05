@@ -226,8 +226,22 @@ public:
 	SSA *Render() override;
 };
 
+class SetJumpExpression : public Expression {
+	UQP(Expression) JumpBuffer;
+public:
+	SetJumpExpression(UQP(Expression) jumpBuffer) : JumpBuffer(std::move(jumpBuffer)) {}
+	SSA* Render() override;
+};
+
+class LongJumpExpression : public Expression {
+  UQP(Expression) JumpBuffer;
+public:
+  LongJumpExpression(UQP(Expression) jumpBuffer) : JumpBuffer(std::move(jumpBuffer)) {}
+  SSA* Render() override;
+};
+
 class TypeofExpression : public Expression {
-	UQP(Expression) Typed;
+  UQP(Expression) Typed;
 public:
 	TypeofExpression(UQP(Expression) typed) : Typed(std::move(typed)) {}
 	SSA *Render() override;
@@ -373,6 +387,7 @@ UQP(Expression) ParseDeclaration(XLSType type);
 UQP(Expression) ParseBlock();
 UQP(Expression) ParseLabel();
 UQP(Expression) ParseJump();
+UQP(Expression) ParseSetLongJump();
 UQP(Expression) ParseSizeof();
 UQP(Expression) ParseTypeof();
 UQP(Expression) ParseMutable();
