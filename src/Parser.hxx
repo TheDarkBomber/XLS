@@ -412,6 +412,7 @@ UQP(FunctionNode) ParseUnboundedExpression();
 
 XLSType GetType(SSA* toType);
 SSA *ImplicitCast(XLSType type, SSA *toCast);
+SSA* ZeroSSA(XLSType Type);
 
 Precedence GetTokenPrecedence();
 

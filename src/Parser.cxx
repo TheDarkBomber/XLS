@@ -1056,7 +1056,7 @@ SSA *BinaryExpression::Render() {
 	callInstance->setCallingConv(function->getCallingConv());
 	TypeAnnotation[callInstance] = GetType(callInstance);
 	return callInstance;
- }
+}
 
 SSA *UnaryExpression::Render() {
 	if(CMP("&", Operator)) {
@@ -1220,9 +1220,7 @@ SSA *BreakExpression::Render() {
 		BreakStack.push(preserve.top());
 		preserve.pop();
 	}
-	SSA *R = llvm::Constant::getNullValue(DefinedTypes["dword"].Type);
-	TypeAnnotation[R] = DefinedTypes["dword"];
-	return R;
+	return ZeroSSA(DefinedTypes["dword"]);
 }
 
 SSA *ContinueExpression::Render() {
@@ -1240,9 +1238,8 @@ SSA *ContinueExpression::Render() {
 		ContinueStack.push(preserve.top());
 		preserve.pop();
 	}
-  SSA *R = llvm::Constant::getNullValue(DefinedTypes["dword"].Type);
-  TypeAnnotation[R] = DefinedTypes["dword"];
-  return R;
+
+	return ZeroSSA(DefinedTypes["dword"]);
 }
 
 SSA *BlockExpression::Render() {
@@ -1257,8 +1254,6 @@ SSA *BlockExpression::Render() {
 
 SSA *ReturnExpression::Render() {
 	llvm::Function *function = Builder->GetInsertBlock()->getParent();
-	SSA *R = llvm::Constant::getNullValue(DefinedTypes["dword"].Type);
-	TypeAnnotation[R] = DefinedTypes["dword"];
 	SSA *returnValue;
 	if (!ReturnValue) returnValue = llvm::Constant::getNullValue(function->getReturnType());
 	else returnValue = ImplicitCast(ReturnTypeAnnotation[function], ReturnValue->Render());
@@ -1267,7 +1262,7 @@ SSA *ReturnExpression::Render() {
 	if (ReturnTypeAnnotation[function].UID == DefinedTypes["void"].UID) Builder->CreateRetVoid();
 	else Builder->CreateRet(returnValue);
 	RESOW_BASIC_BLOCK;
-	return R;
+	return ZeroSSA(DefinedTypes["dword"]);
 }
 
 SSA *CVariadicArgumentExpression::Render() {
@@ -1291,17 +1286,16 @@ SSA *VariadicArgumentExpression::Render() {
 
 SSA *LabelExpression::Render() {
 	llvm::Function *function = Builder->GetInsertBlock()->getParent();
-	SSA *R = llvm::Constant::getNullValue(DefinedTypes["dword"].Type);
-	TypeAnnotation[R] = DefinedTypes["dword"];
+	SSA* Zero = ZeroSSA(DefinedTypes["dword"]);
 	if (Name == CurrentLabelIdentifier && Mode == LABEL_DECLARE) {
 		llvm::BasicBlock *NEW = llvm::BasicBlock::Create(*GlobalContext, "AL" + std::to_string(AnonymousLabels.size()), function);
 		AnonymousLabels.push_back(NEW);
-		return R;
+		return Zero;
 	} else if (Name == CurrentLabelIdentifier && Mode == LABEL_DEFINE) {
 		llvm::BasicBlock* label = AnonymousLabels.back();
 		Builder->CreateBr(label);
 		Builder->SetInsertPoint(label);
-		return R;
+		return Zero;
 	} else if (Name == "") {
 		if (AnonymousReferer > AnonymousLabels.size()) {
 			for(uint i = AnonymousLabels.size(); i <= AnonymousReferer; i++)
@@ -1310,7 +1304,7 @@ SSA *LabelExpression::Render() {
 		llvm::BasicBlock* label = AnonymousLabels[AnonymousReferer];
 		Builder->CreateBr(label);
 		Builder->SetInsertPoint(label);
-		return R;
+		return Zero;
 	}
 	if (AllonymousLabels.find(Name) == AllonymousLabels.end()) AllonymousLabels[Name] = llvm::BasicBlock::Create(*GlobalContext, "L#" + Name, function);
 	if (Mode == LABEL_DEFINE) {
@@ -1318,18 +1312,17 @@ SSA *LabelExpression::Render() {
 		Builder->CreateBr(label);
 		Builder->SetInsertPoint(label);
 	}
-	return R;
+	return Zero;
 }
 
 SSA *JumpExpression::Render() {
 	llvm::Function *function = Builder->GetInsertBlock()->getParent();
-	SSA *R = llvm::Constant::getNullValue(DefinedTypes["dword"].Type);
-	TypeAnnotation[R] = DefinedTypes["dword"];
+	SSA* Zero = ZeroSSA(DefinedTypes["dword"]);
 	if (Label == CurrentLabelIdentifier) {
 		llvm::BasicBlock* label = AnonymousLabels.back();
 		Builder->CreateBr(label);
 		RESOW_BASIC_BLOCK;
-		return R;
+		return Zero;
 	} else if (Label == "") {
 		if (AnonymousReferer > AnonymousLabels.size()) {
 			for (uint i = AnonymousLabels.size(); i <= AnonymousReferer; i++)
@@ -1338,7 +1331,7 @@ SSA *JumpExpression::Render() {
 		llvm::BasicBlock *label = AnonymousLabels[AnonymousReferer];
 		Builder->CreateBr(label);
 		RESOW_BASIC_BLOCK;
-		return R;
+		return Zero;
 	}
 	// TODO: Jump to any expression that returns a label pointer.
 	if (AllonymousValues.find(Label) != AllonymousValues.end()) {
@@ -1350,13 +1343,13 @@ SSA *JumpExpression::Render() {
 		}
 		for (uint i = 0; i < AnonymousLabels.size(); i++) B->addDestination(AnonymousLabels[i]);
 		RESOW_BASIC_BLOCK;
-		return R;
+		return Zero;
 	}
 	if (AllonymousLabels.find(Label) == AllonymousLabels.end()) AllonymousLabels[Label] = llvm::BasicBlock::Create(*GlobalContext, "L#" + Label, function);
 	llvm::BasicBlock* label = AllonymousLabels[Label];
 	Builder->CreateBr(label);
 	RESOW_BASIC_BLOCK;
-	return R;
+	return Zero;
 }
 
 SSA* SetJumpExpression::Render() {
@@ -1395,9 +1388,7 @@ SSA* LongJumpExpression::Render() {
   IType.push_back(DefinedTypes["byte*"].Type);
   IArg.push_back(Builder->CreateBitCast(jumpBuffer, IType[0]));
 	Builder->CreateCall(LongJumpIntrinsic, llvm::ArrayRef<SSA*>(IArg));
-  SSA* R = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false));
-  TypeAnnotation[R] = DefinedTypes["dword"];
-  return R;
+	return ZeroSSA(DefinedTypes["dword"]);
 }
 
 SSA *SizeofExpression::Render() {
@@ -1483,9 +1474,7 @@ SSA *WhileExpression::Render() {
 	BreakStack.pop();
 	ContinueStack.pop();
 
-	SSA *R = llvm::Constant::getNullValue(llvm::Type::getInt32Ty(*GlobalContext));
-	TypeAnnotation[R] = DefinedTypes["dword"];
-	return R;
+	return ZeroSSA(DefinedTypes["dword"]);
 }
 
 SSA *DeclarationExpression::Render() {
@@ -1509,9 +1498,13 @@ SSA *DeclarationExpression::Render() {
 		AllonymousValues[variableName] = stored;
 	}
 
-	SSA *R = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(Type.Size, 0, false));
-	TypeAnnotation[R] = Type;
-	return R;
+	return ZeroSSA(Type);
+}
+
+SSA* ZeroSSA(XLSType Type) {
+  SSA* R = llvm::Constant::getNullValue(Type.Type);
+  TypeAnnotation[R] = Type;
+  return R;
 }
 
 SSA *StructDefinition::Render() {
