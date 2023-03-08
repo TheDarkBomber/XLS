@@ -11,9 +11,14 @@
 #include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Instructions.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/LegacyPassManager.h>
+#include <llvm/IR/Module.h>
 #include <string>
 #include <vector>
 #include <memory>
+#include <stack>
 #include <map>
 
 #define RESOW_BASIC_BLOCK do { llvm::BasicBlock *resow = llvm::BasicBlock::Create(*GlobalContext, "xls_rs", Builder->GetInsertBlock()->getParent()); Builder->SetInsertPoint(resow); } while (0)
@@ -353,16 +358,6 @@ public:
 	SSA *Render() override;
 };
 
-struct AnnotatedValue {
-	XLSType Type;
-	Alloca* Value;
-};
-
-struct AnnotatedGlobal {
-	XLSType Type;
-	llvm::GlobalVariable* Value;
-};
-
 extern std::string CurrentIdentifier;
 extern std::string CurrentOperator;
 extern dword CurrentInteger;
@@ -430,5 +425,41 @@ void InitialiseJIT();
 
 bool DefineFPType(std::string function, XLSType* outtype);
 bool CheckTypeDefined(std::string name);
+
+SSA* ImplicitCast(XLSType type, SSA *toCast);
+
+SSA* CodeError(const char *error);
+
+extern llvm::DataLayout* GlobalLayout;
+extern llvm::Triple* GlobalTriple;
+
+extern ParserFlags Flags;
+
+extern dword CurrentUID;
+
+extern std::map<std::string, Precedence> BinaryPrecedence;
+
+extern UQP(llvm::LLVMContext) GlobalContext;
+extern UQP(llvm::IRBuilder<>) Builder;
+extern UQP(llvm::Module) GlobalModule;
+extern UQP(llvm::legacy::FunctionPassManager) GlobalFPM;
+
+extern std::map<std::string, XLSType> DefinedTypes;
+extern std::map<llvm::Type*, XLSType> TypeMap;
+
+extern std::map<std::string, UQP(SignatureNode)> FunctionSignatures;
+extern std::map<std::string, llvm::BasicBlock*> AllonymousLabels;
+
+extern std::map<llvm::Function*, XLSFunctionInfo> FunctionInfo;
+
+extern std::vector<llvm::BasicBlock*> AnonymousLabels;
+extern std::string CurrentLabelIdentifier;
+
+extern std::map<SSA*, XLSType> TypeAnnotation;
+extern std::map<llvm::Function*, XLSType> ReturnTypeAnnotation;
+extern std::map<llvm::Argument*, XLSType> ArgumentTypeAnnotation;
+
+extern std::stack<llvm::BasicBlock*> BreakStack;
+extern std::stack<llvm::BasicBlock*> ContinueStack;
 
 #endif

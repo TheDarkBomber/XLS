@@ -1,4 +1,5 @@
 #include "Parser.hxx"
+#include "Variables.hxx"
 #include "Lexer.hxx"
 #include "colours.def.h"
 #include <llvm/ADT/APInt.h>
@@ -66,9 +67,6 @@ std::map<llvm::Function*, XLSFunctionInfo> FunctionInfo;
 
 std::vector<llvm::BasicBlock*> AnonymousLabels;
 std::string CurrentLabelIdentifier = "current";
-
-std::map<std::string, AnnotatedValue> AllonymousValues;
-std::map<std::string, AnnotatedGlobal> GlobalValues;
 
 std::map<SSA*, XLSType> TypeAnnotation;
 std::map<llvm::Function*, XLSType> ReturnTypeAnnotation;
@@ -838,16 +836,9 @@ SSA *VariableExpression::Render() {
 			if (!DefineFPType(Name, &FPType)) return nullptr;
 			TypeAnnotation[pointed] = FPType;
 			return pointed;
-		}
-		if (GlobalValues.find(Name) == GlobalValues.end()) CodeError("Reference to undeclared variable.");
-		AnnotatedGlobal global = GlobalValues[Name];
-		llvm::LoadInst *gloadInstance = Builder->CreateLoad(global.Type.Type, global.Value, Name.c_str());
-		TypeAnnotation[gloadInstance] = global.Type;
-		return gloadInstance;
+		} else return CodeError("Reference to undeclared variable.");
 	}
-	llvm::LoadInst *loadInstance;
 
-	AnnotatedValue A = AllonymousValues[Name];
 	if (Dereference) {
 		UQP(Expression) V = MUQ(VariableExpression, Name, Volatile, false);
 		UQP(UnaryExpression) U = MUQ(UnaryExpression, "*", std::move(V));
@@ -855,15 +846,18 @@ SSA *VariableExpression::Render() {
 		return R;
 	}
 
+	llvm::LoadInst* loadInstance;
+	XLSVariable variable = AllonymousValues[Name];
+
 	if (Field != "") {
-		if (!A.Type.IsStruct) return nullptr;
-		if (A.Type.Structure.Fields.find(Field) == A.Type.Structure.Fields.end()) return CodeError("Unknown field.");
-		dword fieldOffset = A.Type.Structure.Fields[Field].first;
-		XLSType fieldType = A.Type.Structure.Fields[Field].second;
+		if (!variable.Type.IsStruct) return nullptr;
+		if (variable.Type.Structure.Fields.find(Field) == variable.Type.Structure.Fields.end()) return CodeError("Unknown field.");
+		dword fieldOffset = variable.Type.Structure.Fields[Field].first;
+		XLSType fieldType = variable.Type.Structure.Fields[Field].second;
 		std::vector<SSA*> GEPIndex(2);
 		GEPIndex[0] = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false));
 		GEPIndex[1] = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, fieldOffset, false));
-		SSA *GEP = Builder->CreateGEP(A.Type.Type, A.Value, GEPIndex, "xls_gep");
+		SSA *GEP = Builder->CreateGEP(variable.Type.Type, variable.Value, GEPIndex, "xls_gep");
 		loadInstance = Builder->CreateLoad(fieldType.Type, GEP, Name.c_str());
 		TypeAnnotation[loadInstance] = fieldType;
 		return loadInstance;
@@ -872,18 +866,15 @@ SSA *VariableExpression::Render() {
 	if (Offset) {
 		SSA *offset = Offset->Render();
 		if (!offset) return nullptr;
-		SSA *V = Builder->CreateLoad(A.Type.Type, A.Value, Name.c_str());
-		SSA *GEP = Builder->CreateInBoundsGEP(DefinedTypes[A.Type.Dereference].Type, V, offset);
-		loadInstance = Builder->CreateLoad(DefinedTypes[A.Type.Dereference].Type, GEP);
+		SSA *V = Builder->CreateLoad(variable.Type.Type, variable.Value, Name.c_str());
+		SSA *GEP = Builder->CreateInBoundsGEP(DefinedTypes[variable.Type.Dereference].Type, V, offset);
+		loadInstance = Builder->CreateLoad(DefinedTypes[variable.Type.Dereference].Type, GEP);
 		loadInstance->setVolatile(Volatile);
-		TypeAnnotation[loadInstance] = DefinedTypes[A.Type.Dereference];
+		TypeAnnotation[loadInstance] = DefinedTypes[variable.Type.Dereference];
 		return loadInstance;
 	}
 
-	loadInstance = Builder->CreateLoad(A.Type.Type, A.Value, Name.c_str());
-	loadInstance->setVolatile(Volatile);
-	TypeAnnotation[loadInstance] = A.Type;
-	return loadInstance;
+	return ReadVariable(variable, Volatile);
 }
 
 SSA *CastExpression::Render() {
@@ -905,28 +896,21 @@ SSA *BinaryExpression::Render() {
 		SSA *value = RHS->Render();
 		if (!value) return nullptr;
 		if (!GetType(value).UID) value = llvm::PoisonValue::get(value->getType());
-		SSA *variable;
 		llvm::StoreInst *storeInstance;
-		AnnotatedValue A;
-		if (AllonymousValues.find(LAssignment->GetName()) == AllonymousValues.end()) {
-			if (GlobalValues.find(LAssignment->GetName()) == GlobalValues.end()) return CodeError("Unknown variable name.");
-			AnnotatedGlobal global = GlobalValues[LAssignment->GetName()];
-			SSA *castedValue = ImplicitCast(global.Type, value);
-			storeInstance = Builder->CreateStore(castedValue, global.Value);
-			storeInstance->setVolatile(Volatile);
-			TypeAnnotation[castedValue] = global.Type;
-			return castedValue;
-		}
-		A = AllonymousValues[LAssignment->GetName()];
+		XLSVariable variable;
+		printf("I: %s\n", LAssignment->GetName().c_str());
+		if (AllonymousValues.find(LAssignment->GetName()) == AllonymousValues.end())
+			return CodeError("Unknown variable name.");
+		variable = AllonymousValues[LAssignment->GetName()];
 		if (LAssignment->GetField() != "") {
-			if (!A.Type.IsStruct) return nullptr;
-			if (A.Type.Structure.Fields.find(LAssignment->GetField()) == A.Type.Structure.Fields.end()) return CodeError("Unknown field to assign.");
-			dword fieldOffset = A.Type.Structure.Fields[LAssignment->GetField()].first;
-			XLSType fieldType = A.Type.Structure.Fields[LAssignment->GetField()].second;
+			if (!variable.Type.IsStruct) return nullptr;
+			if (variable.Type.Structure.Fields.find(LAssignment->GetField()) == variable.Type.Structure.Fields.end()) return CodeError("Unknown field to assign.");
+			dword fieldOffset = variable.Type.Structure.Fields[LAssignment->GetField()].first;
+			XLSType fieldType = variable.Type.Structure.Fields[LAssignment->GetField()].second;
 			std::vector<SSA*> GEPIndex(2);
 			GEPIndex[0] = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false));
 			GEPIndex[1] = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, fieldOffset, false));
-			SSA *GEP = Builder->CreateGEP(A.Type.Type, A.Value, GEPIndex, "xls_assign_gep");
+			SSA *GEP = Builder->CreateGEP(variable.Type.Type, variable.Value, GEPIndex, "xls_assign_gep");
 			SSA *castedValue = ImplicitCast(fieldType, value);
 			storeInstance = Builder->CreateStore(castedValue, GEP);
 			storeInstance->setVolatile(Volatile);
@@ -935,26 +919,23 @@ SSA *BinaryExpression::Render() {
 		}
 		if (LAssignment->GetOffset()) {
 			SSA *offset = LAssignment->GetOffset()->Render();
-			SSA *castedValue = ImplicitCast(DefinedTypes[A.Type.Dereference], value);
-			SSA *V = Builder->CreateLoad(A.Type.Type, A.Value, LAssignment->GetName());
-			SSA *GEP = Builder->CreateInBoundsGEP(DefinedTypes[A.Type.Dereference].Type, V, offset);
+			SSA *castedValue = ImplicitCast(DefinedTypes[variable.Type.Dereference], value);
+			SSA *V = Builder->CreateLoad(variable.Type.Type, variable.Value, LAssignment->GetName());
+			SSA *GEP = Builder->CreateInBoundsGEP(DefinedTypes[variable.Type.Dereference].Type, V, offset);
 			storeInstance = Builder->CreateStore(castedValue, GEP);
 			storeInstance->setVolatile(Volatile);
-			TypeAnnotation[castedValue] = DefinedTypes[A.Type.Dereference];
+			TypeAnnotation[castedValue] = DefinedTypes[variable.Type.Dereference];
 			return castedValue;
 		}
 		if (LAssignment->IsDereference()) {
-			if (!A.Type.IsPointer) return CodeError("Non-pointer values cannot be dereferenced.");
-			storeInstance = Builder->CreateStore(ImplicitCast(DefinedTypes[A.Type.Dereference], value), Builder->CreateLoad(A.Type.Type, A.Value, "xls_assign_pointer"));
+			if (!variable.Type.IsPointer) return CodeError("Non-pointer values cannot be dereferenced.");
+			storeInstance = Builder->CreateStore(ImplicitCast(DefinedTypes[variable.Type.Dereference], value), Builder->CreateLoad(variable.Type.Type, variable.Value, "xls_assign_pointer"));
 			storeInstance->setVolatile(Volatile);
-			TypeAnnotation[value] = DefinedTypes[A.Type.Dereference];
-			return ImplicitCast(DefinedTypes[A.Type.Dereference], value);
+			TypeAnnotation[value] = DefinedTypes[variable.Type.Dereference];
+			return ImplicitCast(DefinedTypes[variable.Type.Dereference], value);
 		}
-		variable = A.Value;
-		storeInstance = Builder->CreateStore(ImplicitCast(A.Type, value), variable);
-		storeInstance->setVolatile(Volatile);
-		TypeAnnotation[storeInstance] = A.Type;
-		return value;
+
+		return WriteVariable(value, variable, Volatile);
 	}
 
 	if (CMP("|>", Operator)) {
@@ -1062,22 +1043,7 @@ SSA *UnaryExpression::Render() {
 	if(CMP("&", Operator)) {
 		VariableExpression *LAssignment = static_cast<VariableExpression*>(Operand.get());
 		if (!LAssignment) return CodeError("Address-of operation on fire.");
-		AnnotatedValue V;
-		if (AllonymousValues.find(LAssignment->GetName()) == AllonymousValues.end())
-			return CodeError("Unknown variable name to address.");
-		V = AllonymousValues[LAssignment->GetName()];
-		SSA *value;
-		XLSType PtrType;
-		PtrType.Dereference = V.Type.Name;
-		PtrType.Name = V.Type.Name;
-		PtrType.Name.push_back('*');
-		PtrType.IsPointer = true;
-		PtrType.Type = V.Type.Type->getPointerTo();
-		PtrType.Size = GlobalLayout->getPointerSizeInBits();
-		if (!CheckTypeDefined(PtrType.Name)) return nullptr;
-		TypeAnnotation[value] = PtrType;
-		value = V.Value;
-		return value;
+		return AddrVariable(LAssignment->GetName());
 	}
 
 	if(CMP("&&", Operator)) {
@@ -1129,24 +1095,24 @@ SSA *CallExpression::Render() {
 		if (AllonymousValues.find(Called) == AllonymousValues.end())
 			return CodeError("Call to undeclared function.");
 
-		AnnotatedValue A = AllonymousValues[Called];
-		if (!A.Type.IsFP) return CodeError("Call to non-function pointer.");
-		llvm::LoadInst* FP = Builder->CreateLoad(A.Type.Type, A.Value, "xls_fp_load");
+		XLSVariable variable = AllonymousValues[Called];
+		if (!variable.Type.IsFP) return CodeError("Call to non-function pointer.");
+		llvm::LoadInst* FP = Builder->CreateLoad(variable.Type.Type, variable.Value, "xls_fp_load");
 
-		if (A.Type.FPData.size() != Arguments.size() + 1) return CodeError("Argument call size mismatch with type argument size.");
+		if (variable.Type.FPData.size() != Arguments.size() + 1) return CodeError("Argument call size mismatch with type argument size.");
 
 		std::vector<SSA*> FPArguments;
 		for (uint i = 0; i < Arguments.size(); i++)
-			FPArguments.push_back(ImplicitCast(A.Type.FPData[i + 1], Arguments[i]->Render()));
+			FPArguments.push_back(ImplicitCast(variable.Type.FPData[i + 1], Arguments[i]->Render()));
 
 		std::vector<llvm::Type*> FPParams;
-		for (uint i = 1; i < A.Type.FPData.size(); i++)
-			FPParams.push_back(A.Type.FPData[i].Type);
+		for (uint i = 1; i < variable.Type.FPData.size(); i++)
+			FPParams.push_back(variable.Type.FPData[i].Type);
 
-		llvm::FunctionType* FPType = llvm::FunctionType::get(A.Type.FPData[0].Type, llvm::ArrayRef<llvm::Type*>(FPParams), false);
+		llvm::FunctionType* FPType = llvm::FunctionType::get(variable.Type.FPData[0].Type, llvm::ArrayRef<llvm::Type*>(FPParams), false);
 		llvm::CallInst* callInstance = Builder->CreateCall(FPType, FP, FPArguments, "xls_fp_call");
-		if (A.Type.FPData[0].UID == DefinedTypes["void"].UID) callInstance->setName("");
-		TypeAnnotation[callInstance] = A.Type.FPData[0];
+		if (variable.Type.FPData[0].UID == DefinedTypes["void"].UID) callInstance->setName("");
+		TypeAnnotation[callInstance] = variable.Type.FPData[0];
 		return callInstance;
 	}
 
@@ -1180,7 +1146,7 @@ SSA *CallExpression::Render() {
 			break;
 		} else if (TailVariadic && index == called->arg_size() - 1) {
 			if (FunctionInfo[called].Variadic != VARIADIC_XLS) return CodeError("Cannot pass the variadic hive to non-variadic function.");
-			AnnotatedValue HiveStore = AllonymousValues["#hive"];
+			XLSVariable HiveStore = AllonymousValues["#hive"];
 			SSA* Hive = Builder->CreateLoad(HiveStore.Type.Type, HiveStore.Value, "xls_pass_hive");
 			ArgumentVector.push_back(Hive);
 			break;
@@ -1266,7 +1232,7 @@ SSA *ReturnExpression::Render() {
 }
 
 SSA *CVariadicArgumentExpression::Render() {
-	AnnotatedValue VAListStore = AllonymousValues["variadic"];
+	XLSVariable VAListStore = AllonymousValues["variadic"];
 	SSA* VAList = Builder->CreateBitCast(VAListStore.Value, llvm::Type::getInt8PtrTy(*GlobalContext));
 	SSA* R = Builder->CreateVAArg(VAList, Type.Type, "xls_variadic_get");
 	TypeAnnotation[R] = Type;
@@ -1274,7 +1240,7 @@ SSA *CVariadicArgumentExpression::Render() {
 }
 
 SSA *VariadicArgumentExpression::Render() {
-	AnnotatedValue HiveStore = AllonymousValues["#hive"];
+	XLSVariable HiveStore = AllonymousValues["#hive"];
 	SSA* Hive = Builder->CreateLoad(HiveStore.Type.Type, HiveStore.Value, "xls_hive_value");
 	SSA* bee = Builder->CreateBitCast(Hive, Type.Type->getPointerTo());
 	SSA* R = Builder->CreateLoad(Type.Type, bee);
@@ -1335,7 +1301,7 @@ SSA *JumpExpression::Render() {
 	}
 	// TODO: Jump to any expression that returns a label pointer.
 	if (AllonymousValues.find(Label) != AllonymousValues.end()) {
-		AnnotatedValue A = AllonymousValues[Label];
+		XLSVariable A = AllonymousValues[Label];
 		llvm::LoadInst* V = Builder->CreateLoad(A.Type.Type, A.Value, "xls_jump&");
 		llvm::IndirectBrInst* B = Builder->CreateIndirectBr(V, AllonymousLabels.size() + AnonymousLabels.size());
 		for (std::pair<std::string, llvm::BasicBlock *> dest : AllonymousLabels) {
@@ -1492,7 +1458,7 @@ SSA *DeclarationExpression::Render() {
 		Alloca *alloca = createEntryBlockAlloca(function, variableName, Type);
 		Builder->CreateStore(ImplicitCast(Type, definerSSA), alloca);
 
-		AnnotatedValue stored;
+		XLSVariable stored;
 		stored.Type = Type;
 		stored.Value = alloca;
 		AllonymousValues[variableName] = stored;
@@ -1535,10 +1501,12 @@ SSA *StructDefinition::Render() {
 SSA *GlobalVariableNode::Render() {
 	llvm::GlobalVariable *global = new llvm::GlobalVariable(*GlobalModule, Type.Type, false, llvm::GlobalValue::ExternalLinkage, 0, Name);
 	global->setInitializer(llvm::ConstantInt::get(*GlobalContext, llvm::APInt(Type.Size, Value, false)));
-	AnnotatedGlobal aGlobal;
-	aGlobal.Type = Type;
-	aGlobal.Value = global;
-	GlobalValues[Name] = aGlobal;
+	printf("V: %s\n", Name.c_str());
+	XLSVariable variable;
+	variable.Type = Type;
+	variable.Value = global;
+	variable.Global = true;
+	AllonymousValues[Name] = variable;
 	TypeAnnotation[global] = Type;
 	return global;
 }
@@ -1586,7 +1554,12 @@ llvm::Function *FunctionNode::Render() {
   llvm::BasicBlock *basicBlock = llvm::BasicBlock::Create(*GlobalContext, "entry", function);
   Builder->SetInsertPoint(basicBlock);
 
-  AllonymousValues.clear();
+  // Clear only local variables.
+	auto iterator = AllonymousValues.begin();
+	while (iterator != AllonymousValues.end()) {
+		if (!iterator->second.Global) iterator = AllonymousValues.erase(iterator);
+		else iterator++;
+	}
 	AllonymousLabels.clear();
 	AnonymousLabels.clear();
 	TypeAnnotation.clear();
@@ -1594,7 +1567,7 @@ llvm::Function *FunctionNode::Render() {
   for (llvm::Argument &argument : function->args()) {
 		Alloca *alloca = createEntryBlockAlloca(function, argument.getName(), ArgumentTypeAnnotation[function->getArg(index)]);
 		Builder->CreateStore(&argument, alloca);
-		AnnotatedValue stored;
+		XLSVariable stored;
 		stored.Type = ArgumentTypeAnnotation[function->getArg(index++)];
 		stored.Value = alloca;
 		AllonymousValues[std::string(argument.getName())] = stored;
@@ -1602,7 +1575,7 @@ llvm::Function *FunctionNode::Render() {
 
 	if (function->isVarArg()) {
 		Alloca *VAList = createEntryBlockAlloca(function, "variadic", DefinedTypes["valist"]);
-		AnnotatedValue VAListStore;
+		XLSVariable VAListStore;
 		VAListStore.Type = DefinedTypes["valist"];
 		VAListStore.Value = VAList;
 		AllonymousValues["variadic"] = VAListStore;
