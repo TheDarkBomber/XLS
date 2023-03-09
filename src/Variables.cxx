@@ -1,4 +1,6 @@
 #include "Variables.hxx"
+#include "Parser.hxx"
+#include "num.def.h"
 #include <llvm/IR/Instructions.h>
 
 std::map<std::string, XLSVariable> AllonymousValues;
@@ -47,4 +49,54 @@ SSA* AddrVariable(std::string name) {
   if (AllonymousValues.find(name) == AllonymousValues.end())
     return CodeError("Unknown variable name to address.");
 	return AddrVariable(AllonymousValues[name]);
+}
+
+SSA* IndexVariable(XLSVariable variable, SSA* index, bool volatility) {
+  SSA *V = Builder->CreateLoad(variable.Type.Type, variable.Value, variable.Name.c_str());
+  SSA *GEP = Builder->CreateInBoundsGEP(DefinedTypes[variable.Type.Dereference].Type, V, index);
+	XLSVariable indexedVariable {.Type = DefinedTypes[variable.Type.Dereference], .Value = GEP, .Name = ".index@#" + variable.Name};
+  return ReadVariable(indexedVariable, volatility);
+}
+
+SSA* IndexVariableField(XLSVariable variable, XLSType fieldType, SSA* index, bool volatility) {
+  std::vector<SSA*> GEPIndex(2);
+  GEPIndex[0] = ZeroSSA(DefinedTypes["dword"]);
+  GEPIndex[1] = index;
+  SSA* GEP = Builder->CreateGEP(variable.Type.Type, variable.Value, GEPIndex);
+	XLSVariable indexedVariable {.Type = fieldType, .Value = GEP, .Name = ".rfield@#" + variable.Name};
+	return ReadVariable(indexedVariable, volatility);
+}
+
+SSA* IndexField(XLSType type, std::string field, SSA* expression) {
+	if (!type.IsStruct) return CodeError("Attempt to index field of non-structure type.");
+	StructData structure = type.Structure;
+	if (structure.Fields.find(field) == structure.Fields.end())
+		return CodeError("Field not found.");
+
+	SDX(dword, XLSType) XLSField = structure.Fields[field];
+	SSA* extractedValue = Builder->CreateExtractValue(expression, llvm::ArrayRef<unsigned>(XLSField.first));
+	TypeAnnotation[extractedValue] = XLSField.second;
+	return extractedValue;
+}
+
+SSA* ExdexVariable(SSA* value, XLSVariable variable, SSA* index, bool volatility) {
+  SSA* castedValue = ImplicitCast(DefinedTypes[variable.Type.Dereference], value);
+  SSA* V = Builder->CreateLoad(variable.Type.Type, variable.Value, variable.Name);
+  SSA* GEP = Builder->CreateInBoundsGEP(DefinedTypes[variable.Type.Dereference].Type, V, index);
+	XLSVariable exdexedVariable {.Type = DefinedTypes[variable.Type.Dereference], .Value = GEP, .Name = ".exdex@#" + variable.Name};
+	(void)WriteVariable(castedValue, exdexedVariable, volatility);
+	TypeAnnotation[castedValue] = exdexedVariable.Type;
+  return castedValue;
+}
+
+SSA* ExdexVariableField(SSA* value, XLSVariable variable, XLSType fieldType, SSA* index, bool volatility) {
+  std::vector<SSA *> GEPIndex(2);
+  GEPIndex[0] = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false));
+  GEPIndex[1] = index;
+  SSA* GEP = Builder->CreateGEP(variable.Type.Type, variable.Value, GEPIndex);
+  SSA* castedValue = ImplicitCast(fieldType, value);
+	XLSVariable exdexedVariable {.Type = fieldType, .Value = GEP, .Name = ".wfield@#" + variable.Name};
+	(void)WriteVariable(castedValue, exdexedVariable, volatility);
+  TypeAnnotation[castedValue] = fieldType;
+  return castedValue;
 }

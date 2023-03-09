@@ -21,4 +21,12 @@ SSA* AddrVariable(std::string name);
 SSA* WriteVariable(SSA* value, XLSVariable variable, bool volatility = false);
 SSA* WriteVariable(SSA* value, std::string name, bool volatility = false);
 
+SSA* IndexVariable(XLSVariable variable, SSA* index, bool volatility = false);
+SSA* IndexVariableField(XLSVariable variable, XLSType fieldType, SSA* index, bool volatility = false);
+
+SSA* IndexField(XLSType type, std::string field, SSA* expression);
+
+SSA* ExdexVariable(SSA* value, XLSVariable variable, SSA* index, bool volatility = false);
+SSA* ExdexVariableField(SSA* value, XLSVariable variable, XLSType fieldType, SSA* index, bool volatility = false);
+
 #endif

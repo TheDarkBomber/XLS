@@ -828,7 +828,7 @@ SSA *MutableArrayExpression::Render() {
 	return R;
 }
 
-SSA *VariableExpression::Render() {
+SSA* VariableExpression::Render() {
 	if (AllonymousValues.find(Name) == AllonymousValues.end()) {
 		if (FunctionSignatures.find(Name) != FunctionSignatures.end()) {
 			llvm::Function *pointed = getFunction(Name);
@@ -839,39 +839,22 @@ SSA *VariableExpression::Render() {
 		} else return CodeError("Reference to undeclared variable.");
 	}
 
-	if (Dereference) {
-		UQP(Expression) V = MUQ(VariableExpression, Name, Volatile, false);
-		UQP(UnaryExpression) U = MUQ(UnaryExpression, "*", std::move(V));
-		SSA *R = U->Render();
-		return R;
-	}
-
-	llvm::LoadInst* loadInstance;
 	XLSVariable variable = AllonymousValues[Name];
+	if (Dereference) IndexVariable(variable, ZeroSSA(DefinedTypes["dword"]), Volatile);
 
 	if (Field != "") {
 		if (!variable.Type.IsStruct) return nullptr;
 		if (variable.Type.Structure.Fields.find(Field) == variable.Type.Structure.Fields.end()) return CodeError("Unknown field.");
 		dword fieldOffset = variable.Type.Structure.Fields[Field].first;
 		XLSType fieldType = variable.Type.Structure.Fields[Field].second;
-		std::vector<SSA*> GEPIndex(2);
-		GEPIndex[0] = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false));
-		GEPIndex[1] = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, fieldOffset, false));
-		SSA *GEP = Builder->CreateGEP(variable.Type.Type, variable.Value, GEPIndex, "xls_gep");
-		loadInstance = Builder->CreateLoad(fieldType.Type, GEP, Name.c_str());
-		TypeAnnotation[loadInstance] = fieldType;
-		return loadInstance;
+		SSA* fieldOffsetSSA = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, fieldOffset, false));
+		return IndexVariableField(variable, fieldType, fieldOffsetSSA, Volatile);
 	}
 
 	if (Offset) {
-		SSA *offset = Offset->Render();
+		SSA* offset = Offset->Render();
 		if (!offset) return nullptr;
-		SSA *V = Builder->CreateLoad(variable.Type.Type, variable.Value, Name.c_str());
-		SSA *GEP = Builder->CreateInBoundsGEP(DefinedTypes[variable.Type.Dereference].Type, V, offset);
-		loadInstance = Builder->CreateLoad(DefinedTypes[variable.Type.Dereference].Type, GEP);
-		loadInstance->setVolatile(Volatile);
-		TypeAnnotation[loadInstance] = DefinedTypes[variable.Type.Dereference];
-		return loadInstance;
+		return IndexVariable(variable, offset, Volatile);
 	}
 
 	return ReadVariable(variable, Volatile);
@@ -896,44 +879,23 @@ SSA *BinaryExpression::Render() {
 		SSA *value = RHS->Render();
 		if (!value) return nullptr;
 		if (!GetType(value).UID) value = llvm::PoisonValue::get(value->getType());
-		llvm::StoreInst *storeInstance;
-		XLSVariable variable;
-		printf("I: %s\n", LAssignment->GetName().c_str());
 		if (AllonymousValues.find(LAssignment->GetName()) == AllonymousValues.end())
 			return CodeError("Unknown variable name.");
-		variable = AllonymousValues[LAssignment->GetName()];
+
+		XLSVariable variable = AllonymousValues[LAssignment->GetName()];
 		if (LAssignment->GetField() != "") {
 			if (!variable.Type.IsStruct) return nullptr;
 			if (variable.Type.Structure.Fields.find(LAssignment->GetField()) == variable.Type.Structure.Fields.end()) return CodeError("Unknown field to assign.");
 			dword fieldOffset = variable.Type.Structure.Fields[LAssignment->GetField()].first;
 			XLSType fieldType = variable.Type.Structure.Fields[LAssignment->GetField()].second;
-			std::vector<SSA*> GEPIndex(2);
-			GEPIndex[0] = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false));
-			GEPIndex[1] = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, fieldOffset, false));
-			SSA *GEP = Builder->CreateGEP(variable.Type.Type, variable.Value, GEPIndex, "xls_assign_gep");
-			SSA *castedValue = ImplicitCast(fieldType, value);
-			storeInstance = Builder->CreateStore(castedValue, GEP);
-			storeInstance->setVolatile(Volatile);
-			TypeAnnotation[castedValue] = fieldType;
-			return castedValue;
+			SSA* fieldOffsetSSA = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, fieldOffset, false));
+			return ExdexVariableField(value, variable, fieldType, fieldOffsetSSA, Volatile);
 		}
-		if (LAssignment->GetOffset()) {
-			SSA *offset = LAssignment->GetOffset()->Render();
-			SSA *castedValue = ImplicitCast(DefinedTypes[variable.Type.Dereference], value);
-			SSA *V = Builder->CreateLoad(variable.Type.Type, variable.Value, LAssignment->GetName());
-			SSA *GEP = Builder->CreateInBoundsGEP(DefinedTypes[variable.Type.Dereference].Type, V, offset);
-			storeInstance = Builder->CreateStore(castedValue, GEP);
-			storeInstance->setVolatile(Volatile);
-			TypeAnnotation[castedValue] = DefinedTypes[variable.Type.Dereference];
-			return castedValue;
-		}
-		if (LAssignment->IsDereference()) {
-			if (!variable.Type.IsPointer) return CodeError("Non-pointer values cannot be dereferenced.");
-			storeInstance = Builder->CreateStore(ImplicitCast(DefinedTypes[variable.Type.Dereference], value), Builder->CreateLoad(variable.Type.Type, variable.Value, "xls_assign_pointer"));
-			storeInstance->setVolatile(Volatile);
-			TypeAnnotation[value] = DefinedTypes[variable.Type.Dereference];
-			return ImplicitCast(DefinedTypes[variable.Type.Dereference], value);
-		}
+		if (LAssignment->GetOffset())
+			return ExdexVariable(value, variable, LAssignment->GetOffset()->Render(), Volatile);
+
+		if (LAssignment->IsDereference())
+			return ExdexVariable(value, variable, ZeroSSA(DefinedTypes["dword"]), Volatile);
 
 		return WriteVariable(value, variable, Volatile);
 	}
@@ -1501,7 +1463,6 @@ SSA *StructDefinition::Render() {
 SSA *GlobalVariableNode::Render() {
 	llvm::GlobalVariable *global = new llvm::GlobalVariable(*GlobalModule, Type.Type, false, llvm::GlobalValue::ExternalLinkage, 0, Name);
 	global->setInitializer(llvm::ConstantInt::get(*GlobalContext, llvm::APInt(Type.Size, Value, false)));
-	printf("V: %s\n", Name.c_str());
 	XLSVariable variable;
 	variable.Type = Type;
 	variable.Value = global;
