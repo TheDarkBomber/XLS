@@ -100,3 +100,16 @@ SSA* ExdexVariableField(SSA* value, XLSVariable variable, XLSType fieldType, SSA
   TypeAnnotation[castedValue] = fieldType;
   return castedValue;
 }
+
+XLSVariable DemoteVariable(XLSVariable variable) {
+  while (variable.Type.IsPointer) {
+    SSA* V = Builder->CreateLoad(variable.Type.Type, variable.Value, variable.Name.c_str());
+    SSA* GEP = Builder->CreateInBoundsGEP(DefinedTypes[variable.Type.Dereference].Type, V, ZeroSSA(DefinedTypes["dword"]));
+    variable.Type = DefinedTypes[variable.Type.Dereference];
+    variable.Value = GEP;
+		TypeAnnotation[GEP] = variable.Type;
+  }
+
+	variable.Name += "(demoted)";
+	return variable;
+}

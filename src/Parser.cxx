@@ -845,6 +845,9 @@ SSA* VariableExpression::Render() {
 	if (Field != "") {
 		if (!variable.Type.IsStruct) return nullptr;
 		if (variable.Type.Structure.Fields.find(Field) == variable.Type.Structure.Fields.end()) return CodeError("Unknown field.");
+
+		if (variable.Type.IsPointer) variable = DemoteVariable(variable);
+
 		dword fieldOffset = variable.Type.Structure.Fields[Field].first;
 		XLSType fieldType = variable.Type.Structure.Fields[Field].second;
 		SSA* fieldOffsetSSA = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, fieldOffset, false));
@@ -886,6 +889,9 @@ SSA *BinaryExpression::Render() {
 		if (LAssignment->GetField() != "") {
 			if (!variable.Type.IsStruct) return nullptr;
 			if (variable.Type.Structure.Fields.find(LAssignment->GetField()) == variable.Type.Structure.Fields.end()) return CodeError("Unknown field to assign.");
+
+			if (variable.Type.IsPointer) variable = DemoteVariable(variable);
+
 			dword fieldOffset = variable.Type.Structure.Fields[LAssignment->GetField()].first;
 			XLSType fieldType = variable.Type.Structure.Fields[LAssignment->GetField()].second;
 			SSA* fieldOffsetSSA = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, fieldOffset, false));
@@ -1423,6 +1429,7 @@ SSA *DeclarationExpression::Render() {
 		XLSVariable stored;
 		stored.Type = Type;
 		stored.Value = alloca;
+		stored.Name = variableName;
 		AllonymousValues[variableName] = stored;
 	}
 
@@ -1466,6 +1473,7 @@ SSA *GlobalVariableNode::Render() {
 	XLSVariable variable;
 	variable.Type = Type;
 	variable.Value = global;
+	variable.Name = Name;
 	variable.Global = true;
 	AllonymousValues[Name] = variable;
 	TypeAnnotation[global] = Type;
@@ -1806,6 +1814,8 @@ bool CheckTypeDefined(std::string name) {
 		NEWType.Signed = false;
 		NEWType.Size = GlobalLayout->getPointerSizeInBits();
 		NEWType.Dereference = dereference;
+		NEWType.IsStruct = DefinedTypes[dereference].IsStruct;
+		NEWType.Structure = DefinedTypes[dereference].Structure;
 		NEWType.UID = CurrentUID++;
 		DefinedTypes[name] = NEWType;
 		TypeMap[NEWType.Type] = NEWType;

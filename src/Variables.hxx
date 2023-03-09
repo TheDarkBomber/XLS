@@ -29,4 +29,6 @@ SSA* IndexField(XLSType type, std::string field, SSA* expression);
 SSA* ExdexVariable(SSA* value, XLSVariable variable, SSA* index, bool volatility = false);
 SSA* ExdexVariableField(SSA* value, XLSVariable variable, XLSType fieldType, SSA* index, bool volatility = false);
 
+XLSVariable DemoteVariable(XLSVariable variable);
+
 #endif
