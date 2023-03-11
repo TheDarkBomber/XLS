@@ -1,7 +1,6 @@
 #include "Variables.hxx"
 #include "Parser.hxx"
 #include "num.def.h"
-#include <llvm/IR/Instructions.h>
 
 std::map<std::string, XLSVariable> AllonymousValues;
 
@@ -112,4 +111,16 @@ XLSVariable DemoteVariable(XLSVariable variable) {
 
 	variable.Name += "(demoted)";
 	return variable;
+}
+
+SSA* DemotePointer(XLSType type, SSA* expression) {
+	SSA* demoted = expression;
+	while (type.IsPointer) {
+		type = DefinedTypes[type.Dereference];
+		SSA* GEP = Builder->CreateInBoundsGEP(type.Type, expression, ZeroSSA(DefinedTypes["dword"]));
+		demoted = Builder->CreateLoad(type.Type, GEP, "(demoted pointer)");
+	}
+
+	TypeAnnotation[demoted] = type;
+	return demoted;
 }

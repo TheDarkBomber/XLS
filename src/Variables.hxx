@@ -30,5 +30,6 @@ SSA* ExdexVariable(SSA* value, XLSVariable variable, SSA* index, bool volatility
 SSA* ExdexVariableField(SSA* value, XLSVariable variable, XLSType fieldType, SSA* index, bool volatility = false);
 
 XLSVariable DemoteVariable(XLSVariable variable);
+SSA* DemotePointer(XLSType type, SSA* expression);
 
 #endif

@@ -245,7 +245,7 @@ UQP(Expression) ParseExpression(bool isVolatile) {
 UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS, bool isVolatile) {
 	for(;;) {
 		Precedence tokenPrecedence = GetTokenPrecedence();
-		if (tokenPrecedence <= precedence) return LHS;
+		if (tokenPrecedence <= precedence) return ParsePostfix(std::move(LHS));
 
 		std::string binaryOperator = CurrentOperator;
 		GetNextToken();
@@ -278,6 +278,18 @@ UQP(Expression) ParseUnary() {
 		return MUQ(UnaryExpression, operator_, std::move(operand));
 	}
 	return nullptr;
+}
+
+UQP(Expression) ParsePostfix(UQP(Expression) LHS) {
+	if (CurrentToken.Type == LEXEME_CHARACTER && CurrentToken.Value == '.') {
+		GetNextToken();
+		if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier after dot notation.");
+		std::string identifier = CurrentIdentifier;
+		GetNextToken();
+		return MUQ(FieldAccessExpression, identifier, std::move(LHS));
+	}
+
+	return LHS;
 }
 
 UQP(Expression) ParseBlock() {
@@ -1139,7 +1151,13 @@ SSA *CallExpression::Render() {
 	return callInstance;
 }
 
-SSA *BreakExpression::Render() {
+SSA* FieldAccessExpression::Render() {
+	SSA* operand = Operand->Render();
+	operand = DemotePointer(GetType(operand), operand);
+	return IndexField(GetType(operand), Field, operand);
+}
+
+SSA* BreakExpression::Render() {
 	llvm::BasicBlock* location;
 	std::stack<llvm::BasicBlock*> preserve;
 	for (uint i = 0; i <= Nest; i++) {
@@ -1157,7 +1175,7 @@ SSA *BreakExpression::Render() {
 	return ZeroSSA(DefinedTypes["dword"]);
 }
 
-SSA *ContinueExpression::Render() {
+SSA* ContinueExpression::Render() {
   llvm::BasicBlock *location;
 	std::stack<llvm::BasicBlock*> preserve;
   for (uint i = 0; i <= Nest; i++) {

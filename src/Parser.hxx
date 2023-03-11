@@ -200,6 +200,14 @@ public:
 	SSA *Render() override;
 };
 
+class FieldAccessExpression : public Expression {
+	std::string Field;
+	UQP(Expression) Operand;
+public:
+	FieldAccessExpression(const std::string &field, UQP(Expression) operand) : Field(field), Operand(std::move(operand)) {}
+	SSA* Render() override;
+};
+
 class BreakExpression : public Expression {
   dword Nest;
 public:
@@ -391,6 +399,7 @@ UQP(Expression) ParseContinue();
 UQP(Expression) ParseCVariadic();
 UQP(Expression) ParseVariadic();
 UQP(Expression) ParseReturn();
+UQP(Expression) ParsePostfix(UQP(Expression) LHS);
 
 UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS, bool isVolatile = false);
 
