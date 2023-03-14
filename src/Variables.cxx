@@ -1,6 +1,5 @@
 #include "Variables.hxx"
-#include "Parser.hxx"
-#include "num.def.h"
+#include "Type.hxx"
 
 std::map<std::string, XLSVariable> AllonymousValues;
 
@@ -18,7 +17,7 @@ SSA* ReadVariable(std::string name, bool volatility) {
 }
 
 SSA* WriteVariable(SSA* value, XLSVariable variable, bool volatility) {
-  llvm::StoreInst* storeInstance = Builder->CreateStore(ImplicitCast(variable.Type, value), variable.Value);
+  llvm::StoreInst* storeInstance = Builder->CreateStore(Cast(variable.Type, value), variable.Value);
   storeInstance->setVolatile(volatility);
   TypeAnnotation[storeInstance] = variable.Type;
   return value;
@@ -79,7 +78,7 @@ SSA* IndexField(XLSType type, std::string field, SSA* expression) {
 }
 
 SSA* ExdexVariable(SSA* value, XLSVariable variable, SSA* index, bool volatility) {
-  SSA* castedValue = ImplicitCast(DefinedTypes[variable.Type.Dereference], value);
+  SSA* castedValue = Cast(DefinedTypes[variable.Type.Dereference], value);
   SSA* V = Builder->CreateLoad(variable.Type.Type, variable.Value, variable.Name);
   SSA* GEP = Builder->CreateInBoundsGEP(DefinedTypes[variable.Type.Dereference].Type, V, index);
 	XLSVariable exdexedVariable {.Type = DefinedTypes[variable.Type.Dereference], .Value = GEP, .Name = ".exdex@#" + variable.Name};
@@ -93,7 +92,7 @@ SSA* ExdexVariableField(SSA* value, XLSVariable variable, XLSType fieldType, SSA
   GEPIndex[0] = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false));
   GEPIndex[1] = index;
   SSA* GEP = Builder->CreateGEP(variable.Type.Type, variable.Value, GEPIndex);
-  SSA* castedValue = ImplicitCast(fieldType, value);
+  SSA* castedValue = Cast(fieldType, value);
 	XLSVariable exdexedVariable {.Type = fieldType, .Value = GEP, .Name = ".wfield@#" + variable.Name};
 	(void)WriteVariable(castedValue, exdexedVariable, volatility);
   TypeAnnotation[castedValue] = fieldType;

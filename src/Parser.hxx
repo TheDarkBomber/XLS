@@ -422,8 +422,6 @@ UQP(FunctionNode) ParseOperatorDefinition();
 UQP(FunctionNode) ParseImplementation();
 UQP(FunctionNode) ParseUnboundedExpression();
 
-XLSType GetType(SSA* toType);
-SSA *ImplicitCast(XLSType type, SSA *toCast);
 SSA* ZeroSSA(XLSType Type);
 
 Precedence GetTokenPrecedence();
@@ -443,8 +441,6 @@ void InitialiseJIT();
 bool DefineFPType(std::string function, XLSType* outtype);
 bool CheckTypeDefined(std::string name);
 
-SSA* ImplicitCast(XLSType type, SSA *toCast);
-
 SSA* CodeError(const char *error);
 
 extern llvm::DataLayout* GlobalLayout;
@@ -461,9 +457,6 @@ extern UQP(llvm::IRBuilder<>) Builder;
 extern UQP(llvm::Module) GlobalModule;
 extern UQP(llvm::legacy::FunctionPassManager) GlobalFPM;
 
-extern std::map<std::string, XLSType> DefinedTypes;
-extern std::map<llvm::Type*, XLSType> TypeMap;
-
 extern std::map<std::string, UQP(SignatureNode)> FunctionSignatures;
 extern std::map<std::string, llvm::BasicBlock*> AllonymousLabels;
 
@@ -471,10 +464,6 @@ extern std::map<llvm::Function*, XLSFunctionInfo> FunctionInfo;
 
 extern std::vector<llvm::BasicBlock*> AnonymousLabels;
 extern std::string CurrentLabelIdentifier;
-
-extern std::map<SSA*, XLSType> TypeAnnotation;
-extern std::map<llvm::Function*, XLSType> ReturnTypeAnnotation;
-extern std::map<llvm::Argument*, XLSType> ArgumentTypeAnnotation;
 
 extern std::stack<llvm::BasicBlock*> BreakStack;
 extern std::stack<llvm::BasicBlock*> ContinueStack;

@@ -58,9 +58,6 @@ UQP(llvm::IRBuilder<>) Builder;
 UQP(llvm::Module) GlobalModule;
 UQP(llvm::legacy::FunctionPassManager) GlobalFPM;
 
-std::map<std::string, XLSType> DefinedTypes;
-std::map<llvm::Type*, XLSType> TypeMap;
-
 std::map<std::string, UQP(SignatureNode)> FunctionSignatures;
 std::map<std::string, llvm::BasicBlock*> AllonymousLabels;
 
@@ -68,10 +65,6 @@ std::map<llvm::Function*, XLSFunctionInfo> FunctionInfo;
 
 std::vector<llvm::BasicBlock*> AnonymousLabels;
 std::string CurrentLabelIdentifier = "current";
-
-std::map<SSA*, XLSType> TypeAnnotation;
-std::map<llvm::Function*, XLSType> ReturnTypeAnnotation;
-std::map<llvm::Argument*, XLSType> ArgumentTypeAnnotation;
 
 std::stack<llvm::BasicBlock*> BreakStack;
 std::stack<llvm::BasicBlock*> ContinueStack;
@@ -759,50 +752,6 @@ UQP(FunctionNode) ParseUnboundedExpression() {
 	return nullptr;
 }
 
-XLSType GetType(SSA *toType) {
-	if (TypeAnnotation.find(toType) == TypeAnnotation.end())
-		TypeAnnotation[toType] = TypeMap[toType->getType()];
-	return TypeAnnotation[toType];
-}
-
-bool operator== (XLSType A, XLSType B) {
-	return A.Name == B.Name;
-}
-
-bool operator< (XLSType A, XLSType B) {
-	return A.Size < B.Size;
-}
-
-bool operator<= (XLSType A, XLSType B) {
-	return A.Size <= B.Size;
-}
-
-bool operator< (SDX(XLSType, std::string) A, SDX(XLSType, std::string) B) {
-	return A.first.Size < B.first.Size;
-}
-
-bool operator<= (SDX(XLSType, std::string) A, SDX(XLSType, std::string) B) {
-  return A.first.Size <= B.first.Size;
-}
-
-SSA *ImplicitCast(XLSType type, SSA *toCast) {
-	if (type == GetType(toCast)) return toCast;
-	SSA *casted;
-	TypeAnnotation[casted] = type;
-	if (!type.UID || !GetType(toCast).UID) return casted = llvm::PoisonValue::get(type.Type);
-	if (type.Type->isVoidTy() || toCast->getType()->isVoidTy())
-		return casted = llvm::Constant::getNullValue(type.Type);
-	if (type.IsPointer && toCast->getType()->isPointerTy())
-		return casted = Builder->CreateBitCast(toCast, type.Type, "xls_ptp_cast");
-	if (type.IsPointer) return casted = Builder->CreateIntToPtr(toCast, type.Type, "xls_itp_cast");
-	if (toCast->getType()->isPointerTy())
-		return casted = Builder->CreatePtrToInt(toCast, type.Type, "xls_pti_cast");
-	if (type.IsStruct) return casted = Builder->CreateBitCast(toCast, type.Type, "xls_bitcast");
-	if (type.Signed) return casted = Builder->CreateSExtOrTrunc(toCast, type.Type, "xls_simplicit_cast");
-	casted = Builder->CreateZExtOrTrunc(toCast, type.Type, "xls_implicit_cast");
-	return casted;
-}
-
 llvm::Function *getFunction(std::string name) {
 	if (llvm::Function *function = GlobalModule->getFunction(name)) return function;
 
@@ -890,23 +839,23 @@ SSA* VariableExpression::Render() {
 	return ReadVariable(variable, Volatile);
 }
 
-SSA *CastExpression::Render() {
-	SSA *toCast = Value->Render();
+SSA* CastExpression::Render() {
+	SSA* toCast = Value->Render();
 	if (!toCast) return nullptr;
-	SSA *R = ImplicitCast(Type, toCast);
+	SSA* R = Cast(Type, toCast);
 	TypeAnnotation[R] = Type;
 	return R;
 }
 
-SSA *PtrRHS(SSA *left, SSA *right) {
-  return ImplicitCast(GetType(left), Builder->CreateMul(right, llvm::ConstantInt::get(*GlobalContext, llvm::APInt(GetType(right).Size, DefinedTypes[GetType(left).Dereference].Size / 8))));
+SSA* PtrRHS(SSA* left, SSA* right) {
+  return Cast(GetType(left), Builder->CreateMul(right, llvm::ConstantInt::get(*GlobalContext, llvm::APInt(GetType(right).Size, DefinedTypes[GetType(left).Dereference].Size / 8))));
 }
 
-SSA *BinaryExpression::Render() {
+SSA* BinaryExpression::Render() {
 	if (CMP("=", Operator)) {
-		VariableExpression *LAssignment = static_cast<VariableExpression*>(LHS.get());
+		VariableExpression* LAssignment = static_cast<VariableExpression*>(LHS.get());
 		if (!LAssignment) return CodeError("Assignment on fire.");
-		SSA *value = RHS->Render();
+		SSA* value = RHS->Render();
 		if (!value) return nullptr;
 		if (!GetType(value).UID) value = llvm::PoisonValue::get(value->getType());
 		if (AllonymousValues.find(LAssignment->GetName()) == AllonymousValues.end())
@@ -939,19 +888,19 @@ SSA *BinaryExpression::Render() {
 		SSA *lvalue = LHS->Render();
 		if (!lvalue) return nullptr;
 		if (CheckTypeDefined(RFunction->GetName())) {
-			return ImplicitCast(DefinedTypes[RFunction->GetName()], lvalue);
+			return Cast(DefinedTypes[RFunction->GetName()], lvalue);
 		}
 		llvm::Function *pipe = getFunction(RFunction->GetName());
 		if (!pipe) return CodeError("Unknown function name in pipe.");
 		if (pipe->arg_size() != 1) return CodeError("Can only pipe into function with one argument.");
 		llvm::Argument *piped = pipe->getArg(0);
-		llvm::CallInst *call = Builder->CreateCall(pipe, ImplicitCast(GetType(piped), lvalue), "xls_pipe");
+		llvm::CallInst *call = Builder->CreateCall(pipe, Cast(GetType(piped), lvalue), "xls_pipe");
 		call->setCallingConv(pipe->getCallingConv());
 		call->setAttributes(pipe->getAttributes());
 		return call;
 	}
 
-#define RCAST ImplicitCast(GetType(left), right)
+#define RCAST Cast(GetType(left), right)
 #define RPTR left->getType()->isPointerTy() ? PtrRHS(left, right) : right
 #define RPCAST left->getType()->isPointerTy() ? PtrRHS(left, RCAST) : RCAST
 	SSA *R;
@@ -1098,7 +1047,7 @@ SSA *CallExpression::Render() {
 
 		std::vector<SSA*> FPArguments;
 		for (uint i = 0; i < Arguments.size(); i++)
-			FPArguments.push_back(ImplicitCast(variable.Type.FPData[i + 1], Arguments[i]->Render()));
+			FPArguments.push_back(Cast(variable.Type.FPData[i + 1], Arguments[i]->Render()));
 
 		std::vector<llvm::Type*> FPParams;
 		for (uint i = 1; i < variable.Type.FPData.size(); i++)
@@ -1146,7 +1095,7 @@ SSA *CallExpression::Render() {
 			ArgumentVector.push_back(Hive);
 			break;
 		}
-		ArgumentVector.push_back(ImplicitCast(ArgumentTypeAnnotation[called->getArg(index)], Arguments[index]->Render()));
+		ArgumentVector.push_back(Cast(ArgumentTypeAnnotation[called->getArg(index)], Arguments[index]->Render()));
 		index++;
 		if (!ArgumentVector.back()) return nullptr;
 	}
@@ -1223,7 +1172,7 @@ SSA *ReturnExpression::Render() {
 	llvm::Function *function = Builder->GetInsertBlock()->getParent();
 	SSA *returnValue;
 	if (!ReturnValue) returnValue = llvm::Constant::getNullValue(function->getReturnType());
-	else returnValue = ImplicitCast(ReturnTypeAnnotation[function], ReturnValue->Render());
+	else returnValue = Cast(ReturnTypeAnnotation[function], ReturnValue->Render());
 	if (!returnValue) return nullptr;
 
 	if (ReturnTypeAnnotation[function].UID == DefinedTypes["void"].UID) Builder->CreateRetVoid();
@@ -1415,7 +1364,7 @@ SSA *IfExpression::Render() {
 
 	llvm::PHINode *phiNode = Builder->CreatePHI(GetType(thenBranch).Type, 2, "xls_if_block");
 	phiNode->addIncoming(thenBranch, thenBlock);
-	phiNode->addIncoming(ImplicitCast(GetType(thenBranch), elseBranch), elseBlock);
+	phiNode->addIncoming(Cast(GetType(thenBranch), elseBranch), elseBlock);
 	TypeAnnotation[phiNode] = GetType(thenBranch);
 	return phiNode;
 }
@@ -1465,7 +1414,7 @@ SSA *DeclarationExpression::Render() {
 		} else definerSSA = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(Type.Size, 0, false));
 
 		Alloca *alloca = createEntryBlockAlloca(function, variableName, Type);
-		Builder->CreateStore(ImplicitCast(Type, definerSSA), alloca);
+		Builder->CreateStore(Cast(Type, definerSSA), alloca);
 
 		XLSVariable stored;
 		stored.Type = Type;
@@ -1599,7 +1548,7 @@ llvm::Function *FunctionNode::Render() {
 	}
 
 	if (SSA *returnValue = Body->Render()) {
-		if (signature.GetType().Name != "void") Builder->CreateRet(ImplicitCast(signature.GetType(), returnValue));
+		if (signature.GetType().Name != "void") Builder->CreateRet(Cast(signature.GetType(), returnValue));
 		else Builder->CreateRetVoid();
 		llvm::verifyFunction(*function);
 		GlobalFPM->run(*function);
