@@ -68,9 +68,11 @@
 												 "continue"
 												 "return"
 												 "c-variadic"
-												 "variadic"))
-					(x-types '("dword" "word" "byte" "boole" "void" "sdword" "sword" "sbyte" "label&" "valist" "N/A"))
-					(x-auxillary '("sizeof" "typeof"))
+												 "variadic"
+												 "setjump"
+												 "longjump"))
+					(x-types '("dword" "word" "byte" "boole" "void" "sdword" "sword" "sbyte" "jumpbuf" "label&" "valist" "N/A"))
+					(x-auxillary '("sizeof" "typeof" "countof"))
 					(x-constants '())
 
 					(x-keywords-regex (regexp-opt x-keywords 'words))

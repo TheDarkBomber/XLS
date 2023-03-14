@@ -267,6 +267,13 @@ public:
 	SSA *Render() override;
 };
 
+class CountofExpression : public Expression {
+	UQP(Expression) Counted;
+public:
+	CountofExpression(UQP(Expression) counted) : Counted(std::move(counted)) {}
+	SSA* Render() override;
+};
+
 class CVariadicArgumentExpression : public Expression {
 	XLSType Type;
 public:
@@ -393,6 +400,7 @@ UQP(Expression) ParseJump();
 UQP(Expression) ParseSetLongJump();
 UQP(Expression) ParseSizeof();
 UQP(Expression) ParseTypeof();
+UQP(Expression) ParseCountof();
 UQP(Expression) ParseMutable();
 UQP(Expression) ParseBreak();
 UQP(Expression) ParseContinue();

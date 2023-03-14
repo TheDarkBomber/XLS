@@ -98,6 +98,7 @@ Token GetToken() {
 		JMPIF(CurrentIdentifier, "variadic", GetToken_kw_variadic);
 		JMPIF(CurrentIdentifier, "setjump", GetToken_kw_setjump);
 		JMPIF(CurrentIdentifier, "longjump", GetToken_kw_longjump);
+		JMPIF(CurrentIdentifier, "countof", GetToken_kw_countof);
 		goto GetToken_end_kw;
 
 	GetToken_kw_implement:
@@ -120,6 +121,9 @@ Token GetToken() {
 		return output;
 	GetToken_kw_typeof:
 		output.Type = LEXEME_TYPEOF;
+		return output;
+	GetToken_kw_countof:
+		output.Type = LEXEME_COUNTOF;
 		return output;
 	GetToken_kw_calling:
 		output.Type = LEXEME_IDENTIFIER;

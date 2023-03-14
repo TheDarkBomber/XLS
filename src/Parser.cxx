@@ -1,5 +1,6 @@
 #include "Parser.hxx"
 #include "Variables.hxx"
+#include "Type.hxx"
 #include "Lexer.hxx"
 #include "colours.def.h"
 #include <llvm/ADT/APInt.h>
@@ -199,6 +200,8 @@ UQP(Expression) ParseDispatcher() {
 		return ParseSizeof();
 	case LEXEME_TYPEOF:
 		return ParseTypeof();
+	case LEXEME_COUNTOF:
+		return ParseCountof();
 	case LEXEME_MUTABLE:
 		return ParseMutable();
 	case LEXEME_BREAK:
@@ -244,8 +247,9 @@ UQP(Expression) ParseExpression(bool isVolatile) {
 
 UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS, bool isVolatile) {
 	for(;;) {
+		LHS = ParsePostfix(std::move(LHS));
 		Precedence tokenPrecedence = GetTokenPrecedence();
-		if (tokenPrecedence <= precedence) return ParsePostfix(std::move(LHS));
+		if (tokenPrecedence <= precedence) return std::move(LHS);
 
 		std::string binaryOperator = CurrentOperator;
 		GetNextToken();
@@ -384,6 +388,17 @@ UQP(Expression) ParseTypeof() {
 	}
 	UQP(Expression) typed = ParseExpression();
 	return MUQ(TypeofExpression, std::move(typed));
+}
+
+UQP(Expression) ParseCountof() {
+  GetNextToken();
+  if (CurrentToken.Type == LEXEME_IDENTIFIER && CheckTypeDefined(CurrentIdentifier)) {
+    std::string type = CurrentIdentifier;
+    GetNextToken();
+    return MUQ(DwordExpression, GetCountof(DefinedTypes[type]));
+  }
+  UQP(Expression) typed = ParseExpression();
+  return MUQ(CountofExpression, std::move(typed));
 }
 
 UQP(Expression) ParseMutable() {
@@ -1343,18 +1358,26 @@ SSA* LongJumpExpression::Render() {
 	return ZeroSSA(DefinedTypes["dword"]);
 }
 
-SSA *SizeofExpression::Render() {
-	SSA *value = Sized->Render();
+SSA* SizeofExpression::Render() {
+	SSA* value = Sized->Render();
 	XLSType type = TypeAnnotation[value];
-	SSA *R = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, type.Size / 8, false));
+	SSA* R = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, type.Size / 8, false));
 	TypeAnnotation[R] = DefinedTypes["dword"];
 	return R;
 }
 
-SSA *TypeofExpression::Render() {
-	SSA *value = Typed->Render();
+SSA* TypeofExpression::Render() {
+	SSA* value = Typed->Render();
 	XLSType type = TypeAnnotation[value];
-	SSA *R = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, type.UID, false));
+	SSA* R = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, type.UID, false));
+	TypeAnnotation[R] = DefinedTypes["dword"];
+	return R;
+}
+
+SSA* CountofExpression::Render() {
+	SSA* value = Counted->Render();
+	XLSType type = GetType(value);
+	SSA* R = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, GetCountof(type), false));
 	TypeAnnotation[R] = DefinedTypes["dword"];
 	return R;
 }
@@ -1728,14 +1751,14 @@ void InitialiseModule(std::string moduleName) {
 	TypeMap[BoolePtrType.Type] = BoolePtrType;
 	TypeMap[BytePtrType.Type] = BytePtrType;
 
-	XLSType JmpBufType;
-	JmpBufType.Size = 5 * GlobalLayout->getPointerSizeInBits();
-	JmpBufType.Type = llvm::Type::getIntNTy(*GlobalContext, JmpBufType.Size);
-	JmpBufType.Name = "jmpbuf";
-	JmpBufType.UID = CurrentUID++;
+	XLSType JumpBufType;
+	JumpBufType.Size = 5 * GlobalLayout->getPointerSizeInBits();
+	JumpBufType.Type = llvm::Type::getIntNTy(*GlobalContext, JumpBufType.Size);
+	JumpBufType.Name = "jumpbuf";
+	JumpBufType.UID = CurrentUID++;
 
-	DefinedTypes[JmpBufType.Name] = JmpBufType;
-	TypeMap[JmpBufType.Type] = JmpBufType;
+	DefinedTypes[JumpBufType.Name] = JumpBufType;
+	TypeMap[JumpBufType.Type] = JumpBufType;
 
 	// C Variadic type
 	XLSType VariadicType;
