@@ -1812,10 +1812,10 @@ bool CheckTypeDefined(std::string name) {
 		return true;
 	}
 
-	if (name == "fn:") {
+	if (name == "fn&") {
 		std::string typeName;
 		std::vector<XLSType> constituentTypes;
-		typeName = "fn:(";
+		typeName = "fn&(";
 		GetNextToken();
 		if (CurrentToken.Value != '(') return false;
 		GetNextToken();
@@ -1869,7 +1869,7 @@ bool DefineFPType(std::string function, XLSType* outtype) {
 	if (FunctionSignatures.find(function) == FunctionSignatures.end()) return false;
   llvm::Function *pointed = getFunction(function);
   XLSType FPType;
-	FPType.Name = "fn:(";
+	FPType.Name = "fn&(";
   FPType.Type = pointed->getType();
   FPType.Size = GlobalLayout->getPointerSizeInBits();
   FPType.Dereference = "#addrsize";
