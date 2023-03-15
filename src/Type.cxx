@@ -1,5 +1,7 @@
 #include "Type.hxx"
 #include "Parser.hxx"
+#include "Variables.hxx"
+#include <llvm/IR/Constants.h>
 
 std::map<std::string, XLSType> DefinedTypes;
 std::map<llvm::Type*, XLSType> TypeMap;
@@ -34,20 +36,32 @@ dword GetCountof(XLSType type) {
 	return 1;
 }
 
-SSA* Cast(XLSType type, SSA *toCast) {
-  if (type == GetType(toCast)) return toCast;
+#define castret(value) do {casted = value; TypeAnnotation[casted] = type; return casted; } while(0)
+
+SSA* Cast(XLSType type, SSA* toCast) {
+	XLSType toCastType = GetType(toCast);
+  if (type == toCastType) return toCast;
   SSA* casted;
-  TypeAnnotation[casted] = type;
-  if (!type.UID || !GetType(toCast).UID) return casted = llvm::PoisonValue::get(type.Type);
-  if (type.Type->isVoidTy() || toCast->getType()->isVoidTy()) return casted = llvm::Constant::getNullValue(type.Type);
-  if (type.IsPointer && toCast->getType()->isPointerTy()) return casted = Builder->CreateBitCast(toCast, type.Type, "xls_ptp_cast");
-  if (type.IsPointer) return casted = Builder->CreateIntToPtr(toCast, type.Type, "xls_itp_cast");
-  if (toCast->getType()->isPointerTy()) return casted = Builder->CreatePtrToInt(toCast, type.Type, "xls_pti_cast");
-  if (type.IsStruct) return casted = Builder->CreateBitCast(toCast, type.Type, "xls_bitcast");
-  if (type.Signed) return casted = Builder->CreateSExtOrTrunc(toCast, type.Type, "xls_simplicit_cast");
-  casted = Builder->CreateZExtOrTrunc(toCast, type.Type, "xls_implicit_cast");
-  return casted;
+  if (!type.UID || !toCastType.UID) castret(llvm::PoisonValue::get(type.Type));
+  if (type.Type->isVoidTy() || toCast->getType()->isVoidTy()) castret(llvm::Constant::getNullValue(type.Type));
+	if (type.IsPointer && toCastType.IsRangedPointer) castret(Builder->CreateExtractValue(toCast, llvm::ArrayRef<unsigned>(RANGED_POINTER_VALUE), "xls_rptp_cast"));
+	if (type.IsRangedPointer && toCastType.IsPointer) {
+		SSA* baseStruct = ZeroSSA(type);
+		baseStruct = Builder->CreateInsertValue(baseStruct, toCast, llvm::ArrayRef<unsigned>(RANGED_POINTER_VALUE), "xls_ptrp_cast");
+		baseStruct = Builder->CreateInsertValue(baseStruct, llvm::ConstantInt::get(DefinedTypes["#addrsize"].Type, llvm::APInt(DefinedTypes["#addrsize"].Size, 1, false)), llvm::ArrayRef<unsigned>(RANGED_POINTER_COUNTOF), "xls_initialise_rp");
+		TypeAnnotation[baseStruct] = type;
+		return baseStruct;
+	}
+	if (type.IsRangedPointer || toCastType.IsRangedPointer) castret(Builder->CreateBitCast(toCast, type.Type, "xls_rp_bitcast"));
+  if (type.IsPointer && toCastType.IsPointer) castret(Builder->CreateBitCast(toCast, type.Type, "xls_ptp_cast"));
+  if (type.IsPointer) castret(Builder->CreateIntToPtr(toCast, type.Type, "xls_itp_cast"));
+  if (toCastType.IsPointer) castret(Builder->CreatePtrToInt(toCast, type.Type, "xls_pti_cast"));
+  if (type.IsStruct) castret(Builder->CreateBitCast(toCast, type.Type, "xls_bitcast"));
+  if (type.Signed) castret(Builder->CreateSExtOrTrunc(toCast, type.Type, "xls_simplicit_cast"));
+	castret(Builder->CreateZExtOrTrunc(toCast, type.Type, "xls_implicit_cast"));
 }
+
+#undef castret
 
 XLSType GetType(SSA* toType) {
   if (TypeAnnotation.find(toType) == TypeAnnotation.end())

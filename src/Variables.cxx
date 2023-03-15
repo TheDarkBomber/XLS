@@ -50,8 +50,14 @@ SSA* AddrVariable(std::string name) {
 }
 
 SSA* IndexVariable(XLSVariable variable, SSA* index, bool volatility) {
-  SSA *V = Builder->CreateLoad(variable.Type.Type, variable.Value, variable.Name.c_str());
-  SSA *GEP = Builder->CreateInBoundsGEP(DefinedTypes[variable.Type.Dereference].Type, V, index);
+  SSA* V = Builder->CreateLoad(variable.Type.Type, variable.Value, variable.Name.c_str());
+	if (variable.Type.IsRangedPointer) {
+		variable.Name += "(extractedptr)";
+		variable.Type = DefinedTypes[variable.Type.Dereference + "*"];
+		// TODO: boundary check ranged pointers
+		V = Builder->CreateExtractValue(V, llvm::ArrayRef<unsigned>(RANGED_POINTER_VALUE));
+	}
+  SSA* GEP = Builder->CreateInBoundsGEP(DefinedTypes[variable.Type.Dereference].Type, V, index);
 	XLSVariable indexedVariable {.Type = DefinedTypes[variable.Type.Dereference], .Value = GEP, .Name = ".index@#" + variable.Name};
   return ReadVariable(indexedVariable, volatility);
 }
@@ -80,6 +86,12 @@ SSA* IndexField(XLSType type, std::string field, SSA* expression) {
 SSA* ExdexVariable(SSA* value, XLSVariable variable, SSA* index, bool volatility) {
   SSA* castedValue = Cast(DefinedTypes[variable.Type.Dereference], value);
   SSA* V = Builder->CreateLoad(variable.Type.Type, variable.Value, variable.Name);
+  if (variable.Type.IsRangedPointer) {
+    variable.Name += "(extractedptr)";
+    variable.Type = DefinedTypes[variable.Type.Dereference + "*"];
+    // TODO: boundary check ranged pointers
+    V = Builder->CreateExtractValue(V, llvm::ArrayRef<unsigned>(RANGED_POINTER_VALUE));
+  }
   SSA* GEP = Builder->CreateInBoundsGEP(DefinedTypes[variable.Type.Dereference].Type, V, index);
 	XLSVariable exdexedVariable {.Type = DefinedTypes[variable.Type.Dereference], .Value = GEP, .Name = ".exdex@#" + variable.Name};
 	(void)WriteVariable(castedValue, exdexedVariable, volatility);
@@ -100,8 +112,13 @@ SSA* ExdexVariableField(SSA* value, XLSVariable variable, XLSType fieldType, SSA
 }
 
 XLSVariable DemoteVariable(XLSVariable variable) {
-  while (variable.Type.IsPointer) {
+  while (variable.Type.IsPointer || variable.Type.IsRangedPointer) {
     SSA* V = Builder->CreateLoad(variable.Type.Type, variable.Value, variable.Name.c_str());
+    if (variable.Type.IsRangedPointer) {
+      variable.Name += "(extractedptr)";
+      variable.Type = DefinedTypes[variable.Type.Dereference + "*"];
+      V = Builder->CreateExtractValue(V, llvm::ArrayRef<unsigned>(RANGED_POINTER_VALUE));
+    }
     SSA* GEP = Builder->CreateInBoundsGEP(DefinedTypes[variable.Type.Dereference].Type, V, ZeroSSA(DefinedTypes["dword"]));
     variable.Type = DefinedTypes[variable.Type.Dereference];
     variable.Value = GEP;
@@ -114,9 +131,13 @@ XLSVariable DemoteVariable(XLSVariable variable) {
 
 SSA* DemotePointer(XLSType type, SSA* expression) {
 	SSA* demoted = expression;
-	while (type.IsPointer) {
+	while (type.IsPointer || type.IsRangedPointer) {
+		if (type.IsRangedPointer) {
+			type = DefinedTypes[type.Dereference + "*"];
+			demoted = Builder->CreateExtractValue(demoted, llvm::ArrayRef<unsigned>(RANGED_POINTER_VALUE));
+		}
 		type = DefinedTypes[type.Dereference];
-		SSA* GEP = Builder->CreateInBoundsGEP(type.Type, expression, ZeroSSA(DefinedTypes["dword"]));
+		SSA* GEP = Builder->CreateInBoundsGEP(type.Type, demoted, ZeroSSA(DefinedTypes["dword"]));
 		demoted = Builder->CreateLoad(type.Type, GEP, "(demoted pointer)");
 	}
 

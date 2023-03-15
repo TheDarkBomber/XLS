@@ -87,6 +87,7 @@ struct XLSType {
   llvm::Type *Type;
 	std::string Name;
 	bool IsPointer = false;
+	bool IsRangedPointer = false;
 	bool IsFP = false;
 	bool IsStruct = false;
 	bool IsLabel = false;

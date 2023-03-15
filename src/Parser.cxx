@@ -822,7 +822,7 @@ SSA* VariableExpression::Render() {
 		if (!variable.Type.IsStruct) return nullptr;
 		if (variable.Type.Structure.Fields.find(Field) == variable.Type.Structure.Fields.end()) return CodeError("Unknown field.");
 
-		if (variable.Type.IsPointer) variable = DemoteVariable(variable);
+		if (variable.Type.IsPointer || variable.Type.IsRangedPointer) variable = DemoteVariable(variable);
 
 		dword fieldOffset = variable.Type.Structure.Fields[Field].first;
 		XLSType fieldType = variable.Type.Structure.Fields[Field].second;
@@ -866,7 +866,7 @@ SSA* BinaryExpression::Render() {
 			if (!variable.Type.IsStruct) return nullptr;
 			if (variable.Type.Structure.Fields.find(LAssignment->GetField()) == variable.Type.Structure.Fields.end()) return CodeError("Unknown field to assign.");
 
-			if (variable.Type.IsPointer) variable = DemoteVariable(variable);
+			if (variable.Type.IsPointer || variable.Type.IsRangedPointer) variable = DemoteVariable(variable);
 
 			dword fieldOffset = variable.Type.Structure.Fields[LAssignment->GetField()].first;
 			XLSType fieldType = variable.Type.Structure.Fields[LAssignment->GetField()].second;
@@ -1326,6 +1326,11 @@ SSA* TypeofExpression::Render() {
 SSA* CountofExpression::Render() {
 	SSA* value = Counted->Render();
 	XLSType type = GetType(value);
+	if (type.IsRangedPointer) {
+		SSA* R = Builder->CreateExtractValue(value, llvm::ArrayRef<unsigned>(RANGED_POINTER_COUNTOF), "xls_countof");
+		TypeAnnotation[R] = DefinedTypes["#addrsize"];
+		return R;
+	}
 	SSA* R = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, GetCountof(type), false));
 	TypeAnnotation[R] = DefinedTypes["dword"];
 	return R;
@@ -1709,6 +1714,24 @@ void InitialiseModule(std::string moduleName) {
 	DefinedTypes[JumpBufType.Name] = JumpBufType;
 	TypeMap[JumpBufType.Type] = JumpBufType;
 
+	// Base ranged pointer type
+	std::vector<llvm::Type*> RPFields;
+	RPFields.push_back(llvm::Type::getInt8PtrTy(*GlobalContext));
+	RPFields.push_back(InternalAddressSizeType.Type);
+	llvm::StructType* RPType = llvm::StructType::create(*GlobalContext, llvm::ArrayRef<llvm::Type*>(RPFields), "rangeptr");
+	dword RPSize = GlobalLayout->getTypeSizeInBits(RPType);
+	XLSType RangedBytePtrType {
+		.Size = RPSize,
+		.Type = RPType,
+		.Name = "byte%",
+		.IsRangedPointer = true,
+		.Dereference = "byte",
+		.UID = CurrentUID++
+	};
+
+	DefinedTypes[RangedBytePtrType.Name] = RangedBytePtrType;
+	TypeMap[RPType] = RangedBytePtrType;
+
 	// C Variadic type
 	XLSType VariadicType;
 	std::vector<llvm::Type*> VFields;
@@ -1809,6 +1832,25 @@ bool CheckTypeDefined(std::string name) {
 		NEWType.UID = CurrentUID++;
 		DefinedTypes[name] = NEWType;
 		TypeMap[NEWType.Type] = NEWType;
+		return true;
+	}
+
+	if (name.back() == '%') {
+		dereference.pop_back();
+		if (!CheckTypeDefined(dereference)) return false;
+		XLSType NEWType {
+			.Size = DefinedTypes["byte%"].Size,
+			.Type = DefinedTypes["byte%"].Type,
+			.Name = name,
+			.IsRangedPointer = true,
+			.IsStruct = DefinedTypes[dereference].IsStruct,
+			.Signed = false,
+			.Dereference = dereference,
+			.Structure = DefinedTypes[dereference].Structure,
+			.UID = CurrentUID++
+		};
+
+		DefinedTypes[name] = NEWType;
 		return true;
 	}
 

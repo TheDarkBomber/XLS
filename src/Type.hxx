@@ -2,6 +2,11 @@
 #define __TYPE_XLS_H_
 #include "Parser.hxx"
 
+enum RangedPointerField {
+	RANGED_POINTER_VALUE = 0,
+	RANGED_POINTER_COUNTOF = 1
+};
+
 extern std::map<std::string, XLSType> DefinedTypes;
 extern std::map<llvm::Type*, XLSType> TypeMap;
 
