@@ -29,6 +29,8 @@ SSA* IndexField(XLSType type, std::string field, SSA* expression);
 SSA* ExdexVariable(SSA* value, XLSVariable variable, SSA* index, bool volatility = false);
 SSA* ExdexVariableField(SSA* value, XLSVariable variable, XLSType fieldType, SSA* index, bool volatility = false);
 
+SSA* ExdexRangedPointerCount(SSA *value, XLSVariable variable);
+
 XLSVariable DemoteVariable(XLSVariable variable);
 SSA* DemotePointer(XLSType type, SSA* expression);
 

@@ -72,7 +72,7 @@
 												 "setjump"
 												 "longjump"))
 					(x-types '("dword" "word" "byte" "boole" "void" "sdword" "sword" "sbyte" "fn&" "jumpbuf" "label&" "valist" "N/A"))
-					(x-auxillary '("sizeof" "typeof" "countof"))
+					(x-auxillary '("sizeof" "typeof" "countof" "setcountof"))
 					(x-constants '())
 
 					(x-keywords-regex (regexp-opt x-keywords 'words))

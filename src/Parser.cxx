@@ -384,6 +384,7 @@ UQP(Expression) ParseTypeof() {
 }
 
 UQP(Expression) ParseCountof() {
+	if (CurrentToken.Subtype == LEXEME_ELSE) return ParseSetCountof();
   GetNextToken();
   if (CurrentToken.Type == LEXEME_IDENTIFIER && CheckTypeDefined(CurrentIdentifier)) {
     std::string type = CurrentIdentifier;
@@ -392,6 +393,19 @@ UQP(Expression) ParseCountof() {
   }
   UQP(Expression) typed = ParseExpression();
   return MUQ(CountofExpression, std::move(typed));
+}
+
+UQP(Expression) ParseSetCountof() {
+	GetNextToken();
+	if (CurrentToken.Value != '(') return ParseError("Expected open parenthesis after setcountof");
+	GetNextToken();
+	UQP(Expression) counted = ParseExpression();
+	if (CurrentToken.Value != ',') return ParseError("Expected comma in setcountof");
+	GetNextToken();
+	UQP(Expression) newCount = ParseExpression();
+	if (CurrentToken.Value != ')') return ParseError("Expected close parenthesis to terminate setcountof");
+	GetNextToken();
+	return MUQ(SetCountofExpression, std::move(counted), std::move(newCount));
 }
 
 UQP(Expression) ParseMutable() {
@@ -789,18 +803,29 @@ SSA *StringExpression::Render() {
 	llvm::ArrayType* strType = llvm::ArrayType::get(DefinedTypes["byte"].Type, elements.size());
 
 	llvm::GlobalVariable* global = new llvm::GlobalVariable(*GlobalModule, strType, !Mutable, llvm::GlobalValue::PrivateLinkage, llvm::ConstantArray::get(strType, elements), "xls_string");
-	SSA *R = llvm::ConstantExpr::getBitCast(global, DefinedTypes["byte*"].Type);
-	TypeAnnotation[R] = DefinedTypes["byte*"];
+	SSA* StringPtr = llvm::ConstantExpr::getBitCast(global, DefinedTypes["byte*"].Type);
+	SSA* Length = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(DefinedTypes["#addrsize"].Size, Value.size(), false));
+
+	SSA* R = ZeroSSA(DefinedTypes["byte%"]);
+	R = Builder->CreateInsertValue(R, StringPtr, llvm::ArrayRef<unsigned>(RANGED_POINTER_VALUE));
+	R = Builder->CreateInsertValue(R, Length, llvm::ArrayRef<unsigned>(RANGED_POINTER_COUNTOF));
+	TypeAnnotation[R] = DefinedTypes["byte%"];
 	return R;
 }
 
 SSA *MutableArrayExpression::Render() {
 	if (!CheckTypeDefined(Type.Name + "*")) return nullptr;
+	if (!CheckTypeDefined(Type.Name + "%")) return nullptr;
 	llvm::ArrayType* maType = llvm::ArrayType::get(Type.Type, Size);
 	llvm::GlobalVariable* global = new llvm::GlobalVariable(*GlobalModule, maType, false, llvm::GlobalValue::PrivateLinkage, llvm::Constant::getNullValue(maType), "xls_mutable_array");
 	global->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
-	SSA *R = llvm::ConstantExpr::getBitCast(global, DefinedTypes[Type.Name + "*"].Type);
-	TypeAnnotation[R] = DefinedTypes[Type.Name + "*"];
+	SSA* ArrayPtr = llvm::ConstantExpr::getBitCast(global, DefinedTypes[Type.Name + "*"].Type);
+	SSA* Length = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(DefinedTypes["#addrsize"].Size, Size, false));
+
+	SSA* R = ZeroSSA(DefinedTypes[Type.Name + "%"]);
+	R = Builder->CreateInsertValue(R, ArrayPtr, llvm::ArrayRef<unsigned>(RANGED_POINTER_VALUE));
+	R = Builder->CreateInsertValue(R, Length, llvm::ArrayRef<unsigned>(RANGED_POINTER_COUNTOF));
+	TypeAnnotation[R] = DefinedTypes[Type.Name + "%"];
 	return R;
 }
 
@@ -1334,6 +1359,18 @@ SSA* CountofExpression::Render() {
 	SSA* R = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, GetCountof(type), false));
 	TypeAnnotation[R] = DefinedTypes["dword"];
 	return R;
+}
+
+SSA* SetCountofExpression::Render() {
+	VariableExpression* rangedptrExpression = static_cast<VariableExpression *>(Counted.get());
+	if (!rangedptrExpression) return CodeError("setcountof on fire.");
+	XLSVariable rangedptr = AllonymousValues[rangedptrExpression->GetName()];
+	if (!rangedptr.Type.IsRangedPointer) return CodeError("Cannot mutate the count of values that do not have ranged pointer type.");
+	SSA* newCount = NewCount->Render();
+	newCount = Cast(DefinedTypes["#addrsize"], newCount);
+	ExdexRangedPointerCount(newCount, rangedptr);
+	TypeAnnotation[newCount] = DefinedTypes["#addrsize"];
+	return newCount;
 }
 
 SSA *IfExpression::Render() {

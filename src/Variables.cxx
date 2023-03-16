@@ -1,4 +1,5 @@
 #include "Variables.hxx"
+#include "Parser.hxx"
 #include "Type.hxx"
 
 std::map<std::string, XLSVariable> AllonymousValues;
@@ -109,6 +110,16 @@ SSA* ExdexVariableField(SSA* value, XLSVariable variable, XLSType fieldType, SSA
 	(void)WriteVariable(castedValue, exdexedVariable, volatility);
   TypeAnnotation[castedValue] = fieldType;
   return castedValue;
+}
+
+SSA* ExdexRangedPointerCount(SSA* value, XLSVariable variable) {
+	std::vector<SSA*> GEPIndex(2);
+	GEPIndex[0] = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false));
+	GEPIndex[1] = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, RANGED_POINTER_COUNTOF, false));
+	SSA* GEP = Builder->CreateGEP(variable.Type.Type, variable.Value, GEPIndex);
+	XLSVariable exdexedVariable {.Type = DefinedTypes["#addrsize"], .Value = GEP, .Name = ".setcountof@#" + variable.Name};
+	(void)WriteVariable(value, exdexedVariable);
+	return value;
 }
 
 XLSVariable DemoteVariable(XLSVariable variable) {
