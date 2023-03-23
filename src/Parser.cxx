@@ -2,6 +2,7 @@
 #include "Variables.hxx"
 #include "Type.hxx"
 #include "Lexer.hxx"
+#include "XLiSp.hxx"
 #include "colours.def.h"
 #include <llvm/ADT/APInt.h>
 #include <llvm/ADT/Triple.h>
@@ -48,8 +49,22 @@ ParserFlags Flags;
 
 dword CurrentUID = 0;
 
+std::queue<TokenContext> TokenStream;
 Token CurrentToken;
-Token GetNextToken() { return CurrentToken = GetToken(); }
+
+Token GetNextToken() {
+	if (!TokenStream.empty()) {
+		TokenContext t = TokenStream.front();
+		CurrentIdentifier = t.Identifier;
+		StringLiteral = t.StringLiteral;
+		CurrentOperator = t.Operator;
+		CurrentInteger = t.IntegerLiteral;
+		CurrentToken = t.Value;
+		TokenStream.pop();
+		return t.Value;
+	}
+  return CurrentToken = GetToken();
+}
 
 std::map<std::string, Precedence> BinaryPrecedence;
 
@@ -218,6 +233,8 @@ UQP(Expression) ParseDispatcher() {
 			return ParseParenthetical();
 		case '{': // '}'
 			return ParseBlock();
+		case '$':
+			return ParseXLiSp();
 		case ';':
 			return nullptr;
 		default: PrintToken(CurrentToken); return ParseError("Unknown token value.");
@@ -558,6 +575,27 @@ UQP(Expression) ParseDeclaration(XLSType type) {
 	}
 
 	return MUQ(DeclarationExpression, std::move(variableNames), type);
+}
+
+UQP(Expression) ParseXLiSp() {
+	GetNextToken();
+	if (CurrentToken.Value != '(') return ParseError("Expected open parenthesis to begin XLiSp expression");
+	std::queue<TokenContext> stream;
+	dword nest = 0;
+	while (GetNextToken().Value != ')' || nest > 0) {
+		TokenContext t;
+		t.Value = CurrentToken;
+		t.CharacterLiteral = t.Value.Value;
+		t.IntegerLiteral = CurrentInteger;
+		t.StringLiteral = StringLiteral;
+		t.Identifier = CurrentIdentifier;
+		t.Operator = CurrentOperator;
+		stream.push(t);
+		if (t.Value.Value == '(') nest++;
+		if (t.Value.Value == ')') nest--;
+	}
+	GetNextToken();
+	return MUQ(XLiSpExpression, stream);
 }
 
 UQP(Statement) ParseStruct() {
@@ -1183,7 +1221,8 @@ SSA* ContinueExpression::Render() {
 	return ZeroSSA(DefinedTypes["dword"]);
 }
 
-SSA *BlockExpression::Render() {
+SSA* BlockExpression::Render() {
+	if (Expressions.empty()) return ZeroSSA(DefinedTypes["dword"]);
 	std::vector<SSA*> ExpressionVector;
 	for (uint i = 0, e = Expressions.size(); i != e; i++) {
 		ExpressionVector.push_back(Expressions[i]->Render());
@@ -1443,7 +1482,7 @@ SSA *WhileExpression::Render() {
 	return ZeroSSA(DefinedTypes["dword"]);
 }
 
-SSA *DeclarationExpression::Render() {
+SSA* DeclarationExpression::Render() {
 	llvm::Function *function = Builder->GetInsertBlock()->getParent();
 	for (uint i = 0, e = VariableNames.size(); i != e; i++) {
 		const std::string &variableName = VariableNames[i].first;
@@ -1466,6 +1505,10 @@ SSA *DeclarationExpression::Render() {
 	}
 
 	return ZeroSSA(Type);
+}
+
+SSA* XLiSpExpression::Render() {
+	return XLiSp::Evaluate(Stream)->Render();
 }
 
 SSA* ZeroSSA(XLSType Type) {

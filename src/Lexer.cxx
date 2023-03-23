@@ -371,6 +371,7 @@ bool IsOperator(char c) {
 	case '}':
 	case ';':
 	case '_':
+	case '$':
 	case EOF:
 		return false;
 	default: return true;

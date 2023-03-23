@@ -2,6 +2,7 @@
 #define __LEXER_XLS_H_
 
 #include "num.def.h"
+#include <string>
 
 enum Lexeme {
 	LEXEME_CHARACTER = 0,
@@ -45,6 +46,16 @@ struct Token {
 	Lexeme Subtype;
 	char Value;
 } __attribute__((packed));
+
+struct TokenContext {
+	Token Value;
+	dword IntegerLiteral;
+	std::string StringLiteral;
+	std::string Identifier;
+	std::string Operator;
+	char CharacterLiteral;
+	bool Symbol = false;
+};
 
 bool IsOperator(char c);
 bool IsIdentifier(char c);

@@ -17,6 +17,7 @@
 #include <llvm/IR/Module.h>
 #include <string>
 #include <vector>
+#include <queue>
 #include <memory>
 #include <stack>
 #include <map>
@@ -326,6 +327,13 @@ public:
 	SSA *Render() override;
 };
 
+class XLiSpExpression : public Expression {
+	std::queue<TokenContext> Stream;
+public:
+	XLiSpExpression(std::queue<TokenContext> stream) : Stream(stream) {}
+	SSA* Render() override;
+};
+
 class SignatureNode {
 	std::string Name;
 	VDX(std::string, XLSType) Arguments;
@@ -392,6 +400,8 @@ extern dword CurrentColumn;
 extern std::string StringLiteral;
 extern StringTermination StringTerminator;
 
+Token GetNextToken();
+
 UQP(Expression) ParseExpression(bool isVolatile = false);
 UQP(Expression) ParseDwordExpression();
 UQP(Expression) ParseCharacterExpression();
@@ -420,6 +430,8 @@ UQP(Expression) ParseReturn();
 UQP(Expression) ParsePostfix(UQP(Expression) LHS);
 
 UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS, bool isVolatile = false);
+
+UQP(Expression) ParseXLiSp();
 
 UQP(Statement) ParseStruct();
 UQP(Statement) ParseGlobalVariable(XLSType type);
@@ -477,5 +489,7 @@ extern std::string CurrentLabelIdentifier;
 
 extern std::stack<llvm::BasicBlock*> BreakStack;
 extern std::stack<llvm::BasicBlock*> ContinueStack;
+
+extern std::queue<TokenContext> TokenStream;
 
 #endif
