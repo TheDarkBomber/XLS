@@ -16,13 +16,13 @@ Directive LexDirective(FILE* stream) {
 }
 
 FILE* LexFilename(FILE* stream) {
-  char buffer[256];
-  if (fgets(buffer, 256, stream) == NULL) {
-    return NULL;
-  }
-  char *n = strchr(buffer, '\n');
-  if (n) *n = '\0';
-  return fopen(buffer, "r");
+	char buffer[256];
+	if (fgets(buffer, 256, stream) == NULL) {
+		return NULL;
+	}
+	char *n = strchr(buffer, '\n');
+	if (n) *n = '\0';
+	return fopen(buffer, "r");
 }
 
 char gbuffer[256];
@@ -36,20 +36,20 @@ char* LexDefine(FILE* stream) {
 }
 
 bool IsIdentifier(char c) {
-  if (isalnum(c) || c == '_')
-    return true;
-  switch (c) {
-  case '-':
-  case '+':
-  case '/':
-  case '*':
-  case ':':
-  case '@':
-  case '=':
-  case '?':
-  case '!':
-    return true;
-  default:
-    return false;
-  }
+	if (isalnum(c) || c == '_')
+		return true;
+	switch (c) {
+	case '-':
+	case '+':
+	case '/':
+	case '*':
+	case ':':
+	case '@':
+	case '=':
+	case '?':
+	case '!':
+		return true;
+	default:
+	  return false;
+	}
 }

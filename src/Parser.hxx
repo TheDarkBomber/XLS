@@ -84,8 +84,8 @@ struct StructData {
 };
 
 struct XLSType {
-  dword Size;
-  llvm::Type *Type;
+	dword Size;
+	llvm::Type *Type;
 	std::string Name;
 	bool IsPointer = false;
 	bool IsRangedPointer = false;
@@ -211,10 +211,10 @@ public:
 };
 
 class BreakExpression : public Expression {
-  dword Nest;
+	dword Nest;
 public:
-  BreakExpression(dword nest) : Nest(nest) {}
-  SSA *Render() override;
+	BreakExpression(dword nest) : Nest(nest) {}
+	SSA *Render() override;
 };
 
 class ContinueExpression : public Expression {
@@ -249,14 +249,14 @@ public:
 };
 
 class LongJumpExpression : public Expression {
-  UQP(Expression) JumpBuffer;
+	UQP(Expression) JumpBuffer;
 public:
-  LongJumpExpression(UQP(Expression) jumpBuffer) : JumpBuffer(std::move(jumpBuffer)) {}
-  SSA* Render() override;
+	LongJumpExpression(UQP(Expression) jumpBuffer) : JumpBuffer(std::move(jumpBuffer)) {}
+	SSA* Render() override;
 };
 
 class TypeofExpression : public Expression {
-  UQP(Expression) Typed;
+	UQP(Expression) Typed;
 public:
 	TypeofExpression(UQP(Expression) typed) : Typed(std::move(typed)) {}
 	SSA *Render() override;
@@ -313,7 +313,7 @@ public:
 };
 
 class IfExpression : public Expression {
-  UQP(Expression) Condition, ThenBranch, ElseBranch;
+	UQP(Expression) Condition, ThenBranch, ElseBranch;
 public:
 	IfExpression(UQP(Expression) condition, UQP(Expression) thenBranch, UQP(Expression) elseBranch) : Condition(std::move(condition)), ThenBranch(std::move(thenBranch)), ElseBranch(std::move(elseBranch)) {}
 	SSA *Render() override;
@@ -367,12 +367,12 @@ public:
 
 class StructDefinition : public Statement {
 	VDX(XLSType, std::string) Types;
-  std::string Name;
-  StructMode Mode;
+	std::string Name;
+	StructMode Mode;
 
 public:
-  StructDefinition(VDX(XLSType, std::string) types, std::string name, StructMode mode = STRUCT_PRACTICAL) : Types(types), Name(name), Mode(mode) {}
-  SSA *Render() override;
+	StructDefinition(VDX(XLSType, std::string) types, std::string name, StructMode mode = STRUCT_PRACTICAL) : Types(types), Name(name), Mode(mode) {}
+	SSA *Render() override;
 };
 
 class GlobalVariableNode : public Statement {

@@ -63,7 +63,7 @@ Token GetNextToken() {
 		TokenStream.pop();
 		return t.Value;
 	}
-  return CurrentToken = GetToken();
+	return CurrentToken = GetToken();
 }
 
 std::map<std::string, Precedence> BinaryPrecedence;
@@ -94,7 +94,7 @@ void AlertError(const char *error) {
 }
 
 void AlertWarning(const char *warning) {
-  llvm::errs() <<
+	llvm::errs() <<
 		COLOUR_YELLOW <<
 		"R" << CurrentRow << "C" << CurrentColumn << ": " <<
 		COLOUR_PURPLE <<
@@ -402,14 +402,14 @@ UQP(Expression) ParseTypeof() {
 
 UQP(Expression) ParseCountof() {
 	if (CurrentToken.Subtype == LEXEME_ELSE) return ParseSetCountof();
-  GetNextToken();
-  if (CurrentToken.Type == LEXEME_IDENTIFIER && CheckTypeDefined(CurrentIdentifier)) {
-    std::string type = CurrentIdentifier;
-    GetNextToken();
-    return MUQ(DwordExpression, GetCountof(DefinedTypes[type]));
-  }
-  UQP(Expression) typed = ParseExpression();
-  return MUQ(CountofExpression, std::move(typed));
+	GetNextToken();
+	if (CurrentToken.Type == LEXEME_IDENTIFIER && CheckTypeDefined(CurrentIdentifier)) {
+		std::string type = CurrentIdentifier;
+		GetNextToken();
+		return MUQ(DwordExpression, GetCountof(DefinedTypes[type]));
+	}
+	UQP(Expression) typed = ParseExpression();
+	return MUQ(CountofExpression, std::move(typed));
 }
 
 UQP(Expression) ParseSetCountof() {
@@ -444,13 +444,13 @@ UQP(Expression) ParseBreak() {
 }
 
 UQP(Expression) ParseContinue() {
-  GetNextToken();
-  if (CurrentToken.Type == LEXEME_INTEGER) {
+	GetNextToken();
+	if (CurrentToken.Type == LEXEME_INTEGER) {
 		dword nest = CurrentInteger;
 		GetNextToken();
 		return MUQ(ContinueExpression, nest);
 	}
-  return MUQ(ContinueExpression, 0);
+	return MUQ(ContinueExpression, 0);
 }
 
 UQP(Expression) ParseReturn() {
@@ -819,15 +819,15 @@ llvm::Function *getFunction(std::string name) {
 }
 
 SSA *DwordExpression::Render() {
-  SSA *R = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, Value, false));
+	SSA *R = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, Value, false));
 	TypeAnnotation[R] = DefinedTypes["dword"];
-  return R;
+	return R;
 }
 
 SSA *CharacterExpression::Render() {
-  SSA *R = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(8, Value, false));
+	SSA *R = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(8, Value, false));
 	TypeAnnotation[R] = DefinedTypes["byte"];
-  return R;
+	return R;
 }
 
 SSA *StringExpression::Render() {
@@ -911,7 +911,7 @@ SSA* CastExpression::Render() {
 }
 
 SSA* PtrRHS(SSA* left, SSA* right) {
-  return Cast(GetType(left), Builder->CreateMul(right, llvm::ConstantInt::get(*GlobalContext, llvm::APInt(GetType(right).Size, DefinedTypes[GetType(left).Dereference].Size / 8))));
+	return Cast(GetType(left), Builder->CreateMul(right, llvm::ConstantInt::get(*GlobalContext, llvm::APInt(GetType(right).Size, DefinedTypes[GetType(left).Dereference].Size / 8))));
 }
 
 SSA* BinaryExpression::Render() {
@@ -1116,6 +1116,7 @@ SSA *CallExpression::Render() {
 		for (uint i = 1; i < variable.Type.FPData.size(); i++)
 			FPParams.push_back(variable.Type.FPData[i].Type);
 
+
 		llvm::FunctionType* FPType = llvm::FunctionType::get(variable.Type.FPData[0].Type, llvm::ArrayRef<llvm::Type*>(FPParams), false);
 		llvm::CallInst* callInstance = Builder->CreateCall(FPType, FP, FPArguments, "xls_fp_call");
 		if (variable.Type.FPData[0].UID == DefinedTypes["void"].UID) callInstance->setName("");
@@ -1203,15 +1204,15 @@ SSA* BreakExpression::Render() {
 }
 
 SSA* ContinueExpression::Render() {
-  llvm::BasicBlock *location;
+	llvm::BasicBlock *location;
 	std::stack<llvm::BasicBlock*> preserve;
-  for (uint i = 0; i <= Nest; i++) {
-    if (ContinueStack.empty()) return CodeError("Continue stack is empty.");
-    location = ContinueStack.top();
+	for (uint i = 0; i <= Nest; i++) {
+		if (ContinueStack.empty()) return CodeError("Continue stack is empty.");
+		location = ContinueStack.top();
 		preserve.push(ContinueStack.top());
-    ContinueStack.pop();
-  }
-  Builder->CreateBr(location);
+		ContinueStack.pop();
+	}
+	Builder->CreateBr(location);
 	RESOW_BASIC_BLOCK;
 	for (uint i = 0; i < preserve.size(); i++) {
 		ContinueStack.push(preserve.top());
@@ -1333,7 +1334,7 @@ SSA *JumpExpression::Render() {
 }
 
 SSA* SetJumpExpression::Render() {
-  llvm::Function* SetJumpIntrinsic = llvm::Intrinsic::getDeclaration(GlobalModule.get(), llvm::Intrinsic::eh_sjlj_setjmp);
+	llvm::Function* SetJumpIntrinsic = llvm::Intrinsic::getDeclaration(GlobalModule.get(), llvm::Intrinsic::eh_sjlj_setjmp);
 	SetJumpIntrinsic->addFnAttr(llvm::Attribute::AlwaysInline);
 	SetJumpIntrinsic->addFnAttr(llvm::Attribute::ReturnsTwice);
 	llvm::Function* FrameAddrIntrinsic = llvm::Intrinsic::getDeclaration(GlobalModule.get(), llvm::Intrinsic::returnaddress);
@@ -1360,13 +1361,13 @@ SSA* SetJumpExpression::Render() {
 }
 
 SSA* LongJumpExpression::Render() {
-  llvm::Function *LongJumpIntrinsic = llvm::Intrinsic::getDeclaration(GlobalModule.get(), llvm::Intrinsic::eh_sjlj_longjmp);
-  LongJumpIntrinsic->addFnAttr(llvm::Attribute::AlwaysInline);
-  SSA *jumpBuffer = JumpBuffer->Render();
-  std::vector<llvm::Type *> IType;
-  std::vector<SSA *> IArg;
-  IType.push_back(DefinedTypes["byte*"].Type);
-  IArg.push_back(Builder->CreateBitCast(jumpBuffer, IType[0]));
+	llvm::Function *LongJumpIntrinsic = llvm::Intrinsic::getDeclaration(GlobalModule.get(), llvm::Intrinsic::eh_sjlj_longjmp);
+	LongJumpIntrinsic->addFnAttr(llvm::Attribute::AlwaysInline);
+	SSA *jumpBuffer = JumpBuffer->Render();
+	std::vector<llvm::Type *> IType;
+	std::vector<SSA *> IArg;
+	IType.push_back(DefinedTypes["byte*"].Type);
+	IArg.push_back(Builder->CreateBitCast(jumpBuffer, IType[0]));
 	Builder->CreateCall(LongJumpIntrinsic, llvm::ArrayRef<SSA*>(IArg));
 	return ZeroSSA(DefinedTypes["dword"]);
 }
@@ -1512,34 +1513,34 @@ SSA* XLiSpExpression::Render() {
 }
 
 SSA* ZeroSSA(XLSType Type) {
-  SSA* R = llvm::Constant::getNullValue(Type.Type);
-  TypeAnnotation[R] = Type;
-  return R;
+	SSA* R = llvm::Constant::getNullValue(Type.Type);
+	TypeAnnotation[R] = Type;
+	return R;
 }
 
 SSA *StructDefinition::Render() {
-  XLSType NEWType;
-  StructData NEWStruct;
-  NEWType.Name = Name;
-  if (Mode == STRUCT_PRACTICAL) std::sort(Types.begin(), Types.end());
-  std::vector<llvm::Type *> fields;
-  for (unsigned i = 0; i < Types.size(); i++) {
-    fields.push_back(Types[i].first.Type);
-    NEWStruct.LiteralSize += Types[i].first.Size;
+	XLSType NEWType;
+	StructData NEWStruct;
+	NEWType.Name = Name;
+	if (Mode == STRUCT_PRACTICAL) std::sort(Types.begin(), Types.end());
+	std::vector<llvm::Type *> fields;
+	for (unsigned i = 0; i < Types.size(); i++) {
+		fields.push_back(Types[i].first.Type);
+		NEWStruct.LiteralSize += Types[i].first.Size;
 		NEWStruct.Fields[Types[i].second] = SDX(dword, XLSType)(i, Types[i].first);
-  }
-  NEWType.Type = llvm::StructType::create(*GlobalContext, llvm::ArrayRef<llvm::Type *>(fields), Name, Mode == STRUCT_PACKED);
-  NEWStruct.Layout = (llvm::StructLayout *)GlobalLayout->getStructLayout((llvm::StructType *)NEWType.Type);
-  NEWStruct.Size = NEWStruct.Layout->getSizeInBits();
-  NEWType.Size = NEWStruct.Size;
-  NEWType.IsStruct = true;
+	}
+	NEWType.Type = llvm::StructType::create(*GlobalContext, llvm::ArrayRef<llvm::Type *>(fields), Name, Mode == STRUCT_PACKED);
+	NEWStruct.Layout = (llvm::StructLayout *)GlobalLayout->getStructLayout((llvm::StructType *)NEWType.Type);
+	NEWStruct.Size = NEWStruct.Layout->getSizeInBits();
+	NEWType.Size = NEWStruct.Size;
+	NEWType.IsStruct = true;
 	NEWType.UID = CurrentUID++;
 	NEWType.Structure = NEWStruct;
-  DefinedTypes[Name] = NEWType;
-  TypeMap[NEWType.Type] = NEWType;
-  SSA *R = llvm::Constant::getNullValue(llvm::Type::getInt32Ty(*GlobalContext));
-  TypeAnnotation[R] = DefinedTypes["dword"];
-  return R;
+	DefinedTypes[Name] = NEWType;
+	TypeMap[NEWType.Type] = NEWType;
+	SSA *R = llvm::Constant::getNullValue(llvm::Type::getInt32Ty(*GlobalContext));
+	TypeAnnotation[R] = DefinedTypes["dword"];
+	return R;
 }
 
 SSA *GlobalVariableNode::Render() {
@@ -1587,7 +1588,7 @@ llvm::Function *SignatureNode::Render() {
 }
 
 llvm::Function *FunctionNode::Render() {
-  SignatureNode &signature = *Signature;
+	SignatureNode &signature = *Signature;
 	FunctionSignatures[Signature->GetName()] = std::move(Signature);
 	llvm::Function *function = getFunction(signature.GetName());
 	if (!function) return nullptr;
@@ -1595,10 +1596,10 @@ llvm::Function *FunctionNode::Render() {
 	if (signature.Binary()) BinaryPrecedence[signature.GetOperatorName()] = signature.GetOperatorPrecedence();
 	if (signature.Unary()) BinaryPrecedence[signature.GetOperatorName()] = PRECEDENCE_UNPRECEDENTED;
 
-  llvm::BasicBlock *basicBlock = llvm::BasicBlock::Create(*GlobalContext, "entry", function);
-  Builder->SetInsertPoint(basicBlock);
+	llvm::BasicBlock *basicBlock = llvm::BasicBlock::Create(*GlobalContext, "entry", function);
+	Builder->SetInsertPoint(basicBlock);
 
-  // Clear only local variables.
+	// Clear only local variables.
 	auto iterator = AllonymousValues.begin();
 	while (iterator != AllonymousValues.end()) {
 		if (!iterator->second.Global) iterator = AllonymousValues.erase(iterator);
@@ -1608,7 +1609,7 @@ llvm::Function *FunctionNode::Render() {
 	AnonymousLabels.clear();
 	TypeAnnotation.clear();
 	uint index = 0;
-  for (llvm::Argument &argument : function->args()) {
+	for (llvm::Argument &argument : function->args()) {
 		Alloca *alloca = createEntryBlockAlloca(function, argument.getName(), ArgumentTypeAnnotation[function->getArg(index)]);
 		Builder->CreateStore(&argument, alloca);
 		XLSVariable stored;
@@ -1857,10 +1858,10 @@ void HandleImplementation() {
 }
 
 void HandleOperatorDefinition() {
-  if (UQP(FunctionNode) functionNode = ParseOperatorDefinition()) {
-    if (llvm::Function *functionIR = functionNode->Render()) {
-    }
-  } else GetNextToken();
+	if (UQP(FunctionNode) functionNode = ParseOperatorDefinition()) {
+		if (llvm::Function *functionIR = functionNode->Render()) {
+		}
+	} else GetNextToken();
 }
 
 void HandleExtern() {
@@ -1989,13 +1990,13 @@ bool CheckTypeDefined(std::string name) {
 
 bool DefineFPType(std::string function, XLSType* outtype) {
 	if (FunctionSignatures.find(function) == FunctionSignatures.end()) return false;
-  llvm::Function *pointed = getFunction(function);
-  XLSType FPType;
+	llvm::Function *pointed = getFunction(function);
+	XLSType FPType;
 	FPType.Name = "fn&(";
-  FPType.Type = pointed->getType();
-  FPType.Size = GlobalLayout->getPointerSizeInBits();
-  FPType.Dereference = "#addrsize";
-  FPType.IsPointer = true;
+	FPType.Type = pointed->getType();
+	FPType.Size = GlobalLayout->getPointerSizeInBits();
+	FPType.Dereference = "#addrsize";
+	FPType.IsPointer = true;
 	FPType.IsFP = true;
 	FPType.FPData.push_back(ReturnTypeAnnotation[pointed]);
 	for (uint i = 0; i < pointed->arg_size(); i++) {
@@ -2005,8 +2006,8 @@ bool DefineFPType(std::string function, XLSType* outtype) {
 	}
 	FPType.Name += "):" + FPType.FPData[0].Name;
 	FPType.UID = CurrentUID++;
-  DefinedTypes[FPType.Name] = FPType;
-  TypeMap[FPType.Type] = FPType;
+	DefinedTypes[FPType.Name] = FPType;
+	TypeMap[FPType.Type] = FPType;
 	*outtype = FPType;
 	return true;
 }

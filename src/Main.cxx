@@ -17,6 +17,8 @@
 #include <stdio.h>
 #include <system_error>
 
+extern dword SpacesDetected;
+
 extern llvm::DataLayout* GlobalLayout;
 extern llvm::Triple* GlobalTriple;
 extern ParserFlags Flags;
@@ -208,6 +210,14 @@ int main(int argc, char* argv[]) {
 	pass.run(*GlobalModule);
 	destination.flush();
 
+	if (SpacesDetected > 0) {
+		fprintf(stderr, COLOUR_PURPLE_BOLD);
+		fprintf(stderr, "Accessibility warning\n");
+		fprintf(stderr, COLOUR_RED);
+		fprintf(stderr, "%u line%s detected containing spaces for indentation.\n", SpacesDetected, SpacesDetected == 1 ? " was" : "s were");
+		fprintf(stderr, "Please consider using tabs to enable accessibility within your codebase.\n");
+		fprintf(stderr, COLOUR_END);
+	}
 
 	llvm::errs() << COLOUR_GREEN << "Wrote " << filename << " for " << MTune << "\n" << COLOUR_END;
 

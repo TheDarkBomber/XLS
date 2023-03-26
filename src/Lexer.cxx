@@ -19,11 +19,19 @@ char CharacterLiteral;
 std::string StringLiteral;
 StringTermination StringTerminator;
 
+dword SpacesDetected = 0;
+static bool Newline = false;
+
 char advance() {
 	char next = getchar();
+	if (Newline) {
+		if (next == ' ') SpacesDetected++;
+		Newline = false;
+	}
 	if (next == '\n') {
 		CurrentRow++;
 		CurrentColumn = 0;
+		Newline = true;
 	} else CurrentColumn++;
 	return next;
 }
@@ -289,14 +297,14 @@ Token GetToken() {
 }
 
 char LexString(char LastCharacter) {
-  StringLiteral = "";
-  LastCharacter = advance();
-  while (LastCharacter != '"') {
-    LastCharacter = LexCharacter(LastCharacter);
-    if (LError != "") return '\0';
-    StringLiteral += CharacterLiteral;
-    LastCharacter = advance();
-  }
+	StringLiteral = "";
+	LastCharacter = advance();
+	while (LastCharacter != '"') {
+		LastCharacter = LexCharacter(LastCharacter);
+		if (LError != "") return '\0';
+		StringLiteral += CharacterLiteral;
+		LastCharacter = advance();
+	}
 	return LastCharacter;
 }
 
