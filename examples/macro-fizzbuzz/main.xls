@@ -24,23 +24,13 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-extern printf(byte* fmt, c-variadic);
-extern puts(byte* str); // LIBC function.
+extern puts(byte* str);
 
-impl fizzbuzz(to) {
-	dword i = 1;
-	while (i <= to) {
-		if (i % 15 == 0) {
-			puts("FizzBuzz");
-		} else if (i % 3 == 0) {
-			puts("Fizz");
-		} else if (i % 5 == 0) {
-			puts("Buzz");
-		} else printf("%d\n", i);
-		i = i + 1;
-	};
-}
+$(set! fizzbuzz (lambda (a) (join-tokens (for i 1 a ([ puts($(
+	if (c= (i% i 15) 0) ("FizzBuzz") (
+	if (c= (i% i 5) 0) ("Buzz") (
+	if (c= (i% i 3) 0) ("Fizz") (as-string i)
+	))
+)) ])))));
 
-impl main(argc) {
-	fizzbuzz(100); // Print fizzbuzz to 100.
-}
+impl main(argc, byte** argv) $(fizzbuzz 1000) |> void;

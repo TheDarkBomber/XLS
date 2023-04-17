@@ -26,33 +26,32 @@
 
 extern puts(byte* str);
 
+$(set! gosub (lambda (lbl) [
+	label declare current;
+	stack[r/w-head] = &&current;
+	r/w-head = r/w-head + 1;
+	jump $(do lbl);
+	label current
+]));
+
+$(set! rts (lambda () [
+	r/w-head = r/w-head - 1;
+	label& back = stack[r/w-head];
+	stack[r/w-head] = 0;
+	jump back
+]));
+
 impl main(argc, byte** argv) {
 	label&* stack = label&[64];
 	byte r/w-head = 0;
 	puts("Program begins!");
-	// GOSUB(location);
-	label declare current;
-	stack[r/w-head] = &&current;
-	r/w-head = r/w-head + 1;
-	jump location;
-	label current;
-	// END GOSUB
+	$(gosub location);
 	puts("Program continues!");
-	// GOSUB(location);
-	label declare current;
-	stack[r/w-head] = &&current;
-	r/w-head = r/w-head + 1;
-	jump location;
-	label current;
-	// END GOSUB
+	$(gosub location);
 	puts("Program ends!");
 	return 0;
 
 	label location;
 	puts("Program is in location subroutine.");
-	// RETURN();
-	r/w-head = r/w-head - 1;
-	label& back = stack[r/w-head];
-	stack[r/w-head] = 0;
-	jump back;
+	$(rts);
 }
