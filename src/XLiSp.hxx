@@ -12,7 +12,8 @@ namespace XLiSp {
 		XLISP_IDENTIFIER = 3,
 		XLISP_LIST = 4,
 		XLISP_BOOLE = 5,
-		XLISP_CLOSURE = 6
+		XLISP_CLOSURE = 6,
+		XLISP_TOKEN_LIST = 7
 	};
 
 	class Symbolic;
@@ -23,32 +24,58 @@ namespace XLiSp {
 
 	typedef SymbolicAtom(*Fun)(SymbolicList, Environment*);
 
-	class SymbolicAtom {
-	public:
-		XLiSpType Type;
-		dword Integer;
-		std::string String;
-		SymbolicList* List;
-		bool Truth = true;
-		Closure* Enclosure;
-		SymbolicAtom() : Type(XLISP_NULL), Truth(false) {}
-		SymbolicAtom(dword integer) : Integer(integer), Type(XLISP_INTEGER) {}
-		SymbolicAtom(std::string string, bool identifier) : String(string), Type(identifier ? XLISP_IDENTIFIER : XLISP_STRING) {}
-		SymbolicAtom(SymbolicList* list) : List(list), Type(XLISP_LIST) {}
-		SymbolicAtom(bool truth) : Truth(truth), Type(XLISP_BOOLE) {}
-		SymbolicAtom(Closure* enclosure) : Enclosure(enclosure), Type(XLISP_CLOSURE) {}
-		std::queue<TokenContext> Tokenise();
-	};
-
 	class SymbolicList {
 		std::vector<Symbolic> Symbols;
 	public:
 		SymbolicList() {}
 		SymbolicList(std::vector<Symbolic> symbols) : Symbols(symbols) {}
-		std::queue<TokenContext> Tokenise();
+		std::queue<TokenContext> Tokenise(Environment* env);
 		SymbolicAtom Interpret(Environment* env);
 		std::vector<Symbolic> GetSymbols() { return Symbols; }
 		Symbolic Expand(Environment* env);
+	};
+
+	class TokenOrConsequences {
+		SymbolicList Consequences;
+		TokenContext Token;
+	public:
+		bool IsConsequences = false;
+		TokenOrConsequences() {}
+		TokenOrConsequences(TokenContext ctx) : Token(ctx) {}
+		TokenOrConsequences(SymbolicList csq) : Consequences(csq), IsConsequences(true) {}
+		std::queue<TokenContext> Interpret(Environment* env);
+		TokenContext GetToken() { return Token; }
+		// Symbolic Expand(Environment* env);
+	};
+
+	class ListOfTokens {
+		std::vector<TokenOrConsequences> List;
+	public:
+		ListOfTokens() {}
+		ListOfTokens(std::vector<TokenOrConsequences> list) : List(list) {}
+		std::queue<TokenContext> Tokenise(Environment* env);
+		SymbolicAtom Interpret(Environment* env);
+		std::vector<TokenOrConsequences> GetList() { return List; }
+	};
+
+	class SymbolicAtom {
+	public:
+		XLiSpType Type;
+		dword Integer;
+		std::string String;
+		SymbolicList List;
+		bool Truth = true;
+		Closure* Enclosure;
+		ListOfTokens TokenList;
+		SymbolicAtom() : Type(XLISP_NULL), Truth(false) {}
+		SymbolicAtom(dword integer) : Integer(integer), Type(XLISP_INTEGER) {}
+		SymbolicAtom(std::string string, bool identifier) : String(string), Type(identifier ? XLISP_IDENTIFIER : XLISP_STRING) {}
+		SymbolicAtom(SymbolicList list) : List(list), Type(XLISP_LIST) {}
+		SymbolicAtom(bool truth) : Truth(truth), Type(XLISP_BOOLE) {}
+		SymbolicAtom(Closure* enclosure) : Enclosure(enclosure), Type(XLISP_CLOSURE) {}
+		SymbolicAtom(ListOfTokens tokenList) : TokenList(tokenList), Type(XLISP_TOKEN_LIST) {}
+		SymbolicAtom CastToString();
+		std::queue<TokenContext> Tokenise(Environment* env);
 	};
 
 	class Symbolic {
@@ -73,6 +100,7 @@ namespace XLiSp {
 		Symbolic ParseSymbolic();
 		SymbolicList ParseList();
 		SymbolicAtom ParseAtom();
+		SymbolicAtom ParseTokenList();
 	};
 
 	class Environment {
@@ -90,7 +118,7 @@ namespace XLiSp {
 		Symbolic Get(std::string key);
 		void AddChild(Environment* child);
 		void AddClosure(Closure* closure);
-		void ExheritClosures();
+		void ExheritClosure(Closure* closure);
 	};
 
 	class Closure {

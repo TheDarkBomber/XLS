@@ -29,6 +29,32 @@ namespace XLiSp {
 		return SymbolicAtom(total);
 	}
 
+	static SymbolicAtom ModulusFun(SymbolicList symbolList, Environment* env) {
+		auto symbols = symbolList.GetSymbols();
+		if (symbols.size() < 2) return XLiSpError("Expected at least 2 elements to i%, but got %lu.\n", symbols.size());
+		SymbolicAtom modulator = symbols[1].Interpret(env);
+		SymbolicAtom modulated = symbols[2].Interpret(env);
+		if (modulator.Type != XLISP_INTEGER || modulated.Type != XLISP_INTEGER)
+			return XLiSpError("Cannot modulate non-integer values.\n");
+		if (modulated.Integer == 0) return XLiSpError("Cannot modulate by zero.\n");
+		dword result = modulator.Integer % modulated.Integer;
+		return SymbolicAtom(result);
+	}
+
+	static SymbolicAtom EqualsFun(SymbolicList symbolList, Environment* env) {
+		auto symbols = symbolList.GetSymbols();
+		if (symbols.size() < 2) return XLiSpError("Expected at least 2 elements to c=, but got %lu.\n", symbols.size());
+		SymbolicAtom A = symbols[1].Interpret(env);
+		SymbolicAtom B = symbols[2].Interpret(env);
+		if (A.Type != B.Type) return SymbolicAtom(false);
+		switch (A.Type) {
+		case XLISP_INTEGER: return SymbolicAtom(A.Integer == B.Integer);
+		case XLISP_STRING: return SymbolicAtom(A.String == B.String);
+		default: return XLiSpError("Invalid types for equality comparison.\n");
+		}
+		return SymbolicAtom(false);
+	}
+
 	static SymbolicAtom SetFun(SymbolicList symbolList, Environment* env) {
 		std::vector<Symbolic> symbols = symbolList.GetSymbols();
 		if (symbols.size() < 3)
@@ -53,11 +79,12 @@ namespace XLiSp {
 			newEnv->Set(bindlist[i].GetAtom().String, bindlist[i + 1].Interpret(newEnv));
 		}
 		SymbolicAtom result = symbols[2].Interpret(newEnv);
+		if (result.Type == XLISP_CLOSURE) newEnv->ExheritClosure(result.Enclosure);
 		delete newEnv;
 		return result;
 	}
 
-	static SymbolicAtom EmitFun(SymbolicList symbolList, Environment* env) {
+	static SymbolicAtom DoFun(SymbolicList symbolList, Environment* env) {
 		std::vector<Symbolic> symbols = symbolList.GetSymbols();
 		SymbolicAtom last = SymbolicAtom();
 		for (int i = 1; i < symbols.size(); i++) {
@@ -85,9 +112,7 @@ namespace XLiSp {
 	static SymbolicAtom EchoFun(SymbolicList symbolList, Environment* env) {
 		std::vector<Symbolic> symbols = symbolList.GetSymbols();
 		if (symbols.size() < 1) return XLiSpError("Expected at least 1 element to echo, but got %lu\n", symbols.size());
-		SymbolicAtom operand = symbols[1].Interpret(env);
-		if (operand.Type != XLISP_STRING) return XLiSpError("Expected string as input to echo.\n");
-		// TODO: Cast any atom to a string type automatically for echoing.
+		SymbolicAtom operand = symbols[1].Interpret(env).CastToString();
 		// TODO: Echo all arguments in sequence.
 		printf("%s\n", operand.String.c_str());
 		return operand;
@@ -101,16 +126,96 @@ namespace XLiSp {
 		return XLiSpError("%s\n", errorMsg.String.c_str());
 	}
 
+	static SymbolicAtom AsStringFun(SymbolicList symbolList, Environment* env) {
+		auto symbols = symbolList.GetSymbols();
+		if (symbols.size() < 1) return XLiSpError("Expected at least 1 element to as-string, but got %lu\n", symbols.size());
+		SymbolicAtom atom = symbols[1].Interpret(env);
+		return atom.CastToString();
+	}
+
+	static SymbolicAtom StrcatFun(SymbolicList symbolList, Environment* env) {
+		auto symbols = symbolList.GetSymbols();
+		std::string total = "";
+		for (int i = 1; i < symbols.size(); i++) {
+			SymbolicAtom atom = symbols[i].Interpret(env).CastToString();
+			total += atom.String;
+		}
+		return SymbolicAtom(total, false);
+	}
+
+	static SymbolicAtom JoinTokensFun(SymbolicList symbolList, Environment* env) {
+		auto symbols =  symbolList.GetSymbols();
+		if (symbols.size() < 1) return XLiSpError("Expected at least 1 element to join-tokens, but got %lu\n", symbols.size());
+		std::vector<TokenOrConsequences> tlist;
+		TokenContext startendToken;
+		startendToken.Value.Type = LEXEME_CHARACTER;
+		startendToken.Value.Value = '{';
+		tlist.push_back(startendToken);
+		SymbolicAtom inputList = symbols[1].Interpret(env);
+		if (inputList.Type != XLISP_LIST) return XLiSpError("Expected input to join-tokens to be a list.\n");
+		auto symlist = inputList.List.GetSymbols();
+		for (int i = 0; i < symlist.size(); i++) {
+			SymbolicAtom atom = symlist[i].Interpret(env);
+			if (atom.Type != XLISP_TOKEN_LIST) return XLiSpError("Expected token-list from argument %d of join-tokens\n", i);
+			std::vector<TokenOrConsequences> atomList = atom.TokenList.GetList();
+			for (int j = 0; j < atomList.size(); j++) tlist.push_back(atomList[j]);
+			startendToken.Value.Value = ';';
+			tlist.push_back(startendToken);
+		}
+		startendToken.Value.Value = '}';
+		tlist.push_back(startendToken);
+		return SymbolicAtom(ListOfTokens(tlist));
+	}
+
+	static SymbolicAtom ForFun(SymbolicList symbolList, Environment* env) {
+		auto symbols = symbolList.GetSymbols();
+		if (symbols.size() < 4) return XLiSpError("Expected at least 4 elements to for, but got %lu\n", symbols.size());
+		if (!symbols[1].IsAtomic()) return XLiSpError("Expected first element to for to be atomic.\n");
+		SymbolicAtom bindAtom = symbols[1].GetAtom();
+		if (bindAtom.Type != XLISP_IDENTIFIER) return XLiSpError("Expected first element to for to be an identifier.\n");
+		SymbolicAtom startAtom = symbols[2].Interpret(env);
+		SymbolicAtom endAtom = symbols[3].Interpret(env);
+		if (startAtom.Type != XLISP_INTEGER) return XLiSpError("Expected second element to for to be an integer.\n");
+		if (endAtom.Type != XLISP_INTEGER) return XLiSpError("Expected third element to for to be an integer.\n");
+		if (symbols[4].IsAtomic()) return XLiSpError("Expected fourth element to for to be a list.\n");
+		SymbolicList actionList = symbols[4].GetList();
+		std::vector<Symbolic> resultSymbols;
+		for (dword i = startAtom.Integer; i <= endAtom.Integer; i++) {
+			Environment* forEnv = new Environment(env);
+			SymbolicAtom iAtom = SymbolicAtom(i);
+			forEnv->Set(bindAtom.String, iAtom);
+			SymbolicAtom result = actionList.Interpret(forEnv);
+			if (result.Type == XLISP_CLOSURE) forEnv->ExheritClosure(result.Enclosure);
+			delete forEnv;
+			resultSymbols.push_back(result);
+		}
+		return SymbolicAtom(SymbolicList(resultSymbols));
+	}
+
+	static SymbolicAtom ListFun(SymbolicList symbolList, Environment* env) {
+		auto symbols = symbolList.GetSymbols();
+		std::vector<Symbolic> outlist;
+		for (int i = 1; i < symbols.size(); i++) outlist.push_back(symbols[i]);
+		return SymbolicAtom(SymbolicList(outlist));
+	}
+
 	UQP(Expression) Evaluate(std::queue<TokenContext> InputStream) {
 		SymbolFunctionMap["i+"] = AddFun;
 		SymbolFunctionMap["i*"] = MulFun;
+		SymbolFunctionMap["i%"] = ModulusFun;
+		SymbolFunctionMap["c="] = EqualsFun;
 		SymbolFunctionMap["set!"] = SetFun;
 		SymbolFunctionMap["let*"] = LetFun;
-		SymbolFunctionMap["emit"] = EmitFun;
+		SymbolFunctionMap["do"] = DoFun;
 		SymbolFunctionMap["if"] = IfFun;
 		SymbolFunctionMap["lambda"] = LambdaFun;
 		SymbolFunctionMap["echo"] = EchoFun;
 		SymbolFunctionMap["error"] = ErrorFun;
+		SymbolFunctionMap["as-string"] = AsStringFun;
+		SymbolFunctionMap["strcat"] = StrcatFun;
+		SymbolFunctionMap["join-tokens"] = JoinTokensFun;
+		SymbolFunctionMap["for"] = ForFun;
+		SymbolFunctionMap["list"] = ListFun;
 		if (!GlobalEnvironment) GlobalEnvironment = new Environment();
 		UQP(SymbolicParser) parser = MUQ(SymbolicParser, InputStream);
 		Symbolic symbol = Symbolic(parser->ParseList());
@@ -119,7 +224,7 @@ namespace XLiSp {
 		t.Value.Type = LEXEME_CHARACTER;
 		t.Value.Value = '{';
 		TokenStream.push(t);
-		std::queue<TokenContext> OutputStream = symbol.Interpret(GlobalEnvironment).Tokenise();
+		std::queue<TokenContext> OutputStream = symbol.Interpret(GlobalEnvironment).Tokenise(GlobalEnvironment);
 		while (!OutputStream.empty()) {
 			TokenStream.push(OutputStream.front());
 			OutputStream.pop();
@@ -162,6 +267,10 @@ namespace XLiSp {
 		case LEXEME_INTEGER:
 			return SymbolicAtom(t.IntegerLiteral);
 		case LEXEME_CHARACTER:
+			switch (t.Value.Value) {
+			case '[': // ']'
+				return this->ParseTokenList();
+			}
 		case LEXEME_END_OF_FILE:
 		case LEXEME_CHARACTER_LITERAL:
 			return XLiSpError("Attempted to understand token %d as atom.\n", t.Value.Type);
@@ -170,10 +279,48 @@ namespace XLiSp {
 		}
 	}
 
+	SymbolicAtom SymbolicParser::ParseTokenList() {
+		Stream.pop();
+		TokenContext t = Stream.front();
+		std::vector<TokenOrConsequences> tokens = std::vector<TokenOrConsequences>();
+		dword bnest = 0;
+		while (t.Value.Type != LEXEME_CHARACTER || t.Value.Value != ']' || bnest > 0) {
+			if (t.Value.Type == LEXEME_CHARACTER && t.Value.Value == '$') {
+				Stream.pop();
+				t = Stream.front();
+				if (t.Value.Type != LEXEME_CHARACTER || t.Value.Value != '(')
+					return XLiSpError("Expected open parenthesis after $ in token list.\n");
+				dword nest = 0;
+				std::queue<TokenContext> symbolicStream;
+				Stream.pop(); t = Stream.front();
+				while (t.Value.Value != ')' || nest > 0) {
+					symbolicStream.push(t);
+					if (t.Value.Value == '(') nest++;
+					if (t.Value.Value == ')') nest--;
+					Stream.pop(); t = Stream.front();
+				}
+				Stream.pop(); t = Stream.front();
+				UQP(SymbolicParser) parser = MUQ(SymbolicParser, symbolicStream);
+				Symbolic symbol = parser->ParseSymbolic();
+				if (symbol.IsAtomic())
+				tokens.push_back(TokenOrConsequences(parser->ParseList()));
+			} else {
+				if (t.Value.Type == LEXEME_CHARACTER && t.Value.Value == '[') bnest++;
+				if (t.Value.Type == LEXEME_CHARACTER && t.Value.Value == ']') bnest--;
+				tokens.push_back(TokenOrConsequences(t));
+				Stream.pop();
+				t = Stream.front();
+			}
+		}
+		return SymbolicAtom(ListOfTokens(tokens));
+	}
+
 	SymbolicAtom Symbolic::Interpret(Environment* env) {
 		if (Atomic) {
 			if (Atom.Type == XLISP_IDENTIFIER && env->Find(Atom.String))
 				return env->Get(Atom.String).Interpret(env);
+			if (Atom.Type == XLISP_TOKEN_LIST)
+				return Atom.TokenList.Interpret(env);
 			return Atom;
 		}
  		return List.Interpret(env);
@@ -191,7 +338,8 @@ namespace XLiSp {
 			}
 
 			if (atom.Type == XLISP_CLOSURE) return atom.Enclosure->Interpret(*this, env);
-			return SymbolicAtom(this);
+			if (atom.Type == XLISP_TOKEN_LIST) return atom.TokenList.Interpret(env);
+			return SymbolicAtom(*this);
 		}
 		Symbols[0] = Symbols[0].Interpret(env);
 		return this->Interpret(env);
@@ -208,7 +356,7 @@ namespace XLiSp {
 			newEnv->Set(atomKey, symbols[i + 1].Interpret(env));
 		}
 		SymbolicAtom result = Body.Interpret(newEnv);
-		newEnv->ExheritClosures();
+		if (result.Type == XLISP_CLOSURE) newEnv->ExheritClosure(result.Enclosure);
 		delete newEnv;
 		return result;
 	}
@@ -227,23 +375,29 @@ namespace XLiSp {
 		return *this;
 	}
 
-	std::queue<TokenContext> SymbolicList::Tokenise() {
+	std::queue<TokenContext> SymbolicList::Tokenise(Environment* env) {
 		std::queue<TokenContext> outstream;
+		TokenContext startend;
+		startend.Value.Type = LEXEME_CHARACTER;
+		startend.Value.Value = '{';
+		outstream.push(startend);
 		for (Symbolic symbol : Symbols) {
-			std::queue<TokenContext> Q = symbol.Interpret(GlobalEnvironment).Tokenise();
+			std::queue<TokenContext> Q = symbol.Interpret(env).Tokenise(env);
 			while (!Q.empty()) {
 				TokenContext t = Q.front();
 				outstream.push(t);
+				Q.pop();
 				t.Value.Type = LEXEME_CHARACTER;
 				t.Value.Value = ';';
 				outstream.push(t);
-				Q.pop();
 			}
 		}
+		startend.Value.Value = '}';
+		outstream.push(startend);
 		return outstream;
 	}
 
-	std::queue<TokenContext> SymbolicAtom::Tokenise() {
+	std::queue<TokenContext> SymbolicAtom::Tokenise(Environment* env) {
 		std::queue<TokenContext> outstream;
 		TokenContext t;
 		switch (Type) {
@@ -264,7 +418,7 @@ namespace XLiSp {
 			outstream.push(t);
 			break;
 		case XLISP_LIST:
-			return List->Tokenise();
+			return List.Tokenise(env);
 		case XLISP_BOOLE:
 			t.Value.Type = LEXEME_INTEGER;
 			t.IntegerLiteral = (dword)Truth;
@@ -275,9 +429,22 @@ namespace XLiSp {
 			t.StringLiteral = "(XLiSp closure)";
 			outstream.push(t);
 			break;
+		case XLISP_TOKEN_LIST:
+			return TokenList.Tokenise(env);
 		default: exit(3054);
 		}
 		return outstream;
+	}
+
+	std::queue<TokenContext> TokenOrConsequences::Interpret(Environment* env) {
+		std::queue<TokenContext> R;
+		if (!IsConsequences) {
+			R.push(Token);
+			return R;
+		}
+
+		SymbolicAtom A = Consequences.Interpret(env);
+		return A.Tokenise(env);
 	}
 
 	void Environment::Set(std::string key, Symbolic value) {
@@ -306,14 +473,20 @@ namespace XLiSp {
 		Closures.push_back(closure);
 	}
 
-	void Environment::ExheritClosures() {
-		for (int i = 0; i < Closures.size(); i++) Parent->AddClosure(Closures[i]);
-		Closures.clear();
+	void Environment::ExheritClosure(Closure* closure) {
+		auto iterator = Closures.begin();
+		while (iterator != Closures.end()) {
+			if (*iterator == closure) {
+				Parent->AddClosure(closure);
+				iterator = Closures.erase(iterator);
+			} else iterator++;
+		}
 	}
 
 	Environment::~Environment() {
 		for (int i = 0; i < Children.size(); i++) delete Children[i];
 		for (int i = 0; i < Closures.size(); i++) delete Closures[i];
+		Parent->Children.erase(std::remove(Parent->Children.begin(), Parent->Children.end(), this));
 	}
 
 	SymbolicAtom XLiSpError(const char* fmt, ...) {
@@ -327,5 +500,50 @@ namespace XLiSp {
 
 		Flags.CodeError = 1;
 		return SymbolicAtom();
+	}
+
+	SymbolicAtom ListOfTokens::Interpret(Environment* env) {
+		std::vector<TokenOrConsequences> newList = std::vector<TokenOrConsequences>();
+		for (int i = 0; i < List.size(); i++) {
+			if (List[i].IsConsequences) {
+				std::queue<TokenContext> tokenisedStream = List[i].Interpret(env);
+				while (!tokenisedStream.empty()) {
+					newList.push_back(tokenisedStream.front());
+					tokenisedStream.pop();
+				}
+			} else newList.push_back(List[i]);
+		}
+		return SymbolicAtom(ListOfTokens(newList));
+	}
+
+	std::queue<TokenContext> ListOfTokens::Tokenise(Environment* env) {
+		std::queue<TokenContext> result;
+		for (int i = 0; i < List.size(); i++) {
+			result.push(List[i].GetToken());
+		}
+		return result;
+	}
+
+	SymbolicAtom SymbolicAtom::CastToString() {
+		switch (this->Type) {
+		case XLISP_NULL: return SymbolicAtom("null", false);
+		case XLISP_STRING: return *this;
+		case XLISP_IDENTIFIER: return SymbolicAtom(this->String, false);
+		case XLISP_INTEGER: return SymbolicAtom(std::to_string(this->Integer), false);
+		case XLISP_BOOLE: return SymbolicAtom(this->Truth ? "true" : "false", false);
+		case XLISP_CLOSURE: return SymbolicAtom("<#closure>", false);
+		case XLISP_TOKEN_LIST: return SymbolicAtom("<#token list>", false);
+		default: return XLiSpError("Cannot convert to string.\n");
+		case XLISP_LIST:
+			std::string total = "(";
+			std::vector<Symbolic> symbols = this->List.GetSymbols();
+			for (int i = 0; i < symbols.size(); i++) {
+				if (symbols[i].IsAtomic()) total += symbols[i].GetAtom().CastToString().String;
+				else total += SymbolicAtom(symbols[i].GetList()).CastToString().String;
+				if (i != symbols.size() - 1) total += ' ';
+			}
+			total += ')';
+			return SymbolicAtom(total, false);
+		}
 	}
 }

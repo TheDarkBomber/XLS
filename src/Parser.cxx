@@ -797,8 +797,9 @@ UQP(SignatureNode) ParseExtern() {
 }
 
 UQP(FunctionNode) ParseUnboundedExpression() {
+	static dword times = 0;
 	if (UQP(Expression) expression = ParseExpression()) {
-		UQP(SignatureNode) signature = MUQ(SignatureNode, "__mistakeman", VDX(std::string, XLSType)(), DefinedTypes["dword"]);
+		UQP(SignatureNode) signature = MUQ(SignatureNode, "__mistakeman" + std::to_string(times), VDX(std::string, XLSType)(), DefinedTypes["dword"]);
 		return MUQ(FunctionNode, std::move(signature), std::move(expression));
 	}
 	return nullptr;
