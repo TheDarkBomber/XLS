@@ -33,6 +33,7 @@ namespace XLiSp {
 		SymbolicAtom Interpret(Environment* env);
 		std::vector<Symbolic> GetSymbols() { return Symbols; }
 		Symbolic Expand(Environment* env);
+		SymbolicList Quasiquote(Environment* env);
 	};
 
 	class TokenOrConsequences {
@@ -67,6 +68,7 @@ namespace XLiSp {
 		bool Truth = true;
 		Closure* Enclosure;
 		ListOfTokens TokenList;
+		bool Quoted = false;
 		SymbolicAtom() : Type(XLISP_NULL), Truth(false) {}
 		SymbolicAtom(dword integer) : Integer(integer), Type(XLISP_INTEGER) {}
 		SymbolicAtom(std::string string, bool identifier) : String(string), Type(identifier ? XLISP_IDENTIFIER : XLISP_STRING) {}
@@ -91,6 +93,7 @@ namespace XLiSp {
 		bool IsAtomic() { return Atomic; }
 		SymbolicAtom GetAtom() { return Atom; }
 		SymbolicList GetList() { return List;}
+		bool IsSymbol(std::string symbol);
 	};
 
 	class SymbolicParser {
@@ -98,6 +101,7 @@ namespace XLiSp {
 	public:
 		SymbolicParser(std::queue<TokenContext> stream) : Stream(stream) {}
 		Symbolic ParseSymbolic();
+		Symbolic ParseReaderMacro(std::string special);
 		SymbolicList ParseList();
 		SymbolicAtom ParseAtom();
 		SymbolicAtom ParseTokenList();

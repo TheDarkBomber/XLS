@@ -199,6 +199,35 @@ namespace XLiSp {
 		return SymbolicAtom(SymbolicList(outlist));
 	}
 
+	static SymbolicAtom QuoteFun(SymbolicList symbolList, Environment* env) {
+		auto symbols = symbolList.GetSymbols();
+		SymbolicAtom atom = symbols[1].IsAtomic() ? symbols[1].GetAtom() : symbols[1].GetList();
+		atom.Quoted =  true;
+		return atom;
+	}
+
+	static SymbolicAtom UnquoteFun(SymbolicList symbolList, Environment* env) {
+		auto symbols = symbolList.GetSymbols();
+		SymbolicAtom atom = symbols[1].Interpret(env);
+		if (!atom.Quoted) return atom;
+		atom.Quoted = false;
+		return Symbolic(atom).Interpret(env);
+	}
+
+	static SymbolicAtom QuasiquoteFun(SymbolicList symbolList, Environment* env) {
+		auto symbols = symbolList.GetSymbols();
+		if (symbols[1].IsAtomic()) {
+			SymbolicAtom atom = symbols[1].GetAtom();
+			atom.Quoted = true;
+			return atom;
+		}
+		SymbolicList toQuasi = symbols[1].GetList().Quasiquote(env);
+		if (toQuasi.GetSymbols().size() > 0 && (toQuasi.GetSymbols()[0].IsSymbol("unquote") || toQuasi.GetSymbols()[0].IsSymbol("splice-unquote"))) return toQuasi.Interpret(env);
+		SymbolicAtom atom = toQuasi;
+		atom.Quoted = true;
+		return atom;
+	}
+
 	UQP(Expression) Evaluate(std::queue<TokenContext> InputStream) {
 		SymbolFunctionMap["i+"] = AddFun;
 		SymbolFunctionMap["i*"] = MulFun;
@@ -216,6 +245,10 @@ namespace XLiSp {
 		SymbolFunctionMap["join-tokens"] = JoinTokensFun;
 		SymbolFunctionMap["for"] = ForFun;
 		SymbolFunctionMap["list"] = ListFun;
+		SymbolFunctionMap["quote"] = QuoteFun;
+		SymbolFunctionMap["unquote"] = UnquoteFun;
+		SymbolFunctionMap["quasiquote"] = QuasiquoteFun;
+		SymbolFunctionMap["splice-unquote"] = UnquoteFun;
 		if (!GlobalEnvironment) GlobalEnvironment = new Environment();
 		UQP(SymbolicParser) parser = MUQ(SymbolicParser, InputStream);
 		Symbolic symbol = Symbolic(parser->ParseList());
@@ -237,9 +270,24 @@ namespace XLiSp {
 
 	Symbolic SymbolicParser::ParseSymbolic() {
 		TokenContext t = Stream.front();
-		if (t.Value.Type == LEXEME_CHARACTER && t.Value.Value == '(') {
-			Stream.pop();
-			return Symbolic(this->ParseList());
+		if (t.Value.Type == LEXEME_CHARACTER) {
+			switch(t.Value.Value) {
+			case '(': // ')'
+				Stream.pop();
+				return Symbolic(this->ParseList());
+			case '%':
+				Stream.pop();
+				return this->ParseReaderMacro("quote");
+			case '~':
+				Stream.pop();
+				return this->ParseReaderMacro("unquote");
+			case '`': // '`'
+				Stream.pop();
+				return this->ParseReaderMacro("quasiquote");
+			case ',':
+				Stream.pop();
+				return this->ParseReaderMacro("splice-unquote");
+			}
 		}
 		return Symbolic(this->ParseAtom());
 	}
@@ -277,6 +325,13 @@ namespace XLiSp {
 		default:
 			return SymbolicAtom(t.Identifier, true);
 		}
+	}
+
+	Symbolic SymbolicParser::ParseReaderMacro(std::string special) {
+		std::vector<Symbolic> outlist;
+		outlist.push_back(SymbolicAtom(special, true));
+		outlist.push_back(this->ParseSymbolic());
+		return SymbolicList(outlist);
 	}
 
 	SymbolicAtom SymbolicParser::ParseTokenList() {
@@ -317,10 +372,12 @@ namespace XLiSp {
 
 	SymbolicAtom Symbolic::Interpret(Environment* env) {
 		if (Atomic) {
+			if (Atom.Quoted) return Atom;
 			if (Atom.Type == XLISP_IDENTIFIER && env->Find(Atom.String))
 				return env->Get(Atom.String).Interpret(env);
 			if (Atom.Type == XLISP_TOKEN_LIST)
 				return Atom.TokenList.Interpret(env);
+			if (Atom.Type == XLISP_LIST) return Atom.List.Interpret(env);
 			return Atom;
 		}
  		return List.Interpret(env);
@@ -329,6 +386,7 @@ namespace XLiSp {
 	SymbolicAtom SymbolicList::Interpret(Environment* env) {
 		if (Symbols[0].IsAtomic()) {
 			SymbolicAtom atom = Symbols[0].GetAtom();
+			if (atom.Quoted) return atom;
 			if (atom.Type == XLISP_IDENTIFIER && SymbolFunctionMap.find(atom.String) != SymbolFunctionMap.end()) {
 				return SymbolFunctionMap[atom.String](*this, env);
 			} else if (atom.Type == XLISP_IDENTIFIER && env->Find(atom.String)) {
@@ -339,6 +397,7 @@ namespace XLiSp {
 
 			if (atom.Type == XLISP_CLOSURE) return atom.Enclosure->Interpret(*this, env);
 			if (atom.Type == XLISP_TOKEN_LIST) return atom.TokenList.Interpret(env);
+			if (atom.Type == XLISP_LIST) return atom.List.Interpret(env);
 			return SymbolicAtom(*this);
 		}
 		Symbols[0] = Symbols[0].Interpret(env);
@@ -373,6 +432,25 @@ namespace XLiSp {
 	Symbolic SymbolicList::Expand(Environment* env) {
 		for (int i = 0; i < Symbols.size(); i++) Symbols[i] = Symbols[i].Expand(env);
 		return *this;
+	}
+
+	SymbolicList SymbolicList::Quasiquote(Environment* env) {
+		std::vector<Symbolic> outsymbols;
+		for (Symbolic S : Symbols) {
+			if (S.IsAtomic()) outsymbols.push_back(S);
+			else {
+				std::vector<Symbolic> checkSymbols = S.GetList().GetSymbols();
+				if (checkSymbols.size() > 0 && checkSymbols[0].IsSymbol("unquote"))
+					outsymbols.push_back(S.Interpret(env));
+				else if (checkSymbols.size() > 0 && checkSymbols[0].IsSymbol("splice-unquote")) {
+					SymbolicAtom atom = S.Interpret(env);
+					if (atom.Type != XLISP_LIST) {outsymbols.push_back(atom); continue;}
+					std::vector<Symbolic> toSplice = atom.List.GetSymbols();
+					for (Symbolic K : toSplice) outsymbols.push_back(K);
+				} else outsymbols.push_back(S.GetList().Quasiquote(env));
+			}
+		}
+		return outsymbols;
 	}
 
 	std::queue<TokenContext> SymbolicList::Tokenise(Environment* env) {
@@ -445,6 +523,10 @@ namespace XLiSp {
 
 		SymbolicAtom A = Consequences.Interpret(env);
 		return A.Tokenise(env);
+	}
+
+	bool Symbolic::IsSymbol(std::string symbol) {
+		return this->IsAtomic() && this->GetAtom().Type == XLISP_IDENTIFIER && this->GetAtom().String == symbol;
 	}
 
 	void Environment::Set(std::string key, Symbolic value) {
