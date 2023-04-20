@@ -195,7 +195,7 @@ namespace XLiSp {
 	static SymbolicAtom ListFun(SymbolicList symbolList, Environment* env) {
 		auto symbols = symbolList.GetSymbols();
 		std::vector<Symbolic> outlist;
-		for (int i = 1; i < symbols.size(); i++) outlist.push_back(symbols[i]);
+		for (int i = 1; i < symbols.size(); i++) outlist.push_back(symbols[i].Interpret(env));
 		return SymbolicAtom(SymbolicList(outlist));
 	}
 
@@ -228,6 +228,28 @@ namespace XLiSp {
 		return atom;
 	}
 
+	static SymbolicAtom MacroFun(SymbolicList symbolList, Environment* env) {
+		auto symbols = symbolList.GetSymbols();
+		if (symbols.size() < 3) return XLiSpError("Expected 2 elements to macro!, but got %lu\n", symbols.size() - 1);
+		if (!symbols[1].IsAtomic()) return XLiSpError("Expected first element to macro! to be atomic.\n");
+		SymbolicAtom name = symbols[1].GetAtom();
+		if (name.Type != XLISP_IDENTIFIER) return XLiSpError("Expected first element to macro! to be an identifier.\n");
+		SymbolicAtom closure = symbols[2].Interpret(env);
+		if (closure.Type != XLISP_CLOSURE) return XLiSpError("Expected second element to macro! to be a closure.\n");
+		closure.Enclosure->Macro = true;
+		env->Set(name.String, closure);
+		return SymbolicAtom();
+	}
+
+	static SymbolicAtom MacroExpandFun(SymbolicList symbolList, Environment* env) {
+		auto symbols = symbolList.GetSymbols();
+		Symbolic expanded = symbols[1].MacroExpand(env);
+		std::vector<Symbolic> newSymbols;
+		newSymbols.push_back(SymbolicAtom("quote", true));
+		newSymbols.push_back(expanded);
+		return QuoteFun(newSymbols, env);
+	}
+
 	UQP(Expression) Evaluate(std::queue<TokenContext> InputStream) {
 		SymbolFunctionMap["i+"] = AddFun;
 		SymbolFunctionMap["i*"] = MulFun;
@@ -249,6 +271,8 @@ namespace XLiSp {
 		SymbolFunctionMap["unquote"] = UnquoteFun;
 		SymbolFunctionMap["quasiquote"] = QuasiquoteFun;
 		SymbolFunctionMap["splice-unquote"] = UnquoteFun;
+		SymbolFunctionMap["macro!"] = MacroFun;
+		SymbolFunctionMap["macroexpand"] = MacroExpandFun;
 		if (!GlobalEnvironment) GlobalEnvironment = new Environment();
 		UQP(SymbolicParser) parser = MUQ(SymbolicParser, InputStream);
 		Symbolic symbol = Symbolic(parser->ParseList());
@@ -371,6 +395,7 @@ namespace XLiSp {
 	}
 
 	SymbolicAtom Symbolic::Interpret(Environment* env) {
+		*this = MacroExpand(env);
 		if (Atomic) {
 			if (Atom.Quoted) return Atom;
 			if (Atom.Type == XLISP_IDENTIFIER && env->Find(Atom.String))
@@ -440,8 +465,8 @@ namespace XLiSp {
 			if (S.IsAtomic()) outsymbols.push_back(S);
 			else {
 				std::vector<Symbolic> checkSymbols = S.GetList().GetSymbols();
-				if (checkSymbols.size() > 0 && checkSymbols[0].IsSymbol("unquote"))
-					outsymbols.push_back(S.Interpret(env));
+				if (checkSymbols.size() > 1 && checkSymbols[0].IsSymbol("unquote"))
+					outsymbols.push_back(checkSymbols[1].Interpret(env));
 				else if (checkSymbols.size() > 0 && checkSymbols[0].IsSymbol("splice-unquote")) {
 					SymbolicAtom atom = S.Interpret(env);
 					if (atom.Type != XLISP_LIST) {outsymbols.push_back(atom); continue;}
@@ -523,6 +548,52 @@ namespace XLiSp {
 
 		SymbolicAtom A = Consequences.Interpret(env);
 		return A.Tokenise(env);
+	}
+
+	Symbolic Symbolic::MacroExpand(Environment* env) {
+		Symbolic retsymbolic = *this;
+		while (retsymbolic.IsMacro(env)) {
+			SymbolicList list = Atomic ? Atom.List : List;
+			std::vector<Symbolic> listSymbols = list.GetSymbols();
+			Closure* closure = env->Get(listSymbols[0].Atom.String).Atom.Enclosure;
+			for (int i = 1; i < listSymbols.size(); i++) {
+				SymbolicAtom atom = listSymbols[i].IsAtomic() ? listSymbols[i].GetAtom() : listSymbols[i].GetList();
+				atom.Quoted = true;
+				listSymbols[i] = atom;
+			}
+			list = listSymbols;
+			SymbolicAtom result = closure->Interpret(list, env);
+			result.Quoted = false;
+			retsymbolic = result;
+			retsymbolic = retsymbolic.Dequote();
+		}
+		return retsymbolic;
+	}
+
+	Symbolic Symbolic::Dequote() {
+		SymbolicAtom atom = Atomic ? Atom : List;
+		atom.Quoted = false;
+		if (atom.Type == XLISP_LIST) {
+			std::vector<Symbolic> symbols = atom.List.GetSymbols();
+			for (int i = 0; i < symbols.size(); i++) symbols[i] = symbols[i].Dequote();
+			return SymbolicList(symbols);
+		}
+		return atom;
+	}
+
+	bool Symbolic::IsMacro(Environment* env) {
+		SymbolicList list;
+		if (Atomic && Atom.Type != XLISP_LIST) return false;
+		list = Atomic ? Atom.List : List;
+		std::vector<Symbolic> symbols = list.GetSymbols();
+		if (symbols.size() < 1) return false;
+		if (!symbols[0].IsAtomic()) return false;
+		SymbolicAtom atom = symbols[0].Atom;
+		if (atom.Type != XLISP_IDENTIFIER) return false;
+		if (!env->Find(atom.String)) return false;
+		Symbolic S = env->Get(atom.String);
+		if (!S.IsAtomic() || !S.GetAtom().Enclosure->Macro) return false;
+		return true;
 	}
 
 	bool Symbolic::IsSymbol(std::string symbol) {

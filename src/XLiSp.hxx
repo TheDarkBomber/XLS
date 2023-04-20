@@ -94,6 +94,9 @@ namespace XLiSp {
 		SymbolicAtom GetAtom() { return Atom; }
 		SymbolicList GetList() { return List;}
 		bool IsSymbol(std::string symbol);
+		bool IsMacro(Environment* env);
+		Symbolic MacroExpand(Environment* env);
+		Symbolic Dequote();
 	};
 
 	class SymbolicParser {
@@ -129,6 +132,7 @@ namespace XLiSp {
 		SymbolicList Arguments;
 		Symbolic Body;
 	public:
+		bool Macro = false;
 		Closure() {}
 		Closure(SymbolicList arguments, Symbolic body) : Arguments(arguments), Body(body) {}
 		SymbolicAtom Interpret(SymbolicList symbolList, Environment* env);
