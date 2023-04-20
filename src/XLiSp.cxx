@@ -433,12 +433,30 @@ namespace XLiSp {
 		std::vector<Symbolic> symbols = symbolList.GetSymbols();
 		Environment* newEnv = new Environment(env);
 		std::vector<Symbolic> vars = Arguments.GetSymbols();
-		for (int i = 0; i < vars.size(); i++) {
+		bool evaluatingVariadic = false;
+		std::string variadicTerm;
+		int i;
+		for (i = 0; i < vars.size(); i++) {
 			if (!vars[i].IsAtomic()) return XLiSpError("Expected atomic argument in closure bindings list, got non-atomic argument instead.\n");
 			if (vars[i].GetAtom().Type != XLISP_IDENTIFIER) return XLiSpError("Closure argument list must contain only identifiers.\n");
 			std::string atomKey = vars[i].GetAtom().String;
+			if (evaluatingVariadic) { variadicTerm = atomKey; break; }
+			if (atomKey == "variadic") {
+				if (i != vars.size() - 2) return XLiSpError("Variadic symbol must be the second-to-last element in the closure argument list.\n");
+				evaluatingVariadic = true;
+				continue;
+			}
 			newEnv->Set(atomKey, symbols[i + 1].Interpret(env));
 		}
+
+		if (evaluatingVariadic) {
+			std::vector<Symbolic> rest;
+			for (i--; i < symbols.size() - 1; i++) {
+				rest.push_back(symbols[i + 1].Interpret(env));
+			}
+			newEnv->Set(variadicTerm, SymbolicAtom(SymbolicList(rest)));
+		}
+
 		SymbolicAtom result = Body.Interpret(newEnv);
 		if (result.Type == XLISP_CLOSURE) newEnv->ExheritClosure(result.Enclosure);
 		delete newEnv;
