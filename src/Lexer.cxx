@@ -22,6 +22,8 @@ StringTermination StringTerminator;
 dword SpacesDetected = 0;
 static bool Newline = false;
 
+void* ExtraData;
+
 char advance() {
 	char next = getchar();
 	if (Newline) {

@@ -60,6 +60,7 @@ Token GetNextToken() {
 		CurrentOperator = t.Operator;
 		CurrentInteger = t.IntegerLiteral;
 		CurrentToken = t.Value;
+		ExtraData = t.ExtraData;
 		TokenStream.pop();
 		return t.Value;
 	}
@@ -224,6 +225,8 @@ UQP(Expression) ParseDispatcher() {
 		return ParseVariadic();
 	case LEXEME_SLJMP:
 		return ParseSetLongJump();
+	case LEXEME_RAW:
+		return ParseRaw();
 	case LEXEME_VOLATILE:
 		GetNextToken();
 		return ParseExpression(true);
@@ -596,6 +599,12 @@ UQP(Expression) ParseXLiSp() {
 	}
 	GetNextToken();
 	return MUQ(XLiSpExpression, stream);
+}
+
+UQP(Expression) ParseRaw() {
+	SSA* rendered = (SSA*)ExtraData;
+	GetNextToken();
+	return MUQ(RawExpression, rendered);
 }
 
 UQP(Statement) ParseStruct() {

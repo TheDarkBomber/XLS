@@ -13,7 +13,8 @@ namespace XLiSp {
 		XLISP_LIST = 4,
 		XLISP_BOOLE = 5,
 		XLISP_CLOSURE = 6,
-		XLISP_TOKEN_LIST = 7
+		XLISP_TOKEN_LIST = 7,
+		XLISP_RENDERED_EXPRESSION = 8
 	};
 
 	class Symbolic;
@@ -68,6 +69,7 @@ namespace XLiSp {
 		bool Truth = true;
 		Closure* Enclosure;
 		ListOfTokens TokenList;
+		SSA* RenderedExpression;
 		bool Quoted = false;
 		SymbolicAtom() : Type(XLISP_NULL), Truth(false) {}
 		SymbolicAtom(dword integer) : Integer(integer), Type(XLISP_INTEGER) {}
@@ -76,6 +78,7 @@ namespace XLiSp {
 		SymbolicAtom(bool truth) : Truth(truth), Type(XLISP_BOOLE) {}
 		SymbolicAtom(Closure* enclosure) : Enclosure(enclosure), Type(XLISP_CLOSURE) {}
 		SymbolicAtom(ListOfTokens tokenList) : TokenList(tokenList), Type(XLISP_TOKEN_LIST) {}
+		SymbolicAtom(SSA* rendered) : RenderedExpression(rendered), Type(XLISP_RENDERED_EXPRESSION) {}
 		SymbolicAtom CastToString();
 		std::queue<TokenContext> Tokenise(Environment* env);
 	};

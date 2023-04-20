@@ -33,7 +33,8 @@ enum Lexeme {
 	LEXEME_CVARIADIC = 25,
 	LEXEME_VARIADIC = 26,
 	LEXEME_SLJMP = 27,
-	LEXEME_COUNTOF = 28
+	LEXEME_COUNTOF = 28,
+	LEXEME_RAW = 29
 };
 
 enum StringTermination {
@@ -55,6 +56,7 @@ struct TokenContext {
 	std::string Operator;
 	char CharacterLiteral;
 	bool Symbol = false;
+	void* ExtraData;
 };
 
 bool IsOperator(char c);

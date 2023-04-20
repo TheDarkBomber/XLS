@@ -1,5 +1,6 @@
 #include "XLiSp.hxx"
 #include "Lexer.hxx"
+#include "Parser.hxx"
 #include "colours.def.h"
 #include <stdarg.h>
 
@@ -187,14 +188,12 @@ namespace XLiSp {
 		SymbolicAtom endAtom = symbols[3].Interpret(env);
 		if (startAtom.Type != XLISP_INTEGER) return XLiSpError("Expected second element to for to be an integer.\n");
 		if (endAtom.Type != XLISP_INTEGER) return XLiSpError("Expected third element to for to be an integer.\n");
-		if (symbols[4].IsAtomic()) return XLiSpError("Expected fourth element to for to be a list.\n");
-		SymbolicList actionList = symbols[4].GetList();
 		std::vector<Symbolic> resultSymbols;
 		for (dword i = startAtom.Integer; i <= endAtom.Integer; i++) {
 			Environment* forEnv = new Environment(env);
 			SymbolicAtom iAtom = SymbolicAtom(i);
 			forEnv->Set(bindAtom.String, iAtom);
-			SymbolicAtom result = actionList.Interpret(forEnv);
+			SymbolicAtom result = symbols[4].Interpret(forEnv);
 			if (result.Type == XLISP_CLOSURE) forEnv->ExheritClosure(result.Enclosure);
 			delete forEnv;
 			resultSymbols.push_back(result);
@@ -333,7 +332,7 @@ namespace XLiSp {
 		return list[0].Interpret(env);
 	}
 
-	static SymbolicAtom TailFun(SymbolicList symbolList, Environment *env) {
+	static SymbolicAtom TailFun(SymbolicList symbolList, Environment* env) {
 		auto symbols = symbolList.GetSymbols();
 		if (symbols.size() < 2) return XLiSpError("Expected at least one element to tail, but got %lu.\n", symbols.size() - 1);
 		SymbolicAtom atom = symbols[1].Interpret(env);
@@ -343,6 +342,29 @@ namespace XLiSp {
 		std::vector<Symbolic> outlist = std::vector<Symbolic>();
 		for (int i = 1; i < list.size(); i++) outlist.push_back(list[i]);
 		return SymbolicList(outlist);
+	}
+
+	static SymbolicAtom RenderFun(SymbolicList symbolList, Environment* env) {
+		auto symbols = symbolList.GetSymbols();
+		if (symbols.size() < 2) return XLiSpError("Expected at least one element to render, but got %lu.\n", symbols.size() - 1);
+		SymbolicAtom atom = symbols[1].Interpret(env);
+		if (atom.Type == XLISP_RENDERED_EXPRESSION) return atom;
+		std::queue<TokenContext> TStream;
+		TokenContext startend;
+		startend.Value.Type = LEXEME_CHARACTER;
+		startend.Value.Value = '{';
+		TStream.push(startend);
+		std::queue<TokenContext> tokenised = atom.Tokenise(env);
+		while (!tokenised.empty()) {
+			TStream.push(tokenised.front());
+			tokenised.pop();
+		}
+		startend.Value.Value = '}';
+		TStream.push(startend);
+		TokenStream = TStream;
+		GetNextToken();
+		UQP(Expression) expr = ParseBlock();
+		return expr->Render();
 	}
 
 	UQP(Expression) Evaluate(std::queue<TokenContext> InputStream) {
@@ -377,6 +399,7 @@ namespace XLiSp {
 		SymbolFunctionMap["idx"] = IdxFun;
 		SymbolFunctionMap["head"] = HeadFun;
 		SymbolFunctionMap["tail"] = TailFun;
+		SymbolFunctionMap["render"] = RenderFun;
 		if (!GlobalEnvironment) GlobalEnvironment = new Environment();
 		UQP(SymbolicParser) parser = MUQ(SymbolicParser, InputStream);
 		Symbolic symbol = Symbolic(parser->ParseList());
@@ -415,6 +438,9 @@ namespace XLiSp {
 			case ',':
 				Stream.pop();
 				return this->ParseReaderMacro("splice-unquote");
+			case '$':
+				Stream.pop();
+				return this->ParseReaderMacro("render");
 			}
 		}
 		return Symbolic(this->ParseAtom());
@@ -604,25 +630,7 @@ namespace XLiSp {
 	}
 
 	std::queue<TokenContext> SymbolicList::Tokenise(Environment* env) {
-		std::queue<TokenContext> outstream;
-		TokenContext startend;
-		startend.Value.Type = LEXEME_CHARACTER;
-		startend.Value.Value = '{';
-		outstream.push(startend);
-		for (Symbolic symbol : Symbols) {
-			std::queue<TokenContext> Q = symbol.Interpret(env).Tokenise(env);
-			while (!Q.empty()) {
-				TokenContext t = Q.front();
-				outstream.push(t);
-				Q.pop();
-				t.Value.Type = LEXEME_CHARACTER;
-				t.Value.Value = ';';
-				outstream.push(t);
-			}
-		}
-		startend.Value.Value = '}';
-		outstream.push(startend);
-		return outstream;
+		return Symbols[Symbols.size() - 1].Interpret(env).Tokenise(env);
 	}
 
 	std::queue<TokenContext> SymbolicAtom::Tokenise(Environment* env) {
@@ -659,6 +667,11 @@ namespace XLiSp {
 			break;
 		case XLISP_TOKEN_LIST:
 			return TokenList.Tokenise(env);
+		case XLISP_RENDERED_EXPRESSION:
+			t.Value.Type = LEXEME_RAW;
+			t.ExtraData = RenderedExpression;
+			outstream.push(t);
+			break;
 		default: exit(3054);
 		}
 		return outstream;
@@ -811,6 +824,7 @@ namespace XLiSp {
 		case XLISP_BOOLE: return SymbolicAtom(this->Truth ? "true" : "false", false);
 		case XLISP_CLOSURE: return SymbolicAtom("<#closure>", false);
 		case XLISP_TOKEN_LIST: return SymbolicAtom("<#token list>", false);
+		case XLISP_RENDERED_EXPRESSION: return SymbolicAtom("<#rendered expression>", false);
 		default: return XLiSpError("Cannot convert to string.\n");
 		case XLISP_LIST:
 			std::string total = "(";

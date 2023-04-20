@@ -334,6 +334,13 @@ public:
 	SSA* Render() override;
 };
 
+class RawExpression : public Expression {
+	SSA* Rendered;
+public:
+	RawExpression(SSA* rendered) : Rendered(rendered) {}
+	SSA* Render() override { return Rendered; }
+};
+
 class SignatureNode {
 	std::string Name;
 	VDX(std::string, XLSType) Arguments;
@@ -400,6 +407,8 @@ extern dword CurrentColumn;
 extern std::string StringLiteral;
 extern StringTermination StringTerminator;
 
+extern void* ExtraData;
+
 Token GetNextToken();
 
 UQP(Expression) ParseExpression(bool isVolatile = false);
@@ -432,6 +441,7 @@ UQP(Expression) ParsePostfix(UQP(Expression) LHS);
 UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS, bool isVolatile = false);
 
 UQP(Expression) ParseXLiSp();
+UQP(Expression) ParseRaw();
 
 UQP(Statement) ParseStruct();
 UQP(Statement) ParseGlobalVariable(XLSType type);
