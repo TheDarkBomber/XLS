@@ -29,6 +29,16 @@ namespace XLiSp {
 		return SymbolicAtom(total);
 	}
 
+	static SymbolicAtom GreaterThanFun(SymbolicList symbolList, Environment* env) {
+		auto symbols = symbolList.GetSymbols();
+		if (symbols.size() < 3) return XLiSpError("Expected at least 2 elements to i>, but got %lu.\n", symbols.size());
+		SymbolicAtom A = symbols[1].Interpret(env);
+		SymbolicAtom B = symbols[2].Interpret(env);
+		if (A.Type != XLISP_INTEGER || B.Type != XLISP_INTEGER)
+			return XLiSpError("Cannot logically compare non-integer values.\n");
+		return A.Integer > B.Integer;
+	}
+
 	static SymbolicAtom ModulusFun(SymbolicList symbolList, Environment* env) {
 		auto symbols = symbolList.GetSymbols();
 		if (symbols.size() < 2) return XLiSpError("Expected at least 2 elements to i%, but got %lu.\n", symbols.size());
@@ -95,7 +105,7 @@ namespace XLiSp {
 
 	static SymbolicAtom IfFun(SymbolicList symbolList, Environment* env) {
 		std::vector<Symbolic> symbols = symbolList.GetSymbols();
-		if (symbols.size() < 3) return XLiSpError("Expected at least 3 elements to if, but got %lu\n", symbols.size());
+		if (symbols.size() < 4) return XLiSpError("Expected at least 2 elements to if, but got %lu\n", symbols.size() - 1);
 		SymbolicAtom condition = symbols[1].Interpret(env);
 		if (condition.Truth) return symbols[2].Interpret(env);
 		return symbols[3].Interpret(env);
@@ -250,9 +260,95 @@ namespace XLiSp {
 		return QuoteFun(newSymbols, env);
 	}
 
+	static SymbolicAtom ListTestFun(SymbolicList symbolList, Environment* env) {
+		auto symbols = symbolList.GetSymbols();
+		if (symbols.size() < 2) return XLiSpError("Expected at least one element to list?, but got %lu.\n", symbols.size() - 1);
+		SymbolicAtom atom = symbols[1].Interpret(env);
+		if (atom.Type == XLISP_LIST) return true;
+		return false;
+	}
+
+	static SymbolicAtom EmptyTestFun(SymbolicList symbolList, Environment* env) {
+		auto symbols = symbolList.GetSymbols();
+		if (symbols.size() < 2) return XLiSpError("Expected at least one element to empty?, but got %lu.\n", symbols.size() - 1);
+		SymbolicAtom atom = symbols[1].Interpret(env);
+		if (atom.Type != XLISP_LIST) return XLiSpError("Expected first argument to empty? to be a list.\n");
+		if (atom.List.GetSymbols().size() == 0)  return true;
+		return false;
+	}
+
+	static SymbolicAtom CountofFun(SymbolicList symbolList, Environment* env) {
+		auto symbols = symbolList.GetSymbols();
+		if (symbols.size() < 2) return XLiSpError("Expected at least one element to countof, but got %lu.\n", symbols.size() - 1);
+		SymbolicAtom atom = symbols[1].Interpret(env);
+		if (atom.Type != XLISP_LIST) return XLiSpError("Expected first argument to countof to be a list, got %d.\n", atom.Type);
+		return SymbolicAtom((dword)atom.List.GetSymbols().size());
+	}
+
+	static SymbolicAtom ConsFun(SymbolicList symbolList, Environment* env) {
+		auto symbols = symbolList.GetSymbols();
+		if (symbols.size() < 3) return XLiSpError("Expected at least two elements to cons, but got %lu.\n", symbols.size() - 1);
+		SymbolicAtom head = symbols[1].Interpret(env);
+		SymbolicAtom tail = symbols[2].Interpret(env);
+		if (tail.Type != XLISP_LIST) return XLiSpError("Expected second argument to cons to be a list.\n");
+		std::vector<Symbolic> outlist;
+		auto tailList = tail.List.GetSymbols();
+		outlist.push_back(head);
+		for (Symbolic S : tailList) outlist.push_back(S);
+		return SymbolicList(outlist);
+	}
+
+	static SymbolicAtom ConcatFun(SymbolicList symbolList, Environment* env) {
+		auto symbols = symbolList.GetSymbols();
+		std::vector<Symbolic> outlist;
+		for (int i = 1; i < symbols.size(); i++) {
+			SymbolicAtom atom = symbols[i].Interpret(env);
+			if (atom.Type != XLISP_LIST) return XLiSpError("Expected argument %d to concat to be a list.\n", i);
+			auto list = atom.List.GetSymbols();
+			for (Symbolic S : list) outlist.push_back(S);
+		}
+		return SymbolicList(outlist);
+	}
+
+	static SymbolicAtom IdxFun(SymbolicList symbolList, Environment* env) {
+		auto symbols = symbolList.GetSymbols();
+		if (symbols.size() < 3) return XLiSpError("Expected at least two elements to idx, but got %lu.\n", symbols.size() - 1);
+		SymbolicAtom atom = symbols[1].Interpret(env);
+		if (atom.Type != XLISP_LIST) return XLiSpError("Expected first argument to idx to be a list.\n");
+		std::vector<Symbolic> idxlist = atom.List.GetSymbols();
+		SymbolicAtom index = symbols[2].Interpret(env);
+		if (index.Type != XLISP_INTEGER) return XLiSpError("Expected second argument to idx to be a list.\n");
+		if (index.Integer >= idxlist.size()) return XLiSpError("Index %d out of bounds.\n", index.Integer);
+		return idxlist[index.Integer].Interpret(env);
+	}
+
+	static SymbolicAtom HeadFun(SymbolicList symbolList, Environment* env) {
+		auto symbols = symbolList.GetSymbols();
+		if (symbols.size() < 2) return XLiSpError("Expected at least one element to head, but got %lu.\n", symbols.size() - 1);
+		SymbolicAtom atom = symbols[1].Interpret(env);
+		if (atom.Type == XLISP_NULL) return atom;
+		if (atom.Type != XLISP_LIST) return XLiSpError("Expected first argument to head to be a list.\n");
+		std::vector<Symbolic> list = atom.List.GetSymbols();
+		if (list.size() == 0) return SymbolicAtom();
+		return list[0].Interpret(env);
+	}
+
+	static SymbolicAtom TailFun(SymbolicList symbolList, Environment *env) {
+		auto symbols = symbolList.GetSymbols();
+		if (symbols.size() < 2) return XLiSpError("Expected at least one element to tail, but got %lu.\n", symbols.size() - 1);
+		SymbolicAtom atom = symbols[1].Interpret(env);
+		if (atom.Type == XLISP_NULL) return SymbolicList(std::vector<Symbolic>());
+		if (atom.Type != XLISP_LIST) return XLiSpError("Expected first argument to tail to be a list.\n");
+		std::vector<Symbolic> list = atom.List.GetSymbols();
+		std::vector<Symbolic> outlist = std::vector<Symbolic>();
+		for (int i = 1; i < list.size(); i++) outlist.push_back(list[i]);
+		return SymbolicList(outlist);
+	}
+
 	UQP(Expression) Evaluate(std::queue<TokenContext> InputStream) {
 		SymbolFunctionMap["i+"] = AddFun;
 		SymbolFunctionMap["i*"] = MulFun;
+		SymbolFunctionMap["i>"] = GreaterThanFun;
 		SymbolFunctionMap["i%"] = ModulusFun;
 		SymbolFunctionMap["c="] = EqualsFun;
 		SymbolFunctionMap["set!"] = SetFun;
@@ -273,6 +369,14 @@ namespace XLiSp {
 		SymbolFunctionMap["splice-unquote"] = UnquoteFun;
 		SymbolFunctionMap["macro!"] = MacroFun;
 		SymbolFunctionMap["macroexpand"] = MacroExpandFun;
+		SymbolFunctionMap["list?"] = ListTestFun;
+		SymbolFunctionMap["empty?"] = EmptyTestFun;
+		SymbolFunctionMap["countof"] = CountofFun;
+		SymbolFunctionMap["cons"] = ConsFun;
+		SymbolFunctionMap["concat"] = ConcatFun;
+		SymbolFunctionMap["idx"] = IdxFun;
+		SymbolFunctionMap["head"] = HeadFun;
+		SymbolFunctionMap["tail"] = TailFun;
 		if (!GlobalEnvironment) GlobalEnvironment = new Environment();
 		UQP(SymbolicParser) parser = MUQ(SymbolicParser, InputStream);
 		Symbolic symbol = Symbolic(parser->ParseList());
@@ -409,6 +513,7 @@ namespace XLiSp {
 	}
 
 	SymbolicAtom SymbolicList::Interpret(Environment* env) {
+		if (Symbols.size() == 0) return *this;
 		if (Symbols[0].IsAtomic()) {
 			SymbolicAtom atom = Symbols[0].GetAtom();
 			if (atom.Quoted) return atom;
@@ -450,11 +555,13 @@ namespace XLiSp {
 		}
 
 		if (evaluatingVariadic) {
-			std::vector<Symbolic> rest;
+			std::vector<Symbolic> rest = std::vector<Symbolic>();
 			for (i--; i < symbols.size() - 1; i++) {
 				rest.push_back(symbols[i + 1].Interpret(env));
 			}
-			newEnv->Set(variadicTerm, SymbolicAtom(SymbolicList(rest)));
+			SymbolicAtom restAtom = SymbolicList(rest);
+			restAtom.Quoted = true;
+			newEnv->Set(variadicTerm, restAtom);
 		}
 
 		SymbolicAtom result = Body.Interpret(newEnv);

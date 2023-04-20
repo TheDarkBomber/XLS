@@ -398,6 +398,8 @@ bool IsIdentifier(char c) {
 	case ':':
 	case '@':
 	case '=':
+	case '>':
+	case '<':
 	case '?':
 	case '!':
 		return true;
