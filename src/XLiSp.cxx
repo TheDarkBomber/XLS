@@ -404,17 +404,18 @@ namespace XLiSp {
 		UQP(SymbolicParser) parser = MUQ(SymbolicParser, InputStream);
 		Symbolic symbol = Symbolic(parser->ParseList());
 		TokenContext t;
-		TokenStream = std::queue<TokenContext>();
+		auto WrapStream = std::queue<TokenContext>();
 		t.Value.Type = LEXEME_CHARACTER;
 		t.Value.Value = '{';
-		TokenStream.push(t);
+		WrapStream.push(t);
 		std::queue<TokenContext> OutputStream = symbol.Interpret(GlobalEnvironment).Tokenise(GlobalEnvironment);
 		while (!OutputStream.empty()) {
-			TokenStream.push(OutputStream.front());
+			WrapStream.push(OutputStream.front());
 			OutputStream.pop();
 		}
 		t.Value.Value = '}';
-		TokenStream.push(t);
+		WrapStream.push(t);
+		TokenStream = WrapStream;
 		GetNextToken();
 		return ParseBlock();
 	}
@@ -473,6 +474,7 @@ namespace XLiSp {
 			case '[': // ']'
 				return this->ParseTokenList();
 			}
+		case LEXEME_RAW: return SymbolicAtom((SSA*)t.ExtraData);
 		case LEXEME_END_OF_FILE:
 		case LEXEME_CHARACTER_LITERAL:
 			return XLiSpError("Attempted to understand token %d as atom.\n", t.Value.Type);
