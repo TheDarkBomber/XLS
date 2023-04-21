@@ -1,6 +1,7 @@
 #include "XLiSp.hxx"
 #include "Lexer.hxx"
 #include "Parser.hxx"
+#include "Type.hxx"
 #include "colours.def.h"
 #include <stdarg.h>
 
@@ -367,6 +368,14 @@ namespace XLiSp {
 		return expr->Render();
 	}
 
+	static SymbolicAtom QueryXLSTypeFun(SymbolicList symbolList, Environment* env) {
+		auto symbols = symbolList.GetSymbols();
+		if (symbols.size() < 2) return XLiSpError("Expected at least one element to xls-type, but got %lu.\n", symbols.size() - 1);
+		SymbolicAtom atom = symbols[1].Interpret(env);
+		if (atom.Type != XLISP_RENDERED_EXPRESSION) return XLiSpError("Expected first argument to xls-type to be a rendered XLS expression.\n");
+		return SymbolicAtom(TypeAnnotation[atom.RenderedExpression].Name, false);
+	}
+
 	UQP(Expression) Evaluate(std::queue<TokenContext> InputStream) {
 		SymbolFunctionMap["i+"] = AddFun;
 		SymbolFunctionMap["i*"] = MulFun;
@@ -400,6 +409,7 @@ namespace XLiSp {
 		SymbolFunctionMap["head"] = HeadFun;
 		SymbolFunctionMap["tail"] = TailFun;
 		SymbolFunctionMap["render"] = RenderFun;
+		SymbolFunctionMap["xls-type"] = QueryXLSTypeFun;
 		if (!GlobalEnvironment) GlobalEnvironment = new Environment();
 		UQP(SymbolicParser) parser = MUQ(SymbolicParser, InputStream);
 		Symbolic symbol = Symbolic(parser->ParseList());
