@@ -52,6 +52,9 @@ static void Handle() {
 		case LEXEME_TYPEDEF:
 			HandleTypedef();
 			break;
+		case LEXEME_FUNCDEF:
+			HandleFuncdef();
+			break;
 		default:
 			switch (CurrentToken.Value) {
 			case ';':

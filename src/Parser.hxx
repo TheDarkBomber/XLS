@@ -63,6 +63,14 @@ enum Variadism {
 	VARIADIC_XLS = 2
 };
 
+enum MacroArgumentType {
+	MACRO_ARGUMENT_INTEGER = 0,
+	MACRO_ARGUMENT_STRING = 1,
+	MACRO_ARGUMENT_EXPRESSION = 2,
+	MACRO_ARGUMENT_VARIADIC = 3,
+	MACRO_ARGUMENT_COMPOSITE = 4
+};
+
 struct ParserFlags {
 	uint Unused : 3;
 	uint NoOptimise : 1;
@@ -117,6 +125,7 @@ class DwordExpression : public Expression {
 	dword Value;
 public:
 	DwordExpression(dword value) : Value(value) {}
+	dword GetValue() { return Value; }
 	SSA *Render() override;
 };
 
@@ -133,6 +142,7 @@ class StringExpression : public Expression {
 	StringTermination Terminator;
 public:
 	StringExpression(std::string value, StringTermination terminator = ST_NULL, bool _mutable = false) : Value(value), Terminator(terminator), Mutable(_mutable) {}
+	std::string GetValue() { return Value; }
 	SSA *Render() override;
 };
 
@@ -327,6 +337,16 @@ public:
 	SSA *Render() override;
 };
 
+class MacroArgument;
+class MacroExpression : public Expression {
+	std::string Name;
+	std::vector<UQP(Expression)> Values;
+	std::vector<MacroArgument> Metatypes;
+public:
+	MacroExpression(std::string name, std::vector<UQP(Expression)> values, std::vector<MacroArgument> metatypes) : Name(name), Values(std::move(values)), Metatypes(metatypes) {}
+	SSA* Render() override;
+};
+
 class XLiSpExpression : public Expression {
 	std::queue<TokenContext> Stream;
 public:
@@ -382,6 +402,16 @@ public:
 	SSA *Render() override;
 };
 
+class MacroArgument {
+	MacroArgumentType Type;
+	std::vector<MacroArgument> Composite;
+public:
+	MacroArgument(const MacroArgumentType& type, std::vector<MacroArgument> composite, UQP(Expression) value) : Type(type), Composite(composite) {}
+	MacroArgument(const MacroArgumentType& type) : Type(type) {}
+	const MacroArgumentType& GetType() { return Type; }
+	std::vector<MacroArgument> GetComposite() { return Composite; }
+};
+
 class GlobalVariableNode : public Statement {
 	std::string Name;
 	dword Value;
@@ -422,6 +452,7 @@ UQP(Expression) ParseIf();
 UQP(Expression) ParseWhile(bool doWhile = false);
 UQP(Expression) ParseUnary();
 UQP(Expression) ParseDeclaration(XLSType type);
+UQP(Expression) ParseMacro(std::string macro);
 UQP(Expression) ParseBlock();
 UQP(Expression) ParseLabel();
 UQP(Expression) ParseJump();
@@ -446,6 +477,8 @@ UQP(Expression) ParseRaw();
 UQP(Statement) ParseStruct();
 UQP(Statement) ParseGlobalVariable(XLSType type);
 UQP(Statement) ParseTypedef();
+UQP(Statement) ParseFuncdef();
+UQP(Statement) ParseFuncdefMacro();
 
 UQP(SignatureNode) ParseSignature();
 UQP(SignatureNode) ParseExtern();
@@ -464,6 +497,7 @@ void HandleExtern();
 void HandleGlobal();
 void HandleStruct();
 void HandleTypedef();
+void HandleFuncdef();
 void HandleUnboundedExpression();
 
 void PreinitialiseJIT();
@@ -501,5 +535,7 @@ extern std::stack<llvm::BasicBlock*> BreakStack;
 extern std::stack<llvm::BasicBlock*> ContinueStack;
 
 extern std::queue<TokenContext> TokenStream;
+
+extern std::map<std::string, std::vector<MacroArgument>> Macros;
 
 #endif

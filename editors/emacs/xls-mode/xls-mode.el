@@ -70,7 +70,9 @@
 												 "c-variadic"
 												 "variadic"
 												 "setjump"
-												 "longjump"))
+												 "longjump"
+												 "funcdef"
+												 "funcdef macro"))
 					(x-types '("dword" "word" "byte" "boole" "void" "sdword" "sword" "sbyte" "fn&" "jumpbuf" "label&" "valist" "N/A"))
 					(x-auxillary '("sizeof" "typeof" "countof" "setcountof"))
 					(x-constants '())

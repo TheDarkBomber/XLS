@@ -85,6 +85,8 @@ std::string CurrentLabelIdentifier = "current";
 std::stack<llvm::BasicBlock*> BreakStack;
 std::stack<llvm::BasicBlock*> ContinueStack;
 
+std::map<std::string, std::vector<MacroArgument>> Macros;
+
 void AlertError(const char *error) {
 	llvm::errs() <<
 		COLOUR_YELLOW <<
@@ -141,6 +143,7 @@ UQP(Expression) ParseParenthetical() {
 
 UQP(Expression) ParseIdentifier(bool isVolatile) {
 	std::string identifier = CurrentIdentifier;
+	if (Macros.find(identifier) != Macros.end()) return ParseMacro(identifier);
 	if (CheckTypeDefined(identifier))
 		return ParseDeclaration(DefinedTypes[CurrentIdentifier]);
 	GetNextToken();
@@ -580,6 +583,35 @@ UQP(Expression) ParseDeclaration(XLSType type) {
 	return MUQ(DeclarationExpression, std::move(variableNames), type);
 }
 
+UQP(Expression) ParseMacro(std::string macro) {
+	GetNextToken();
+	if (CurrentToken.Value != '(') return ParseError("Expected open parenthesis to begin macro call.");
+	auto macrarguments = Macros[macro];
+	std::vector<UQP(Expression)> values;
+	for (MacroArgument M : macrarguments) {
+		GetNextToken();
+		switch (M.GetType()) {
+		case MACRO_ARGUMENT_INTEGER:
+			if (CurrentToken.Type != LEXEME_INTEGER) return ParseError("Expected integer in macro call.");
+			values.push_back(ParseDwordExpression());
+			break;
+		case MACRO_ARGUMENT_STRING:
+			if (CurrentToken.Type != LEXEME_STRING) return ParseError("Expected string in macro call.");
+			values.push_back(ParseStringExpression());
+			break;
+		case MACRO_ARGUMENT_EXPRESSION:
+			values.push_back(ParseExpression());
+			break;
+		default: return ParseError("Unimplemented macro argument type.");
+		}
+		if (CurrentToken.Value == ',') continue;
+		if (CurrentToken.Value != ')') return ParseError("Expected close parenthesis to end macro call.");
+	}
+	if (values.size() != macrarguments.size()) return ParseError("Count of macro metatypes and values do not match.");
+	GetNextToken();
+	return MUQ(MacroExpression, macro, std::move(values), macrarguments);
+}
+
 UQP(Expression) ParseXLiSp() {
 	GetNextToken();
 	if (CurrentToken.Value != '(') return ParseError("Expected open parenthesis to begin XLiSp expression");
@@ -666,6 +698,40 @@ UQP(Statement) ParseTypedef() {
 		return MUQ(NullNode);
 	}
 	return ParseError("Unknown typedef operand.", nullptr, nullptr);
+}
+
+UQP(Statement) ParseFuncdef() {
+	GetNextToken();
+	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier after funcdef.", 0, 0);
+	if (CMP(CurrentIdentifier, "macro")) return ParseFuncdefMacro();
+	return ParseError("Unknown funcdef operand.", 0, 0);
+}
+
+UQP(Statement) ParseFuncdefMacro() {
+	GetNextToken();
+	if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected identifier after funcdef macro.", 0, 0);
+	std::string macro = CurrentIdentifier;
+	GetNextToken();
+	if (CurrentToken.Type != LEXEME_CHARACTER || CurrentToken.Value != '(') return ParseError("Expected open parenthesis in funcdef macro.", 0, 0);
+	auto macrarguments = std::vector<MacroArgument>();
+	for (;;) {
+		GetNextToken();
+		if (CurrentToken.Type != LEXEME_IDENTIFIER && CurrentToken.Type != LEXEME_VARIADIC)
+			return ParseError("Expected identifier or variadic in funcdef macro.", 0, 0);
+		// TODO: Handle the variadic case.
+		if (CurrentIdentifier == "integer") macrarguments.push_back(MACRO_ARGUMENT_INTEGER);
+		else if (CurrentIdentifier == "string") macrarguments.push_back(MACRO_ARGUMENT_STRING);
+		else if (CurrentIdentifier == "expression") macrarguments.push_back(MACRO_ARGUMENT_EXPRESSION);
+		else return ParseError("Unknown metatype for funcdef macro.", 0, 0);
+
+		GetNextToken();
+		if (CurrentToken.Value == ',') continue;
+		if (CurrentToken.Value != ')') return ParseError("Expected close parenthesis in funcdef macro.", 0, 0);
+		else break;
+	}
+	Macros[macro] = macrarguments;
+	GetNextToken();
+	return MUQ(NullNode);
 }
 
 UQP(Statement) ParseGlobalVariable(XLSType type) {
@@ -1518,6 +1584,42 @@ SSA* DeclarationExpression::Render() {
 	return ZeroSSA(Type);
 }
 
+SSA* MacroExpression::Render() {
+	std::vector<XLiSp::Symbolic> Symbols;
+	Symbols.push_back(XLiSp::SymbolicAtom(Name, true));
+	for (int i = 0; i < Values.size(); i++) {
+		switch (Metatypes[i].GetType()) {
+		case MACRO_ARGUMENT_INTEGER:
+			Symbols.push_back(XLiSp::SymbolicAtom(static_cast<DwordExpression*>(Values[i].get())->GetValue()));
+			break;
+		case MACRO_ARGUMENT_STRING:
+			Symbols.push_back(XLiSp::SymbolicAtom(static_cast<StringExpression*>(Values[i].get())->GetValue(), false));
+			break;
+		case MACRO_ARGUMENT_EXPRESSION:
+			Symbols.push_back(XLiSp::SymbolicAtom(Values[i]->Render()));
+			break;
+		default: return CodeError("Unknown render implementation for metatype.");
+		}
+	}
+
+	auto WrapStream = std::queue<TokenContext>();
+	TokenContext startend;
+	startend.Value.Type = LEXEME_CHARACTER;
+	startend.Value.Value = '{';
+	WrapStream.push(startend);
+	auto OutputStream = XLiSp::Symbolic(XLiSp::SymbolicList(Symbols)).Interpret(XLiSp::GlobalEnvironment).Tokenise(XLiSp::GlobalEnvironment);
+	while (!OutputStream.empty()) {
+		WrapStream.push(OutputStream.front());
+		OutputStream.pop();
+	}
+	startend.Value.Value = '}';
+	WrapStream.push(startend);
+	TokenStream = WrapStream;
+
+	GetNextToken();
+	return ParseBlock()->Render();
+}
+
 SSA* XLiSpExpression::Render() {
 	return XLiSp::Evaluate(Stream)->Render();
 }
@@ -1679,6 +1781,8 @@ void InitialiseModule(std::string moduleName) {
 	GlobalFPM->doInitialization();
 
 	Builder = MUQ(llvm::IRBuilder<>, *GlobalContext);
+
+	XLiSp::GlobalEnvironment = new XLiSp::Environment();
 
 	// Type definitions.
 	XLSType InvalidType;
@@ -1897,6 +2001,10 @@ void HandleStruct() {
 
 void HandleTypedef() {
 	if (!ParseTypedef()) GetNextToken();
+}
+
+void HandleFuncdef() {
+	if (!ParseFuncdef()) GetNextToken();
 }
 
 void HandleUnboundedExpression() {

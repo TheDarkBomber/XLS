@@ -144,6 +144,8 @@ namespace XLiSp {
 	UQP(Expression) Evaluate(std::queue<TokenContext> InputStream);
 
 	SymbolicAtom XLiSpError(const char* fmt, ...);
+
+	extern Environment* GlobalEnvironment;
 }
 
 #endif

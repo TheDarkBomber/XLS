@@ -7,7 +7,7 @@
 
 namespace XLiSp {
 	std::map<std::string, Fun> SymbolFunctionMap;
-	static Environment* GlobalEnvironment = nullptr;
+	Environment* GlobalEnvironment = nullptr;
 
 	static SymbolicAtom AddFun(SymbolicList symbolList, Environment* env) {
 		dword total = 0;
@@ -410,7 +410,6 @@ namespace XLiSp {
 		SymbolFunctionMap["tail"] = TailFun;
 		SymbolFunctionMap["render"] = RenderFun;
 		SymbolFunctionMap["xls-type"] = QueryXLSTypeFun;
-		if (!GlobalEnvironment) GlobalEnvironment = new Environment();
 		UQP(SymbolicParser) parser = MUQ(SymbolicParser, InputStream);
 		Symbolic symbol = Symbolic(parser->ParseList());
 		TokenContext t;

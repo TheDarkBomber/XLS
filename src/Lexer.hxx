@@ -34,7 +34,8 @@ enum Lexeme {
 	LEXEME_VARIADIC = 26,
 	LEXEME_SLJMP = 27,
 	LEXEME_COUNTOF = 28,
-	LEXEME_RAW = 29
+	LEXEME_RAW = 29,
+	LEXEME_FUNCDEF = 30
 };
 
 enum StringTermination {
