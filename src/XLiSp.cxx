@@ -140,9 +140,19 @@ namespace XLiSp {
 
 	static SymbolicAtom AsStringFun(SymbolicList symbolList, Environment* env) {
 		auto symbols = symbolList.GetSymbols();
-		if (symbols.size() < 1) return XLiSpError("Expected at least 1 element to as-string, but got %lu\n", symbols.size());
+		if (symbols.size() < 2) return XLiSpError("Expected at least 1 element to as-string, but got %lu\n", symbols.size() - 1);
 		SymbolicAtom atom = symbols[1].Interpret(env);
 		return atom.CastToString();
+	}
+
+	static SymbolicAtom AsIdentifierFun(SymbolicList symbolList, Environment* env) {
+		auto symbols = symbolList.GetSymbols();
+		if (symbols.size() < 2) return XLiSpError("Expected at least 1 element to as-identifier, but got %lu.\n", symbols.size() - 1);
+		SymbolicAtom atom = symbols[1].Interpret(env);
+		if (atom.Type != XLISP_STRING) return XLiSpError("Expected input to as-identifier to be a string.\n");
+		SymbolicAtom k = SymbolicAtom(atom.String, true);
+		k.Quoted = true;
+		return k;
 	}
 
 	static SymbolicAtom StrcatFun(SymbolicList symbolList, Environment* env) {
@@ -390,6 +400,7 @@ namespace XLiSp {
 		SymbolFunctionMap["echo"] = EchoFun;
 		SymbolFunctionMap["error"] = ErrorFun;
 		SymbolFunctionMap["as-string"] = AsStringFun;
+		SymbolFunctionMap["as-identifier"] = AsIdentifierFun;
 		SymbolFunctionMap["strcat"] = StrcatFun;
 		SymbolFunctionMap["join-tokens"] = JoinTokensFun;
 		SymbolFunctionMap["for"] = ForFun;

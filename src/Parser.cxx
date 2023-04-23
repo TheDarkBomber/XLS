@@ -602,6 +602,12 @@ UQP(Expression) ParseMacro(std::string macro) {
 		case MACRO_ARGUMENT_EXPRESSION:
 			values.push_back(ParseExpression());
 			break;
+		case MACRO_ARGUMENT_TYPENAME:
+			if (!CheckTypeDefined(CurrentIdentifier)) return ParseError("Expected type name in macro call.");
+		case MACRO_ARGUMENT_IDENTIFIER:
+			values.push_back(std::move(MUQ(VariableExpression, CurrentIdentifier)));
+			GetNextToken();
+			break;
 		default: return ParseError("Unimplemented macro argument type.");
 		}
 		if (CurrentToken.Value == ',') continue;
@@ -722,6 +728,8 @@ UQP(Statement) ParseFuncdefMacro() {
 		if (CurrentIdentifier == "integer") macrarguments.push_back(MACRO_ARGUMENT_INTEGER);
 		else if (CurrentIdentifier == "string") macrarguments.push_back(MACRO_ARGUMENT_STRING);
 		else if (CurrentIdentifier == "expression") macrarguments.push_back(MACRO_ARGUMENT_EXPRESSION);
+		else if (CurrentIdentifier == "typename") macrarguments.push_back(MACRO_ARGUMENT_TYPENAME);
+		else if (CurrentIdentifier == "identifier") macrarguments.push_back(MACRO_ARGUMENT_IDENTIFIER);
 		else return ParseError("Unknown metatype for funcdef macro.", 0, 0);
 
 		GetNextToken();
@@ -1587,6 +1595,7 @@ SSA* DeclarationExpression::Render() {
 SSA* MacroExpression::Render() {
 	std::vector<XLiSp::Symbolic> Symbols;
 	Symbols.push_back(XLiSp::SymbolicAtom(Name, true));
+	XLiSp::SymbolicAtom k;
 	for (int i = 0; i < Values.size(); i++) {
 		switch (Metatypes[i].GetType()) {
 		case MACRO_ARGUMENT_INTEGER:
@@ -1597,6 +1606,12 @@ SSA* MacroExpression::Render() {
 			break;
 		case MACRO_ARGUMENT_EXPRESSION:
 			Symbols.push_back(XLiSp::SymbolicAtom(Values[i]->Render()));
+			break;
+		case MACRO_ARGUMENT_TYPENAME:
+		case MACRO_ARGUMENT_IDENTIFIER:
+			k = XLiSp::SymbolicAtom(static_cast<VariableExpression*>(Values[i].get())->GetName(), true);
+			k.Quoted = true;
+			Symbols.push_back(k);
 			break;
 		default: return CodeError("Unknown render implementation for metatype.");
 		}
