@@ -27,7 +27,7 @@ xls: $(BUILD)/xls
 
 $(BUILD)/xls: $(CXX_OBJECTS)
 	@echo $(CXX_OBJECTS)
-	$(LD) $(LDFLAGS) -o $@ $^ $(CCLIBRARIES)
+	$(LD) $(LDFLAGS) $(CCLIBRARIES) -o $@ $^
 	@echo "[XLS] COMPILED xls"
 
 $(OBJ_LOCATION)/%.o: $(SOURCES)/%.cxx always
