@@ -386,6 +386,27 @@ namespace XLiSp {
 		return SymbolicAtom(TypeAnnotation[atom.RenderedExpression].Name, false);
 	}
 
+	static SymbolicAtom XLSStructureLayoutFun(SymbolicList symbolList, Environment* env) {
+		auto symbols = symbolList.GetSymbols();
+		if (symbols.size() < 2) return XLiSpError("Expected at least one element to xls-structure-information, but got %lu.\n", symbols.size() - 1);
+		SymbolicAtom atom = symbols[1].Interpret(env);
+		if (atom.Type == XLISP_RENDERED_EXPRESSION) atom = SymbolicAtom(TypeAnnotation[atom.RenderedExpression].Name, false);
+		if (atom.Type == XLISP_IDENTIFIER) atom.Type = XLISP_STRING;
+		if (atom.Type != XLISP_STRING) return XLiSpError("Expected first argument to xls-type to be a string, identifier, or a rendered XLS expression.\n");
+		if (DefinedTypes.find(atom.String) == DefinedTypes.end()) return XLiSpError("Expected first argument to xls-type to be a valid type.\n");
+		XLSType type = DefinedTypes[atom.String];
+		while (!type.IsStruct && type.IsPointer) type = DefinedTypes[type.Dereference];
+		if (!type.IsStruct) return SymbolicList();
+		std::vector<Symbolic> outlist;
+		for (auto const& field : type.Structure.Fields) {
+			std::vector<Symbolic> pair = std::vector<Symbolic>(2);
+			pair[1] = SymbolicAtom(field.first, false);
+			pair[0] = SymbolicAtom(field.second.second.Name, false);
+			outlist.push_back(SymbolicAtom(pair));
+		}
+		return SymbolicAtom(outlist);
+	}
+
 	UQP(Expression) Evaluate(std::queue<TokenContext> InputStream) {
 		SymbolFunctionMap["i+"] = AddFun;
 		SymbolFunctionMap["i*"] = MulFun;
@@ -421,6 +442,7 @@ namespace XLiSp {
 		SymbolFunctionMap["tail"] = TailFun;
 		SymbolFunctionMap["render"] = RenderFun;
 		SymbolFunctionMap["xls-type"] = QueryXLSTypeFun;
+		SymbolFunctionMap["xls-structure-layout"] = XLSStructureLayoutFun;
 		UQP(SymbolicParser) parser = MUQ(SymbolicParser, InputStream);
 		Symbolic symbol = Symbolic(parser->ParseList());
 		TokenContext t;
