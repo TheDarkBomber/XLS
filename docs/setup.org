@@ -1,0 +1,16 @@
+# -*- mode: org; -*-
+
+#+OPTIONS: html-style:nil
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="aux/readtheorg_theme/css/htmlize.css"/>
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="aux/readtheorg_theme/css/readtheorg.css"/>
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="../../lirix/1984/font/stylesheet.css"/>
+
+#+HTML_HEAD: <script type="text/javascript" src="aux/lib/js/jquery.min.js"></script>
+#+HTML_HEAD: <script type="text/javascript" src="aux/lib/js/bootstrap.min.js"></script>
+#+HTML_HEAD: <script type="text/javascript" src="aux/lib/js/jquery.stickytableheaders.min.js"></script>
+#+HTML_HEAD: <script type="text/javascript" src="aux/readtheorg_theme/js/readtheorg.js"></script>
+
+#+HTML_HEAD: <style> #content{max-width:1800px;}</style>
+#+HTML_HEAD: <style> p{max-width:800px;}</style>
+#+HTML_HEAD: <style> li{max-width:800px;}</style
+

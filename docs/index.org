@@ -1,0 +1,15 @@
+#+TITLE: XLS Documentation Index
+#+AUTHOR: Caesar
+#+SETUPFILE: setup.org
+#+DESCRIPTION: Test index page for XLS documentation.
+#+OPTIONS: toc:2
+#+OPTIONS: p:t
+#+OPTIONS: H:4
+
+* Heading one
+Hi! First heading
+
+** Heading two
+Next heading
+
+[[./basics.org][Basic overview]]

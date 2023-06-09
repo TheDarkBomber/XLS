@@ -1,0 +1,74 @@
+#+TITLE: Basic Overview
+#+AUTHOR: Caesar
+#+SETUPFILE: setup.org
+#+DESCRIPTION: A basic overview of XLS syntax and features.
+#+OPTIONS: toc:2
+#+OPTIONS: p:t
+#+OPTIONS: H:4
+
+This document will provide an overview of the syntax of XLS and basic features.
+
+* Functions
+** Declaration
+To declare that a function exists:
+#+BEGIN_SRC xls
+extern name();
+#+END_SRC
+This declares an anadic function named ~name~ that returns ~dword~. A more complex example of a
+function declaration may be:
+#+BEGIN_SRC xls
+extern name(sword argument, byte* text) : void;
+#+END_SRC
+This declares a dyad named ~name~ that returns ~void~. In general, the syntax for
+declaring a function is:
+#+BEGIN_SRC fundamental
+[keyword: extern] [identifier][parenthetical: ([typename] [identifier], ...)][optional: ':' [typename]][optional ';']
+#+END_SRC
+** Implementation
+Of course, the above only declares that a function exist, to aid the linker.
+It says nothing about how to actually write a function.
+
+Let there be a function ~print~, that prints a message to a screen. Assuming NXLS is
+used as the fulfilling standard, a simple ~Hey there, Galaxy~ program could look like
+the following:
+#+BEGIN_SRC xls
+// insert include for print here.
+  
+impl main(dword argc, byte** argv) {
+	print("Hey there, Galaxy!\n");		
+}
+#+END_SRC
+
+The program is simple and short. A function, ~main~ is implemented, that calls the
+~print~ function, defined in NXLS via a header file, omitted for this demonstration.
+
+Implementing a function looks a lot like declaring a function, only that it must
+also have an expression following it.
+
+#+begin_note
+The keyword ~implement~ may also be used instead of ~impl~, for those of us who like
+verbatim names.
+#+end_note
+
+The general syntax is, therefore:
+#+BEGIN_SRC fundamental
+[keyword: impl or implement][function signature][expression][optional ';']
+#+END_SRC
+** Calling convention
+#+begin_warning
+*Deprecation* \\
+This particular feature of XLS will be deprecated in favour of a feature not yet implemented.
+
+In general, XLS is currently an in-progress work and is subject to change.
+#+end_warning
+
+There was a lie when the general syntax for function signatures were mentioned.
+Function signatures may also be prepended with a calling convention, such as ~coldcc~.
+
+#+BEGIN_SRC xls
+extern coldcc name();
+#+END_SRC
+
+This feature would change the calling convention to one specified. However, as calling
+conventions are a detail that aren't necessarily compatible between targets, this feature
+is somewhat crude and will be deprecated in future in favour of an attributes feature.
