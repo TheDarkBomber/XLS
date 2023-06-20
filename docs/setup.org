@@ -5,6 +5,8 @@
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="aux/readtheorg_theme/css/readtheorg.css"/>
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="../../lirix/1984/font/stylesheet.css"/>
 
+#+HTML_HEAD: <link rel="icon" type="image/png" href="aux/favicon.png"/>
+
 #+HTML_HEAD: <script type="text/javascript" src="aux/lib/js/jquery.min.js"></script>
 #+HTML_HEAD: <script type="text/javascript" src="aux/lib/js/bootstrap.min.js"></script>
 #+HTML_HEAD: <script type="text/javascript" src="aux/lib/js/jquery.stickytableheaders.min.js"></script>

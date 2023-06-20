@@ -9,7 +9,13 @@
 This document will provide an overview of the syntax of XLS and basic features.
 
 * Functions
+:PROPERTIES:
+:CUSTOM_ID: functions
+:END:
 ** Declaration
+:PROPERTIES:
+:CUSTOM_ID: extern
+:END:
 To declare that a function exists:
 #+BEGIN_SRC xls
 extern name();
@@ -25,6 +31,9 @@ declaring a function is:
 [keyword: extern] [identifier][parenthetical: ([typename] [identifier], ...)][optional: ':' [typename]][optional ';']
 #+END_SRC
 ** Implementation
+:PROPERTIES:
+:CUSTOM_ID: impl
+:END:
 Of course, the above only declares that a function exist, to aid the linker.
 It says nothing about how to actually write a function.
 
@@ -55,6 +64,9 @@ The general syntax is, therefore:
 [keyword: impl or implement][function signature][expression][optional ';']
 #+END_SRC
 ** Calling convention
+:PROPERTIES:
+:CUSTOM_ID: calling-convention
+:END:
 #+begin_warning
 *Deprecation* \\
 This particular feature of XLS will be deprecated in favour of a feature not yet implemented.
@@ -72,3 +84,591 @@ extern coldcc name();
 This feature would change the calling convention to one specified. However, as calling
 conventions are a detail that aren't necessarily compatible between targets, this feature
 is somewhat crude and will be deprecated in future in favour of an attributes feature.
+
+* Expressions
+:PROPERTIES:
+:CUSTOM_ID: expressions
+:END:
+
+XLS is an [[https://en.wikipedia.org/wiki/Expression-oriented_programming_language][expression-oriented]] language, meaning that every construction in the language is
+an expression that yields a value, even if the value is null.
+
+However, there are exceptions to this. Specifically, only non-top-level statements are expressions.
+For simplicity, this document will refer to top-level statements as simply statements.
+
+An expression can take many forms, and the basic expression types shall now be listed.
+
+** Literals
+:PROPERTIES:
+:CUSTOM_ID: literals
+:END:
+
+Literals are expressions whose values are literally what they say they are. Fiat expressions,
+so to speak. These are things such as numerals, ~3054~, or strings: ~"Hey there, Galaxy"~.
+
+*** Numerals
+
+Numeric literals represent a numerical value, and can be represented in a variety of radices,
+or bases. To form a numeric literal with a given base, simply prepend a prefix such as ~0x~ to the
+numeral, e.g. ~0xBEE~. Whenever a radix is large enough to require alphabetical symbols,
+numeric literals are case-insensitive; so ~0xBEE == 0xbee == 0xBeE~.
+
+#+CAPTION: Radix prefixes for numeric literals
+| Prefix | Radix | English name         |
+|--------+-------+----------------------|
+| 0b     |     2 | Binary               |
+| 0q     |     4 | Quaternary/Tetrimal  |
+| 0s     |     6 | Heximal              |
+| 0o     |     8 | Octal                |
+| 0d     |    10 | Decimal              |
+| 0x     |    16 | Hexadecimal/Tessimal |
+| 0n     |    36 | Niftimal             |
+
+#+begin_note
+The prefix for decimal is assumed by default, and only exists explicitly for completeness.
+#+end_note
+
+*** Characters
+
+Character literals represent an [[https://en.wikipedia.org/wiki/ASCII][ASCII]] character, and have a size of 1 byte, or 8 bits.
+They are denoted by wrapping a single ASCII character in apostrophetic parentheses, e.g.
+~'X'~ to represent the ASCII character ~X~.
+
+However, if one wishes to print non-printable characters, such as the newline characters,
+one would perhaps use an [[https://en.wikipedia.org/wiki/Escape_sequence][escape sequence]] instead. These are denoted by prepending a backslash
+to a character that stands-in as a code to know which non-printable is which, e.g.
+~\n~ for a newline character. To actually represent a backslash, use ~'\\'~.
+
+#+CAPTION: List of escape sequences for character literals
+| Escape sequence | ASCII value | Standard name             |
+|-----------------+-------------+---------------------------|
+| 0               |        0x00 | Null                      |
+| H               |        0x01 | Start of Heading          |
+| T               |        0x02 | Start of Text             |
+| X               |        0x03 | End of Text               |
+| E               |        0x04 | End of Transmission       |
+| Q               |        0x05 | Enquiry                   |
+| A               |        0x06 | Achknowledge              |
+| a               |        0x07 | Bell                      |
+| b               |        0x08 | Backspace                 |
+| t OR h          |        0x09 | Horizontal Tabstop        |
+| n               |        0x0A | Newline                   |
+| v               |        0x0B | Vertical Tabstop          |
+| f               |        0x0C | Formfeed                  |
+| r               |        0x0D | Carriage Return           |
+| O               |        0x0E | Shift Out                 |
+| I               |        0x0F | Shift In                  |
+| D               |        0x10 | Data Link Escape          |
+| 1               |        0x11 | Device Control 1          |
+| 2               |        0x12 | Device Control 2          |
+| 3               |        0x13 | Device Control 3          |
+| 4               |        0x14 | Device Control 4          |
+| N               |        0x15 | Negative Achknowledge     |
+| Y               |        0x16 | Synchronous Idle          |
+| B               |        0x17 | End of Transmission Block |
+| C               |        0x18 | Cancel                    |
+| M               |        0x19 | End of Medium             |
+| S               |        0x1A | Substitute                |
+| $               |        0x1B | Escape                    |
+| F               |        0x1C | File Separator            |
+| G               |        0x1D | Group Separator           |
+| R               |        0x1E | Record Separator          |
+| U               |        0x1F | Unit Separator            |
+| *               |        0x7F | Delete                    |
+| %               |        0xFF | Antinull                  |
+
+#+begin_note
+The lowercase escape sequences are holdover symbols from C, except for ~h~ which was added
+in order to complement ~v~.
+#+end_note
+
+Sometimes it is necessary to write character literals that do not have an escape sequence.
+Any arbitrary 8-bit value can be written using ~'\xAB'~, for instance, to represent the
+hexadecimal value ~0xAB~ as a character literal.
+
+*** Strings
+
+Strings are a sequence of characters, and string literals may be represnted as such. To ensure
+backwards compatibility with C, all string literals implicitly end with null, however this
+is not counted in the length of the string. Any string literal may be prefixed by ~R~ to
+prevent a null value being placed at the string's end.
+
+Strings can be represented using quote-parentheses, e.g. ~"Hey there, Galaxy!"~. A string literal
+is simply written as a sequence of character literals, with all the rules applying. The only
+difference is that there be no need to wrap each individual character literal in the sequence with
+apostrophetic parentheses.
+
+String literals, as an expression, yield the value of a [[#ranged-pointers][ranged pointer]], which stores a regular
+[[#pointers][pointer]] and a length. So, the length of a string literal is yelt along with its contents.
+
+Specifically, the type would be ~byte%~.
+
+*** Arrays
+
+Array literals can be constructed in XLS. These are simple, they are a literal representation of
+an array, and provide a continuum of data. To represent them, use ~byte[5]~ for example, which yields
+an array of bytes with length ~5~. In particular, it yields a ranged pointer of type ~byte%~.
+
+One can also use them to get a pointer to some value, e.g. ~jumpbuf* jb = jumpbuf[1]~.
+
+** Block Expressions
+:PROPERTIES:
+:CUSTOM_ID: blocks
+:END:
+
+Block expressions represent a sequence of expressions, in order. Each expression inside
+a block must be separated by a semicolon. The last member of a block may also optionally end
+with a semicolon. As an expression, blocks yield the value of its last member. So, a function
+that returns a value could do so, like this:
+
+#+BEGIN_SRC xls
+implement add-one(dword number) {
+	number = number + 1;
+	number;
+}
+#+END_SRC
+
+or simply,
+
+#+BEGIN_SRC xls
+implement add-one(dword number) {
+	number = number + 1;
+}
+#+END_SRC
+
+, as assignment is also an expression.
+
+#+begin_caution
+*Block expressions are still expressions!*
+
+A block expression, if contained in the midst of another block expression must still end
+with a semicolon, to act as a separator for the next one.
+#+end_caution
+
+** Declaring Variables
+:PROPERTIES:
+:CUSTOM_ID: declaring-variables
+:END:
+
+Variables are considered by many to be, if not the best, the most important language feature of
+any programming language. XLS has them, and here's how to declare them:
+
+#+begin_src fundamental
+[typename] [identifier: variable-name] = [expression]
+#+end_src
+
+One may also declare variables without initialisation, such as ~byte name;~, or declare multiple
+variables at once: ~dword x = 4, y = 5, z;~.
+
+** Binary Operators
+:PROPERTIES:
+:CUSTOM_ID: binary
+:END:
+
+XLS also has a litany of binary operators, for operations such as addition and division.
+These are used like ~6 + (4 / 3)~ where ~+~ and ~/~ are operators. Note that parentheticals
+denote a complete expression.
+
+#+CAPTION: List of operators and their cardinal priority values.
+| Operator         | English name           | Priority |
+|------------------+------------------------+----------|
+| ~=~              | Assignment             |        2 |
+| ~&&~             | Logical And            |        5 |
+| ~\vert\vert~     | Logical Or             |        5 |
+| ~^^~             | Logical Xor            |        5 |
+| ~&~              | Bitwise And            |        6 |
+| ~\vert~          | Bitwise Or             |        6 |
+| ~^~              | Bitwise Xor            |        6 |
+| ~<~              | Less-than              |       10 |
+| ~>~              | Greater-than           |       10 |
+| ~==~             | Equals                 |       10 |
+| ~!=~             | Inequals               |       10 |
+| ~<=~             | Less-than-or-equals    |       10 |
+| ~>=~             | Greater-than-or-equals |       10 |
+| ~+~              | Addition               |       20 |
+| ~-~              | Subtraction            |       20 |
+| ~*~              | Multiplication         |       40 |
+| ~%~              | Modulus                |       40 |
+| ~/~              | Division               |       40 |
+| ~\vert>~         | Pipe                   |       50 |
+
+*** Pipe Operator
+
+In XLS, there is a binary operator known as the pipe operator, which is a special kind
+of operator. One uses it such as ~expression \vert> monad~, where ~expression~ is any
+expression, and ~monad~ is an expression that yields a monad, a function with a fixed arity of ~1~.
+
+~monad~ could also be instead a typename, which would then cast ~expression~ to that type.
+Another way to cast would be ~typename(expression);~. If, however, ~monad~ is not an expression,
+then the result is equivalent to evaluating ~monad~ on ~expression~, i.e. ~monad(expression);~.
+
+*** Unary Operators
+
+XLS also has unary operators: ~-~ for negation, ~\~~ for bitwise negation, ~*~ for dereferencing,
+and ~&~ for referencing a variable. Also ~&&~ for referencing a label.
+
+* Control Flow
+:PROPERTIES:
+:CUSTOM_ID: control-flow
+:END:
+
+** If-Conditionals
+:PROPERTIES:
+:CUSTOM_ID: if
+:END:
+
+The typical way of handling control flow in XLS is via the classical ~if~ statement, which
+needs an introduction. An example of a basic ~if~ expression is:
+
+#+BEGIN_SRC xls
+if (condition) do-this else do-that;
+#+END_SRC
+
+where ~condition~, ~do-this~, and ~do-that~ are expressions. Simply put, if the
+~condition~ expression evaluates to a true value (non-zero), then ~do-this~ is executed
+but ~do-that~ is not, and vice versa if the condition is false.
+
+The else branch of an ~if~ condition may be omitted by emitting the ~else do-that~.
+
+#+begin_caution
+*Beware the dangling else!*
+The /entire/ ~if~ expression is an expression, so you cannot end ~do-this~ with a semicolon
+and have an else branch. Semicolons separate expressions, and there is no ~else~ expression.
+
+So make sure the semicolon indicates the end of the entire ~if-then-else~ expression if there
+is an else branch present, else face a syntax error.
+#+end_caution
+
+** Time Loops (While)
+:PROPERTIES:
+:CUSTOM_ID: while
+:END:
+
+XLS has a feature that many other programming languages have: the classic ~while~ loop.
+A ~while~ loop allows the control flow of the program to be put into a time loop, reliving
+the same events until it does something that causes it to break out of the loop. Like that
+American movie I haven't watched.
+
+A while loop is quite simple:
+
+#+BEGIN_SRC xls
+while (condition) do-this;
+#+END_SRC
+
+It simply repeats the ~do-this~ expression so long as ~condition~ is true.
+
+*** Break & Continue
+
+However, what if you want to exit the time loop even when ~condition~ is true? Say you
+encounter some kind of edge case and need to abort, quickly? Or what if you're in the middle
+of evaluating ~do-this~ and you have a good excuse to skip the rest of evaluating ~do-this~
+and go back to the beginning of the time loop?
+
+Welcome one and all, to the revolutionary new feature of XLS: ~break~ and ~continue~. They're
+not actually revolutionary but why not pretend they are?
+
+Using them is simple.
+
+#+BEGIN_SRC xls
+while (condition) {
+	boole alive = do-necromancy();
+	if (alive) break;
+	print("We have not yet succeeded.\n");
+}
+#+END_SRC
+
+This function attempts to do necromancy, and if it successfully exits out of the time loop.
+Likewise, ~continue~ can be used if you just want to get back to the start of the loop instead
+of exiting it, like in Monopoly.
+
+Yet, there is a problem. What if we're in some kind of *double* time loop? One where if we
+break out of the first one, we'll end right back in the second one like Sisyphus? How can we
+break out of the Sisyphean time loop? Or continue it, for that matter?
+
+Not to worry, XLS supports nested ~break~ and ~continue~!
+
+#+BEGIN_SRC xls
+while (sisyphus) {
+	while (pushing-boulder) {
+		print(":c\n");
+    if (finally-on-top-of-hill) break 1;
+	}
+}
+#+END_SRC
+
+Simply put the number of additional loops one wishes to break or continue out of as a
+numeric literal after the respective keyword.
+
+#+begin_note
+~break~ and ~continue~ on their own are implicit for ~break 0~ and ~continue 0~ respectively,
+as they break or continue out of zero additional loops by default.
+#+end_note
+
+** Labels
+:PROPERTIES:
+:CUSTOM_ID: labels
+:END:
+
+Labels, ever so controversial. XLS has them, yes. Should you make often use of them, no.
+Are they useful, yes. And they are somewhat different in XLS.
+
+Firstly, to set a label, instead of the traditional ~name:~ syntax, one instead uses the
+~label~ keyword, such as ~label name;~. After all, everything not top-level is an expression,
+even if the value of the expression is useless or null.
+
+Then to jump to a label, one does not use ~goto~. After all, we're not BASIC. We are ADVANCED,
+and so we use the term ~jump~, a favourite of instruction sets. To jump to a label, use ~jump name;~
+
+Here's a simple time loop using these constructs:
+
+#+BEGIN_SRC xls
+label time-loop;
+print("Oh no, I'm in a time loop.\n");
+jump time-loop;
+#+END_SRC
+
+As this time loop has been constructed from first principles using labels and jumps, ~break~
+and ~continue~ will not work here, much to McFly's chagrin.
+
+*** Anonymous Labels & Label Pointers
+
+Now we turn to the dark side, where no respectable language like C dares to go. To truly
+unlock the full power of labels, one must first delete any preconception of inherent structure
+of control flow, and start thinking exherently. The programmer has full control, and the language
+provides ways to exercise it.
+
+To start, we shall introduce the concept of label pointers, which yes, is being done before
+pointers in this document. Do not fret, as label pointers are a much simpler concept to understand.
+
+A variable may have type ~label&~, indicating it refers to a label pointer. Assume
+a label ~name~ exists, then ~label& variable = &&name;~ is a pointer to the label ~name~.
+
+And an anonymous label may be defined using ~label current;~. If one wishes to forward jump to
+an anonymous label, they can first forward-declare the anonymous label using ~label declare current;~
+
+For an example of these in action, refer to [[https://github.com/TheDarkBomber/XLS/blob/master/examples/gosub/main.xls][the GOSUB example]]. Whilst it makes light use of macros, not
+yet covered, these are very simple and I hope the example could be understood regardless.
+
+** Setjump & Longjump
+:PROPERTIES:
+:CUSTOM_ID: setjump-longjump
+:END:
+
+Sometimes, labels are just not strong enough. What if we wanted to jump between functions? Well,
+those familiar with C may be aware of the functions ~setjmp~ and ~longjmp~. These exist in XLS,
+however they are built-in operations, in order to support the nature of XLS being freestanding,
+and requiring a fulfilling standard such as NXLS to define the hosted environment.
+
+In XLS, to setjump, one uses ~setjump~, and ~longjump~ for long jumping. Use of these operations
+requires an expression of type ~jumpbuf*~. Then, ~setjump jb~ and ~longjump jb~ (where ~jb~ is an
+expression with type ~jumpbuf*~) act like the equivalent C functions.
+
+For those who are not familiar, ~setjump~ flags to a given buffer (the jump buffer) that the next
+~longjump~ invocation unequivocally will take them there, so long as the function that set the
+buffer's flag does not return and modify The Stack by the time it is invoked.
+
+To present an example, assuming some obvious fulfilling standard:
+
+#+begin_src xls
+// insert declaration of print here
+
+impl second(jumpbuf* jb) : void {
+	print("second\n");
+	longjump jb;
+}
+
+impl first(jumpbuf* jb) : void {
+	second(jb);
+	print("first\n");
+}
+
+impl main(argc, byte** argv) {
+	jumpbuf* jb = jumpbuf[1];
+	if ((setjump jb) == 0) first(jb)
+	else print("main");
+} |> void;
+#+end_src
+
+This program will print ~second~ followed by ~main~. The ~setjump~ operation yields whether
+it was invoked naturally, or if it was jamp to by a ~longjump~.
+
+* Pointers
+:PROPERTIES:
+:CUSTOM_ID: pointers
+:END:
+
+Whilst this document is meant to be approachable, XLS is meant to be used by people who
+have experience with the C programming language, and thus know about pointers. The syntax for
+pointers is more-or-less the same as C, and I encourage further reading on the subject for people
+who still do not understand them.
+
+Pointers are variables that store a number, which is equivalent to a memory address. That's it.
+All pointer types are technically the same type, all pointers have the same size. The only difference
+between a pointer-to-byte type and a pointer-to-word type is that they /dereference/ to different
+things. Not that they are different things, because they are the same thing.
+
+When one dereferences a pointer, they retrieve a copy of the data stored at that memory location.
+One can also use a pointer to change the data at that memory location, so whenever /anything/ dereferences
+that specific memory location, they retrieve a copy of the new data.
+
+In XLS, a pointer is dereferenced like ~*name~ where ~name~ is an expression that yields a pointer.
+One can obtain a pointer whose memory address points to another variable, this is known as referencing.
+To reference a variable, one performs ~&variable~ where ~variable~ is strictly a variable.
+
+Any type can be made to be a pointer type, by suffixing a normal type with ~*~. So, ~byte*~ is
+a pointer to a byte. ~jumpbuf*~ is a pointer to a jump buffer. ~void*~ makes no sense, and cannot
+be dereferenced. If one does not care about the type that a pointer dereferences to, ~byte*~ is recommended.
+
+A significant use of pointers is to use them to model arrays. In low-level languages such as C and XLS,
+arrays are represented as a contiguous set of values in memory, one after the other, and arrays
+are typically of fixed size (except for dynamic arrays, not covered in this document as they require
+non-freestanding behaviour).
+
+Pointers are useful for this, as one can store the first element's memory address, and we know that
+the second comes immediately after that one ends in memory, and the third after that, and so on.
+So, to get from one memory address to the next, we can add the unit size of the elements in the array
+(so an array of bytes would have elements with size 1 byte, words with size 2, and so on.). Then we can
+dereference that to get the value of the next memory address.
+
+In XLS, we can do this using pointer arithmetic, ~p + 1~ is equal to ~p~ plus the size of whatever it
+dereferences to. However, a better way is to use index notation, ~p[1]~ is the same thing as ~*(p + 1)~.
+That's also why arrays are zero-indexed, as in they start from zero. The first element is ~p~ plus zero.
+The second is ~p + 1~, the third ~p + 2~, and so on. Note that ~p~ is a pointer.
+
+** Ranged Pointers
+:PROPERTIES:
+:CUSTOM_ID: ranged-pointers
+:END:
+
+It's all well and good to use pointers for arrays, however a small problem arises: what happens if, say,
+~p + 5~ is no longer in the array, if the array's size is 5 elements only? ~p[5]~ would be a value we aren't
+allowed to access. Classically, on hosted environments, a segmentation violation would occur in this instance,
+however anything can happen. Especially on freestanding environments.
+
+So, if we're iterating through an array, it would be nice to know when to stop. We can do this by noting
+how long the array is, and just remembering that. This is the approach taken in C. However, a better
+approach would be if the pointer itself was aware of the size of the array it represents.
+
+Introducing ranged pointers. Some languages call these slices, but that's a terribly irreflective name.
+Ranged pointers are like regular pointers but they also store an additional value, the range of the pointer.
+This range is how much you can add to ~rp~ before it is considered invalid to do so. Note, that for speed purposes,
+nothing strictly stops the user from doing this. However, it allows one to easily check if they're unsure,
+and is especially suitable for if the range needs to change.
+
+In the context of arrays, this is the number of elements the array that the pointer points to has. In XLS,
+this is given by the expression ~countof rp~, where ~rp~ is a ranged pointer. There also exists
+~setcountof(rp, n)~ where ~n~ is an integer expression. Figuring out what that does is left as an
+exercise to the reader.
+
+In XLS, ranged pointers are denoted by suffixing the type with ~%~ instead of ~*~. Thus, ~byte%~ is
+a ranged pointer to a byte. This is the most apt type for a string, as string literal expressions have
+type ~byte%~, which is handy if one needed to get the length of the string without recalculation.
+
+* Structures
+:PROPERTIES:
+:CUSTOM_ID: structures
+:END:
+
+Sometimes, there is a need to store multiple data items within a single variable. In C, this is achieved
+by structures, and so it is in XLS. Structures store multiple data items as one single aggregate data item.
+Each item is known as a field, and can be accessed using dot notation. A struct can be defined using a
+statement, indicated by the keyword ~struct~. Here is an example of a structure definition in XLS:
+
+#+BEGIN_SRC xls
+struct Bee(dword A, byte B, sword* C, sdword Q);
+#+END_SRC
+
+The field names can be whatever. Now, one can declare a variable of type ~Bee~ and access its data
+fields like ~Bee bee; bee.A = 3054~. One can also access the fields of a pointer to a structure. Say we
+have ~Bee* apioform = Bee[1]~, then its fields can be accessed as if it were not a pointer at all;
+~apioform.Q = 3054~. There is no alternative notation for accessing the fields of structure pointers.
+
+** Padding
+:PROPERTIES:
+:CUSTOM_ID: structure-padding
+:END:
+
+The underlying representation of a structure often requires padding between fields for [[http://www.catb.org/esr/structure-packing/][memory alignment reasons]].
+By default, XLS utilises ~practical~ padding for its structures. That is to say, its fields are sorted
+by size in order to maximally reduce the amount of padding required. However, XLS also provides alternative
+padding methods.
+
+One of these is ~padded~, which does not sort the fields by size and leaves them untouched. This allows
+one to create structures compatible with C.
+
+The other method is ~packed~, which does not sort the fields by size, however it disables padding completely.
+This should only be used in situations where it is imperative that there be no padding, such as in operating system
+development which uses packed structures to communicate with hardware, for example.
+
+To use these methods, insert either ~padded~ or ~packed~ after the ~struct~ keyword. One can also insert
+~practical~, however this is the default and therefore unnecessary to specify explicitly.
+
+* Miscellaneous Statements
+:PROPERTIES:
+:CUSTOM_ID: statements
+:END:
+
+** Global Variables
+:PROPERTIES:
+:CUSTOM_ID: global-variables
+:END:
+
+By declaring a variable as a statement rather than an expression, that forms a global variable that
+may be used from anywhere within the program. Global variable declarations cannot specify an initialisation;
+they must be initialised from within a function.
+
+** Typedef
+:PROPERTIES:
+:CUSTOM_ID: typedef
+:END:
+
+In XLS, sometimes the default types are just not enough. The ~typedef~ keywords allow the user to specify
+a custom type. Typedef has various options, which are enumerated as subsubsections.
+
+*** Type aliases
+
+A type alias can be defined using a ~typedef alias~ statement. This allows for one type to be referred to
+by another name. For example, the statement ~typedef alias bee byte~ would cause ~bee~ to be treated
+identically to the ~byte~ typename.
+
+** Funcdef
+:PROPERTIES:
+:CUSTOM_ID: funcdef
+:END:
+
+Sometimes there is a need to create a function that performs a trivial task upon another function, such
+as a trampoline. Or perhaps to create a monad out of a surmonadic function so that it can be used with the
+pipe operator. Or perhaps to define a macro. Funcdef has various options, which are enumerated as
+subsubsections.
+
+*** Function-like macros
+
+XLS has a macro system, explained in the below section. ~funcdef macro~ can be used to imbue a macro
+with a syntax like ordinary functions. For instance, ~funcdef macro bee(string, expression)~ defines ~bee~
+as a function-like macro with the semantics of ~bee~, and that it takes in as arguments a string literal and
+any XLS expression.
+
+~funcdef macro~ can take in many metatypes of arguments such as ~string~ for string literals, ~identifier~ for
+identifiers, ~typename~ for typenames, ~integer~ for integer literals, and ~expression~ for arbitrary XLS expressions.
+
+* XLiSp and Macros
+:PROPERTIES:
+:CUSTOM_ID: xlisp
+:END:
+
+Macros. Metaprogramming. XLS has these features, and are perhaps the most complex aspect of XLS as a whole.
+These are not like what C calls macros, which XLS calls manifests, but instead these are much more powerful macros.
+The macro system in XLS is Turing-complete, and is defined using an embedded domain specific language called XLiSp.
+This language is described in detail on a separate document.
+
+To invoke an XLiSp expression, one uses the ~$()~ syntax, where ~()~ is an XLiSp list. For example,
+~$(echo "Hey there, Galaxy!");~, either as a statement or as an expression (a statement can just be an expression alone),
+will output ~Hey there, Galaxy!~ to the standard output of the terminal running the compiler.
+
+A macro can be defined by setting an XLiSp variable to an XLiSp lambda, e.g. ~$(set! add-one (lambda (x) (i+ x 1)))~
+will define a macro, ~add-one~ that adds one to an XLiSp integer, so ~$(add-one 4)~ will yield ~5~.
+
+XLiSp expressions yields XLS tokens which are immediately parsed and then compiled, and treated as an expression.
+An XLiSp expression cannot directly yield statements, however there is (will be) a construct to emit statements using
+XLiSp.
+
