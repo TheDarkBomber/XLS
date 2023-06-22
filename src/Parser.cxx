@@ -897,9 +897,9 @@ llvm::Function *getFunction(std::string name) {
 	return nullptr;
 }
 
- Alloca *createEntryBlockAlloca(llvm::Function *function, llvm::StringRef variableName, XLSType type = DefinedTypes["dword"]) {
+Alloca* createEntryBlockAlloca(llvm::Function *function, llvm::StringRef variableName, XLSType type = DefinedTypes["dword"], SSA* size = nullptr) {
 	llvm::IRBuilder<> apiobuilder(&function->getEntryBlock(), function->getEntryBlock().begin());
-	return apiobuilder.CreateAlloca(type.Type, nullptr, variableName);
+	return apiobuilder.CreateAlloca(type.Type, size, variableName);
 }
 
 SSA *DwordExpression::Render() {
@@ -935,17 +935,14 @@ SSA *StringExpression::Render() {
 	return R;
 }
 
-SSA *MutableArrayExpression::Render() {
+SSA* MutableArrayExpression::Render() {
 	if (!CheckTypeDefined(Type.Name + "*")) return nullptr;
 	if (!CheckTypeDefined(Type.Name + "%")) return nullptr;
-	llvm::ArrayType* maType = llvm::ArrayType::get(Type.Type, Size);
-	llvm::GlobalVariable* global = new llvm::GlobalVariable(*GlobalModule, maType, false, llvm::GlobalValue::PrivateLinkage, llvm::Constant::getNullValue(maType), "xls_mutable_array");
-	global->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
-	SSA* ArrayPtr = llvm::ConstantExpr::getBitCast(global, DefinedTypes[Type.Name + "*"].Type);
 	SSA* Length = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(DefinedTypes["#addrsize"].Size, Size, false));
+	SSA* Array = createEntryBlockAlloca(Builder->GetInsertBlock()->getParent(), "xls_mutable_array", Type, Length);
 
 	SSA* R = ZeroSSA(DefinedTypes[Type.Name + "%"]);
-	R = Builder->CreateInsertValue(R, ArrayPtr, llvm::ArrayRef<unsigned>(RANGED_POINTER_VALUE));
+	R = Builder->CreateInsertValue(R, Array, llvm::ArrayRef<unsigned>(RANGED_POINTER_VALUE));
 	R = Builder->CreateInsertValue(R, Length, llvm::ArrayRef<unsigned>(RANGED_POINTER_COUNTOF));
 	TypeAnnotation[R] = DefinedTypes[Type.Name + "%"];
 	return R;
