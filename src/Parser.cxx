@@ -543,9 +543,11 @@ UQP(Expression) ParseDeclaration(XLSType type) {
 	GetNextToken();
 	if (CurrentToken.Type == LEXEME_CHARACTER && CurrentToken.Value == '[') {
 		GetNextToken();
-		if (CurrentToken.Type != LEXEME_INTEGER) return ParseError("Expected integer size to statically allocate.");
-		UQP(MutableArrayExpression) result = MUQ(MutableArrayExpression, CurrentInteger, type);
-		GetNextToken();
+		UQP(Expression) dsize = nullptr;
+		bool sizeIsDynamic = false;
+		if (CurrentToken.Type != LEXEME_INTEGER) { dsize = ParseExpression(); sizeIsDynamic = true; }
+		UQP(MutableArrayExpression) result = MUQ(MutableArrayExpression, dsize ? 0 : CurrentInteger, type, std::move(dsize));
+		if (!sizeIsDynamic) GetNextToken();
 		if (CurrentToken.Value != ']') return ParseError("Expected close square parenthesis in mutable array expression.");
 		GetNextToken();
 		return result;
@@ -938,8 +940,10 @@ SSA *StringExpression::Render() {
 SSA* MutableArrayExpression::Render() {
 	if (!CheckTypeDefined(Type.Name + "*")) return nullptr;
 	if (!CheckTypeDefined(Type.Name + "%")) return nullptr;
-	SSA* Length = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(DefinedTypes["#addrsize"].Size, Size, false));
-	SSA* Array = createEntryBlockAlloca(Builder->GetInsertBlock()->getParent(), "xls_mutable_array", Type, Length);
+	SSA* Length;
+	if (!DynamicSize) Length = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(DefinedTypes["#addrsize"].Size, Size, false));
+	else Length = Cast(DefinedTypes["#addrsize"], DynamicSize->Render());
+	SSA* Array = !DynamicSize ? createEntryBlockAlloca(Builder->GetInsertBlock()->getParent(), "xls_mutable_array", Type, Length) : Builder->CreateAlloca(Type.Type, Length, "xls_mutable_array");
 
 	SSA* R = ZeroSSA(DefinedTypes[Type.Name + "%"]);
 	R = Builder->CreateInsertValue(R, Array, llvm::ArrayRef<unsigned>(RANGED_POINTER_VALUE));

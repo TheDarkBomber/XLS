@@ -174,9 +174,10 @@ public:
 
 class MutableArrayExpression : public Expression {
 	dword Size;
+	UQP(Expression) DynamicSize;
 	XLSType Type;
 public:
-	MutableArrayExpression(dword size, XLSType type) : Size(size), Type(type) {}
+	MutableArrayExpression(dword size, XLSType type, UQP(Expression) dynamicSize = nullptr) : Size(size), Type(type), DynamicSize(std::move(dynamicSize)) {}
 	SSA *Render() override;
 };
 
