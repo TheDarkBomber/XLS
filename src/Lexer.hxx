@@ -60,6 +60,13 @@ struct TokenContext {
 	void* ExtraData;
 };
 
+struct SourceLocation {
+	dword Row;
+	dword Column;
+};
+
+extern SourceLocation CurrentLocation;
+
 bool IsOperator(char c);
 bool IsIdentifier(char c);
 bool IsRadix(char c, byte radix);

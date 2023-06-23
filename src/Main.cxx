@@ -1,5 +1,6 @@
 #include "Lexer.hxx"
 #include "Parser.hxx"
+#include "Debug.hxx"
 #include "colours.def.h"
 #include <llvm/ADT/Optional.h>
 #include <llvm/IR/DataLayout.h>
@@ -150,6 +151,11 @@ int main(int argc, char* argv[]) {
 			END_ARGV;
 		}
 
+		PARSE_ARGV("debug") {
+			Flags.Debug = 1;
+			END_ARGV;
+		}
+
 	continue_argv_parse:
 		currentargc++;
 	}
@@ -189,6 +195,8 @@ int main(int argc, char* argv[]) {
 	}
 
 	llvm::errs() << COLOUR_BLUE << "Building for " << COLOUR_BLUE_BOLD << targetTriple << COLOUR_END << "\n";
+
+	if (Flags.Debug) Dbg.Builder->finalize();
 
 	GlobalModule->setTargetTriple(targetTriple);
 	GlobalModule->setDataLayout(layout);

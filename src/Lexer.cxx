@@ -12,8 +12,7 @@ std::string CurrentIdentifier;
 std::string LError;
 dword CurrentInteger;
 
-dword CurrentRow = 1;
-dword CurrentColumn = 1;
+SourceLocation CurrentLocation;
 
 char CharacterLiteral;
 std::string StringLiteral;
@@ -31,10 +30,10 @@ char advance() {
 		Newline = false;
 	}
 	if (next == '\n') {
-		CurrentRow++;
-		CurrentColumn = 0;
+		CurrentLocation.Row++;
+		CurrentLocation.Column = 0;
 		Newline = true;
-	} else CurrentColumn++;
+	} else CurrentLocation.Column++;
 	return next;
 }
 
@@ -46,7 +45,7 @@ Token LexicalError(const char* error) {
 	LError = "";
 	std::cerr <<
 		COLOUR_YELLOW <<
-		"R" << CurrentRow << "C" << CurrentColumn << ": " <<
+		"R" << CurrentLocation.Row << "C" << CurrentLocation.Column << ": " <<
 		COLOUR_PURPLE <<
 		"Warning: " << COLOUR_PURPLE_BOLD << error <<
 		COLOUR_END << '\n';

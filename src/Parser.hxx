@@ -74,7 +74,8 @@ enum MacroArgumentType {
 };
 
 struct ParserFlags {
-	uint Unused : 3;
+	uint Unused : 2;
+	uint Debug : 1;
 	uint NoOptimise : 1;
 	uint CodeWarning : 1;
 	uint ParseWarning : 1;
@@ -114,8 +115,12 @@ struct XLSFunctionInfo {
 };
 
 class Expression {
+	SourceLocation DbgLoc;
 public:
+	Expression(SourceLocation dbgLoc = CurrentLocation) : DbgLoc(dbgLoc) {}
 	virtual SSA *Render() = 0;
+	dword GetRow() const { return DbgLoc.Row; }
+	dword GetColumn() const { return DbgLoc.Column; }
 };
 
 class Statement {
@@ -372,11 +377,16 @@ class SignatureNode {
 	llvm::CallingConv::ID Convention;
 	XLSType Type;
 	Variadism Variadic;
+	SourceLocation DbgLoc;
 public:
-	SignatureNode(const std::string &name, VDX(std::string, XLSType) arguments, const XLSType &type, Variadism variadic = VARIADIC_NONE, llvm::CallingConv::ID convention = llvm::CallingConv::C, bool operator_ = false, Precedence precedence = PRECEDENCE_INVALID) : Name(name), Arguments(std::move(arguments)), Type(type), Variadic(variadic), Convention(convention), Operator(operator_), OperatorPrecedence(precedence) {}
+	SignatureNode(const std::string &name, VDX(std::string, XLSType) arguments, const XLSType &type, SourceLocation dbgLoc = CurrentLocation, Variadism variadic = VARIADIC_NONE, llvm::CallingConv::ID convention = llvm::CallingConv::C, bool operator_ = false, Precedence precedence = PRECEDENCE_INVALID) : Name(name), Arguments(std::move(arguments)), Type(type), DbgLoc(dbgLoc), Variadic(variadic), Convention(convention), Operator(operator_), OperatorPrecedence(precedence) {}
 	llvm::Function *Render();
 	const std::string &GetName() const { return Name; }
 	const XLSType &GetType() const { return Type; }
+	const Variadism &GetVariadism() const { return Variadic; }
+	const VDX(std::string, XLSType) &GetArguments() const { return Arguments; }
+	dword GetRow() const { return DbgLoc.Row; }
+	dword GetColumn() const { return DbgLoc.Column; }
 	bool Unary() const { return Operator && Arguments.size() == 1; }
 	bool Binary() const { return Operator && Arguments.size() == 2; }
 	std::string GetOperatorName() const {

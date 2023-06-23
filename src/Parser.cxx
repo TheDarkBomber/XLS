@@ -3,6 +3,7 @@
 #include "Type.hxx"
 #include "Lexer.hxx"
 #include "XLiSp.hxx"
+#include "Debug.hxx"
 #include "colours.def.h"
 #include <llvm/ADT/APInt.h>
 #include <llvm/ADT/Triple.h>
@@ -12,6 +13,7 @@
 #include <llvm/IR/CallingConv.h>
 #include <llvm/IR/Constant.h>
 #include <llvm/IR/Constants.h>
+#include <llvm/IR/DIBuilder.h>
 #include <llvm/IR/DataLayout.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Function.h>
@@ -90,7 +92,7 @@ std::map<std::string, std::vector<MacroArgument>> Macros;
 void AlertError(const char *error) {
 	llvm::errs() <<
 		COLOUR_YELLOW <<
-		"R" << CurrentRow << "C" << CurrentColumn << ": " <<
+		"R" << CurrentLocation.Row << "C" << CurrentLocation.Column << ": " <<
 		COLOUR_RED <<
 		"Error: " << error << COLOUR_RED_BOLD <<
 		COLOUR_END << "\n";
@@ -99,7 +101,7 @@ void AlertError(const char *error) {
 void AlertWarning(const char *warning) {
 	llvm::errs() <<
 		COLOUR_YELLOW <<
-		"R" << CurrentRow << "C" << CurrentColumn << ": " <<
+		"R" << CurrentLocation.Row << "C" << CurrentLocation.Column << ": " <<
 		COLOUR_PURPLE <<
 		"Warning: " << warning << COLOUR_PURPLE_BOLD <<
 		COLOUR_END << "\n";
@@ -783,7 +785,7 @@ UQP(SignatureNode) ParseOperatorSignature() {
 	GetNextToken();
 
 	if (signatureType && argumentNames.size() != signatureType) return ParseError("Invalid number of operands for operator.", nullptr);
-	return MUQ(SignatureNode, functionName, std::move(argumentNames), DefinedTypes["dword"], VARIADIC_NONE, llvm::CallingConv::Fast, true, precedence);
+	return MUQ(SignatureNode, functionName, std::move(argumentNames), DefinedTypes["dword"], CurrentLocation, VARIADIC_NONE, llvm::CallingConv::Fast, true, precedence);
 }
 
 UQP(SignatureNode) ParseSignature() {
@@ -852,7 +854,7 @@ UQP(SignatureNode) ParseSignature() {
 		GetNextToken();
 	}
 
-	return MUQ(SignatureNode, functionName, std::move(argumentNames), type, variadic, convention);
+	return MUQ(SignatureNode, functionName, std::move(argumentNames), type, CurrentLocation, variadic, convention);
 }
 
 UQP(FunctionNode) ParseImplementation() {
@@ -905,18 +907,21 @@ Alloca* createEntryBlockAlloca(llvm::Function *function, llvm::StringRef variabl
 }
 
 SSA *DwordExpression::Render() {
+	EMIT_DEBUG;
 	SSA *R = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, Value, false));
 	TypeAnnotation[R] = DefinedTypes["dword"];
 	return R;
 }
 
 SSA *CharacterExpression::Render() {
+	EMIT_DEBUG;
 	SSA *R = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(8, Value, false));
 	TypeAnnotation[R] = DefinedTypes["byte"];
 	return R;
 }
 
 SSA *StringExpression::Render() {
+	EMIT_DEBUG;
 	std::vector<llvm::Constant*> elements(Value.size());
 	for (unsigned i = 0; i < Value.size(); i++) {
 		elements[i] = llvm::ConstantInt::get(DefinedTypes["byte"].Type, Value[i]);
@@ -938,6 +943,7 @@ SSA *StringExpression::Render() {
 }
 
 SSA* MutableArrayExpression::Render() {
+	EMIT_DEBUG;
 	if (!CheckTypeDefined(Type.Name + "*")) return nullptr;
 	if (!CheckTypeDefined(Type.Name + "%")) return nullptr;
 	SSA* Length;
@@ -953,6 +959,7 @@ SSA* MutableArrayExpression::Render() {
 }
 
 SSA* VariableExpression::Render() {
+	EMIT_DEBUG;
 	if (AllonymousValues.find(Name) == AllonymousValues.end()) {
 		if (FunctionSignatures.find(Name) != FunctionSignatures.end()) {
 			llvm::Function *pointed = getFunction(Name);
@@ -988,6 +995,7 @@ SSA* VariableExpression::Render() {
 }
 
 SSA* CastExpression::Render() {
+	EMIT_DEBUG;
 	SSA* toCast = Value->Render();
 	if (!toCast) return nullptr;
 	SSA* R = Cast(Type, toCast);
@@ -1000,6 +1008,7 @@ SSA* PtrRHS(SSA* left, SSA* right) {
 }
 
 SSA* BinaryExpression::Render() {
+	EMIT_DEBUG;
 	if (CMP("=", Operator)) {
 		VariableExpression* LAssignment = static_cast<VariableExpression*>(LHS.get());
 		if (!LAssignment) return CodeError("Assignment on fire.");
@@ -1132,6 +1141,7 @@ SSA* BinaryExpression::Render() {
 }
 
 SSA *UnaryExpression::Render() {
+	EMIT_DEBUG;
 	if(CMP("&", Operator)) {
 		VariableExpression *LAssignment = static_cast<VariableExpression*>(Operand.get());
 		if (!LAssignment) return CodeError("Address-of operation on fire.");
@@ -1182,6 +1192,7 @@ SSA *UnaryExpression::Render() {
 }
 
 SSA *CallExpression::Render() {
+	EMIT_DEBUG;
 	llvm::Function *called = getFunction(Called);
 	if (!called) {
 		if (AllonymousValues.find(Called) == AllonymousValues.end())
@@ -1265,12 +1276,14 @@ SSA *CallExpression::Render() {
 }
 
 SSA* FieldAccessExpression::Render() {
+	EMIT_DEBUG;
 	SSA* operand = Operand->Render();
 	operand = DemotePointer(GetType(operand), operand);
 	return IndexField(GetType(operand), Field, operand);
 }
 
 SSA* BreakExpression::Render() {
+	EMIT_DEBUG;
 	llvm::BasicBlock* location;
 	std::stack<llvm::BasicBlock*> preserve;
 	for (uint i = 0; i <= Nest; i++) {
@@ -1289,6 +1302,7 @@ SSA* BreakExpression::Render() {
 }
 
 SSA* ContinueExpression::Render() {
+	EMIT_DEBUG;
 	llvm::BasicBlock *location;
 	std::stack<llvm::BasicBlock*> preserve;
 	for (uint i = 0; i <= Nest; i++) {
@@ -1308,6 +1322,7 @@ SSA* ContinueExpression::Render() {
 }
 
 SSA* BlockExpression::Render() {
+	EMIT_DEBUG;
 	if (Expressions.empty()) return ZeroSSA(DefinedTypes["dword"]);
 	std::vector<SSA*> ExpressionVector;
 	for (uint i = 0, e = Expressions.size(); i != e; i++) {
@@ -1319,6 +1334,7 @@ SSA* BlockExpression::Render() {
 }
 
 SSA *ReturnExpression::Render() {
+	EMIT_DEBUG;
 	llvm::Function *function = Builder->GetInsertBlock()->getParent();
 	SSA *returnValue;
 	if (!ReturnValue) returnValue = llvm::Constant::getNullValue(function->getReturnType());
@@ -1569,6 +1585,7 @@ SSA *WhileExpression::Render() {
 }
 
 SSA* DeclarationExpression::Render() {
+	EMIT_DEBUG;
 	llvm::Function *function = Builder->GetInsertBlock()->getParent();
 	for (uint i = 0, e = VariableNames.size(); i != e; i++) {
 		const std::string &variableName = VariableNames[i].first;
@@ -1581,6 +1598,12 @@ SSA* DeclarationExpression::Render() {
 		} else definerSSA = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(Type.Size, 0, false));
 
 		Alloca *alloca = createEntryBlockAlloca(function, variableName, Type);
+
+		if (Flags.Debug) {
+			llvm::DILocalVariable* dbgVar = Dbg.Builder->createAutoVariable(Dbg.Blocks.back(), variableName, Dbg.Blocks.back()->getFile(), GetRow(), Dbg.GetType(Type));
+			Dbg.Builder->insertDeclare(alloca, dbgVar, Dbg.Builder->createExpression(), llvm::DILocation::get(Dbg.Blocks.back()->getContext(), GetRow(), GetColumn(), Dbg.Blocks.back()), Builder->GetInsertBlock());
+		}
+
 		Builder->CreateStore(Cast(Type, definerSSA), alloca);
 
 		XLSVariable stored;
@@ -1727,6 +1750,19 @@ llvm::Function *FunctionNode::Render() {
 	llvm::BasicBlock *basicBlock = llvm::BasicBlock::Create(*GlobalContext, "entry", function);
 	Builder->SetInsertPoint(basicBlock);
 
+	llvm::DIFile* dbgUnit;
+	llvm::DIScope* dbgCtx;
+	llvm::DISubprogram* dbgSP;
+
+	if (Flags.Debug) {
+		dbgUnit = Dbg.Builder->createFile("unknown.xls", ".");
+		dbgCtx = dbgUnit;
+		dbgSP = Dbg.Builder->createFunction(dbgCtx, signature.GetName(), llvm::StringRef(), dbgUnit, signature.GetRow(), Dbg.GetFunctionType(signature), signature.GetRow(), llvm::DINode::FlagPrototyped, llvm::DISubprogram::SPFlagDefinition);
+		function->setSubprogram(dbgSP);
+		Dbg.Blocks.push_back(dbgSP);
+		Dbg.EmitLocation(Builder.get());
+	}
+
 	// Clear only local variables.
 	auto iterator = AllonymousValues.begin();
 	while (iterator != AllonymousValues.end()) {
@@ -1739,12 +1775,20 @@ llvm::Function *FunctionNode::Render() {
 	uint index = 0;
 	for (llvm::Argument &argument : function->args()) {
 		Alloca *alloca = createEntryBlockAlloca(function, argument.getName(), ArgumentTypeAnnotation[function->getArg(index)]);
+
+		if (Flags.Debug) {
+			llvm::DILocalVariable* dbgVar = Dbg.Builder->createParameterVariable(dbgSP, argument.getName(), index + 1, dbgUnit, signature.GetRow(), Dbg.GetType(ArgumentTypeAnnotation[function->getArg(index)]),true);
+			Dbg.Builder->insertDeclare(alloca, dbgVar, Dbg.Builder->createExpression(), llvm::DILocation::get(dbgSP->getContext(), signature.GetRow(), 0, dbgSP), Builder->GetInsertBlock());
+		}
+
 		Builder->CreateStore(&argument, alloca);
 		XLSVariable stored;
 		stored.Type = ArgumentTypeAnnotation[function->getArg(index++)];
 		stored.Value = alloca;
 		AllonymousValues[std::string(argument.getName())] = stored;
 	}
+
+	if (Flags.Debug) Dbg.EmitLocation(Builder.get(), Body.get());
 
 	if (function->isVarArg()) {
 		Alloca *VAList = createEntryBlockAlloca(function, "variadic", DefinedTypes["valist"]);
@@ -1764,12 +1808,14 @@ llvm::Function *FunctionNode::Render() {
 	if (SSA *returnValue = Body->Render()) {
 		if (signature.GetType().Name != "void") Builder->CreateRet(Cast(signature.GetType(), returnValue));
 		else Builder->CreateRetVoid();
+		if (Flags.Debug) Dbg.Blocks.pop_back();
 		llvm::verifyFunction(*function);
 		GlobalFPM->run(*function);
 		return function;
 	}
 
 	function->eraseFromParent();
+	if (Flags.Debug) Dbg.Blocks.pop_back();
 	return nullptr;
 }
 
@@ -1781,6 +1827,11 @@ void InitialiseModule(std::string moduleName) {
 	GlobalContext = MUQ(llvm::LLVMContext);
 	GlobalModule = MUQ(llvm::Module, moduleName, *GlobalContext);
 	GlobalFPM = MUQ(llvm::legacy::FunctionPassManager, GlobalModule.get());
+
+	if (Flags.Debug) {
+		Dbg.Builder = MUQ(llvm::DIBuilder, *GlobalModule.get());
+		Dbg.CompileUnit = Dbg.Builder->createCompileUnit(llvm::dwarf::DW_LANG_C, Dbg.Builder->createFile("<stdin>", "."), "XLS Protocompiler", !Flags.NoOptimise, "<todo: fill in later>", 0, "output.dbg");
+	}
 
 	if (!Flags.NoOptimise) {
 		GlobalFPM->add(llvm::createPromoteMemoryToRegisterPass());
