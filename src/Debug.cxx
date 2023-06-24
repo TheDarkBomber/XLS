@@ -8,7 +8,7 @@ llvm::DIType* DebugInfo::GetType(XLSType type) {
 	if (CachedTypes.find(type.UID) != CachedTypes.end()) return CachedTypes[type.UID];
 
 	llvm::DIType* R;
-	if (type.IsPointer) {
+	if (type.IsPointer && !type.IsFP) {
 		R = Builder->createPointerType(GetType(DefinedTypes[type.Dereference]), type.Size, type.Size, llvm::None, type.Name);
 	} else if (type.IsRangedPointer) {
 		auto types = std::vector<llvm::Metadata*>(2);
@@ -21,8 +21,12 @@ llvm::DIType* DebugInfo::GetType(XLSType type) {
 			types.push_back(Builder->createMemberType(CompileUnit->getScope(), F.first, CompileUnit->getFile(), 0, F.second.second.Size, 0, type.Structure.Layout->getElementOffsetInBits(F.second.first), llvm::DINode::FlagPublic, GetType(F.second.second)));
 		}
 		R = Builder->createStructType(CompileUnit->getScope(), type.Name, CompileUnit->getFile(), 0, type.Size, type.Structure.Layout->getAlignment().value(), llvm::DINode::FlagPublic, Builder->createUnspecifiedType("<unspecified>"), Builder->getOrCreateArray(llvm::ArrayRef<llvm::Metadata*>(types)));
-	} else if (type.IsLabel || type.IsFP) {
-		R = Builder->createUnspecifiedType(type.Name);
+	} else if (type.IsFP) {
+		std::vector<llvm::Metadata*> types;
+		for (auto X : type.FPData) {
+			types.push_back(GetType(X));
+		}
+		R = Builder->createSubroutineType(Builder->getOrCreateTypeArray(types));
 	} else if (type.Signed) {
 		R = Builder->createBasicType(type.Name, type.Size, llvm::dwarf::DW_ATE_signed);
 	} else {
