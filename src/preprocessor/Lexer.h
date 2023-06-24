@@ -1,6 +1,6 @@
 #ifndef __LEXER_XPP_H_
 #define __LEXER_XPP_H_
-#include <stdio.h>
+#include "File.h"
 #include <stdbool.h>
 
 enum Directive {
@@ -9,9 +9,11 @@ enum Directive {
 	DIRECTIVE_DEFINE = 2
 } typedef Directive;
 
-Directive LexDirective(FILE* stream);
-FILE* LexFilename(FILE* stream);
-char* LexDefine(FILE* stream);
+Directive LexDirective(PPUnit stream);
+PPUnit LexFilename(PPUnit stream);
+char* LexDefine(PPUnit stream);
 bool IsIdentifier(char c);
+
+extern PPUnit NullUnit;
 
 #endif

@@ -121,6 +121,7 @@ public:
 	virtual SSA *Render() = 0;
 	dword GetRow() const { return DbgLoc.Row; }
 	dword GetColumn() const { return DbgLoc.Column; }
+	SDX(std::string, std::string) GetFile() const { return DbgLoc.File; }
 };
 
 class Statement {
@@ -387,6 +388,7 @@ public:
 	const VDX(std::string, XLSType) &GetArguments() const { return Arguments; }
 	dword GetRow() const { return DbgLoc.Row; }
 	dword GetColumn() const { return DbgLoc.Column; }
+	SDX(std::string, std::string) GetFile() const { return DbgLoc.File; }
 	bool Unary() const { return Operator && Arguments.size() == 1; }
 	bool Binary() const { return Operator && Arguments.size() == 2; }
 	std::string GetOperatorName() const {

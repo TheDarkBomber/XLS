@@ -1,9 +1,9 @@
 #ifndef __PREPROCESSOR_XPP_H_
 #define __PREPROCESSOR_XPP_H_
-#include <stdio.h>
+#include "File.h"
 
-void Preprocess(FILE* stream);
-void PreprocessInclude(FILE* stream);
-void PreprocessDefine(FILE* stream);
+void Preprocess(PPUnit stream);
+void PreprocessInclude(PPUnit stream);
+void PreprocessDefine(PPUnit stream);
 
 #endif

@@ -2,6 +2,7 @@
 #define __LEXER_XLS_H_
 
 #include "num.def.h"
+#include "macros.def.h"
 #include <string>
 
 enum Lexeme {
@@ -63,6 +64,7 @@ struct TokenContext {
 struct SourceLocation {
 	dword Row;
 	dword Column;
+	SDX(std::string, std::string) File;
 };
 
 extern SourceLocation CurrentLocation;
@@ -71,6 +73,7 @@ bool IsOperator(char c);
 bool IsIdentifier(char c);
 bool IsRadix(char c, byte radix);
 void PrintToken(Token token);
+void InterpretDirective();
 char LexCharacter(char LastCharacter);
 char LexString(char LastCharacter);
 Token GetToken();

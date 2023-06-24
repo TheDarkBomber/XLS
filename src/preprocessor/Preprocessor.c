@@ -5,10 +5,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-void Preprocess(FILE *stream) {
+void Preprocess(PPUnit stream) {
 	char c;
-	while((c = fgetc(stream)) != EOF) {
+	while((c = fgetc(stream.File)) != EOF) {
 		if (c == '\n') {
+			stream.Row++;
 			putchar('\n');
 			continue;
 		}
@@ -29,7 +30,7 @@ void Preprocess(FILE *stream) {
 			do {
 				memset(ibuffer, 0, 256);
 				if (IsIdentifier(c)) {
-					for (uint i = 0; IsIdentifier(c); i++, c = fgetc(stream)) {
+					for (uint i = 0; IsIdentifier(c); i++, c = fgetc(stream.File)) {
 						ibuffer[i] = c;
 					}
 					printf("%s", ((v = FindDefine(ibuffer)) == NULL) ? ibuffer : v);
@@ -39,20 +40,20 @@ void Preprocess(FILE *stream) {
 				} else {
 					putchar(c);
 				}
-			} while ((c = fgetc(stream)) != '\n'); // C dowhile has stupid syntax.
+			} while ((c = fgetc(stream.File)) != '\n'); // C dowhile has stupid syntax.
 			putchar('\n');
 		}
 	}
 }
 
-void PreprocessInclude(FILE *stream) {
-	FILE *f = LexFilename(stream);
-	if (!f) return;
-	Preprocess(f);
-	fclose(f);
+void PreprocessInclude(PPUnit stream) {
+	PPUnit u = LexFilename(stream);
+	Preprocess(u);
+	printf("#S%d\n", stream.Row + 1);
+	fclose(u.File);
 }
 
-void PreprocessDefine(FILE *stream) {
+void PreprocessDefine(PPUnit stream) {
 	char* define = LexDefine(stream);
 	char* split = strchr(define, ' ');
 	char* keybuffer = malloc(split - define + 1);

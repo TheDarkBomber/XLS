@@ -1,4 +1,5 @@
 #include "Lexer.hxx"
+#include "Debug.hxx"
 #include "num.def.h"
 #include "macros.def.h"
 #include "colours.def.h"
@@ -27,8 +28,13 @@ char advance() {
 	char next = getchar();
 	if (Newline) {
 		if (next == ' ') SpacesDetected++;
+		if (next == '#') {
+			InterpretDirective();
+			next = '\v';
+		}
 		Newline = false;
 	}
+	CurrentLocation.File = Dbg.ExtraFiles.empty() ? std::make_pair("", "") : Dbg.ExtraFiles.back();
 	if (next == '\n') {
 		CurrentLocation.Row++;
 		CurrentLocation.Column = 0;
@@ -434,4 +440,27 @@ void PrintToken(Token token) {
 	fprintf(stderr, "Alphanumeric = %s\n", isalnum(token.Value) ? "yes" : "no");
 	fprintf(stderr, "Operator = %s\n", IsOperator(token.Value) ? "yes" : "no");
 	fprintf(stderr, "String = %s\n", StringLiteral.c_str());
+}
+
+void InterpretDirective() {
+	char type = getchar();
+	if (type == 'F') {
+		std::string file = "";
+		char c;
+		while ((c = getchar()) != '/') file += c;
+		std::string nextLine = "";
+		while ((c = getchar()) != '/') nextLine += c;
+		std::string directory = "";
+		while ((c = getchar()) != '\n') directory += c;
+		CurrentLocation.Column = 0;
+		CurrentLocation.Row = strtoul(nextLine.c_str(), 0, 10);
+		Dbg.ExtraFiles.push_back(std::make_pair(file, directory));
+	} else if (type == 'S') {
+		std::string nextLine = "";
+		char c;
+		while ((c = getchar()) != '\n') nextLine += c;
+		CurrentLocation.Column = 0;
+		CurrentLocation.Row = strtoul(nextLine.c_str(), 0, 10);
+		Dbg.ExtraFiles.pop_back();
+	}
 }

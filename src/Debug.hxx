@@ -13,6 +13,7 @@ struct DebugInfo {
 	std::map<dword, llvm::DIType*> CachedTypes;
 	std::string Filename = "unknown.xls";
 	std::string Directory = ".";
+	VDX(std::string, std::string) ExtraFiles;
 	llvm::DIType* GetType(XLSType type);
 	llvm::DISubroutineType* GetFunctionType(SignatureNode signature);
 	void EmitLocation(llvm::IRBuilder<>* IRBuilder, Expression* expr = nullptr);

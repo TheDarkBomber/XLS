@@ -2,11 +2,14 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
-Directive LexDirective(FILE* stream) {
+PPUnit NullUnit;
+
+Directive LexDirective(PPUnit stream) {
 	char buffer[32];
-	char c = fgetc(stream);
-	for (unsigned i = 0; isalpha(c) && i < 32; i++, c = fgetc(stream)){
+	char c = fgetc(stream.File);
+	for (unsigned i = 0; isalpha(c) && i < 32; i++, c = fgetc(stream.File)){
 		buffer[i] = c;
 	}
 	if (strcmp(buffer, "include") == 0) return DIRECTIVE_INCLUDE;
@@ -15,20 +18,26 @@ Directive LexDirective(FILE* stream) {
 	return DIRECTIVE_INVALID;
 }
 
-FILE* LexFilename(FILE* stream) {
+PPUnit LexFilename(PPUnit stream) {
 	char buffer[256];
-	if (fgets(buffer, 256, stream) == NULL) {
-		return NULL;
+	if (fgets(buffer, 256, stream.File) == NULL) {
+		return NullUnit;
 	}
 	char *n = strchr(buffer, '\n');
 	if (n) *n = '\0';
-	return fopen(buffer, "r");
+	PPUnit unit;
+	unit.File = fopen(buffer, "r");
+	unit.Row = 1;
+	char cwd[256];
+	getcwd(cwd, 256);
+	printf("#F%s/%d/%s\n", buffer, unit.Row, cwd);
+	return unit;
 }
 
 char gbuffer[256];
-char* LexDefine(FILE* stream) {
+char* LexDefine(PPUnit stream) {
 	char buffer[256];
-	if (fgets(buffer, 256, stream) == NULL) return NULL;
+	if (fgets(buffer, 256, stream.File) == NULL) return NULL;
 	char *n = strchr(buffer, '\n');
 	if (n) *n = '\0';
 	memcpy(gbuffer, buffer, 256);
