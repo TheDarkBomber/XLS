@@ -11,6 +11,8 @@ struct DebugInfo {
 	UQP(llvm::DIBuilder) Builder;
 	std::vector<llvm::DIScope*> Blocks;
 	std::map<dword, llvm::DIType*> CachedTypes;
+	std::string Filename = "unknown.xls";
+	std::string Directory = ".";
 	llvm::DIType* GetType(XLSType type);
 	llvm::DISubroutineType* GetFunctionType(SignatureNode signature);
 	void EmitLocation(llvm::IRBuilder<>* IRBuilder, Expression* expr = nullptr);

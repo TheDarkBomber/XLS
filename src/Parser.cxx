@@ -1779,7 +1779,7 @@ llvm::Function* FunctionNode::Render() {
 	llvm::DISubprogram* dbgSP;
 
 	if (Flags.Debug) {
-		dbgUnit = Dbg.Builder->createFile("unknown.xls", ".");
+		dbgUnit = Dbg.Builder->createFile(Dbg.Filename, Dbg.Directory);
 		dbgCtx = dbgUnit;
 		dbgSP = Dbg.Builder->createFunction(dbgCtx, signature.GetName(), llvm::StringRef(), dbgUnit, signature.GetRow(), Dbg.GetFunctionType(signature), signature.GetRow(), llvm::DINode::FlagPrototyped, llvm::DISubprogram::SPFlagDefinition);
 		function->setSubprogram(dbgSP);

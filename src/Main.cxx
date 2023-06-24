@@ -126,8 +126,18 @@ int main(int argc, char* argv[]) {
 			END_ARGV;
 		}
 
+		PARSE_ARGV("in") {
+			SET_ARGV(Dbg.Filename);
+			END_ARGV;
+		}
+
 		PARSE_ARGV("out") {
 			SET_ARGV(filename);
+			END_ARGV;
+		}
+
+		PARSE_ARGV("dir") {
+			SET_ARGV(Dbg.Directory);
 			END_ARGV;
 		}
 
