@@ -1347,7 +1347,8 @@ SSA *ReturnExpression::Render() {
 	return ZeroSSA(DefinedTypes["dword"]);
 }
 
-SSA *CVariadicArgumentExpression::Render() {
+SSA* CVariadicArgumentExpression::Render() {
+	EMIT_DEBUG;
 	XLSVariable VAListStore = AllonymousValues["variadic"];
 	SSA* VAList = Builder->CreateBitCast(VAListStore.Value, llvm::Type::getInt8PtrTy(*GlobalContext));
 	SSA* R = Builder->CreateVAArg(VAList, Type.Type, "xls_variadic_get");
@@ -1355,7 +1356,8 @@ SSA *CVariadicArgumentExpression::Render() {
 	return R;
 }
 
-SSA *VariadicArgumentExpression::Render() {
+SSA* VariadicArgumentExpression::Render() {
+	EMIT_DEBUG;
 	XLSVariable HiveStore = AllonymousValues["#hive"];
 	SSA* Hive = Builder->CreateLoad(HiveStore.Type.Type, HiveStore.Value, "xls_hive_value");
 	SSA* bee = Builder->CreateBitCast(Hive, Type.Type->getPointerTo());
@@ -1366,7 +1368,8 @@ SSA *VariadicArgumentExpression::Render() {
 	return R;
 }
 
-SSA *LabelExpression::Render() {
+SSA* LabelExpression::Render() {
+	EMIT_DEBUG;
 	llvm::Function *function = Builder->GetInsertBlock()->getParent();
 	SSA* Zero = ZeroSSA(DefinedTypes["dword"]);
 	if (Name == CurrentLabelIdentifier && Mode == LABEL_DECLARE) {
@@ -1377,6 +1380,10 @@ SSA *LabelExpression::Render() {
 		llvm::BasicBlock* label = AnonymousLabels.back();
 		Builder->CreateBr(label);
 		Builder->SetInsertPoint(label);
+		if (Flags.Debug) {
+			llvm::DILabel* dbgLbl = Dbg.Builder->createLabel(Dbg.Blocks.back(), "#AL" + std::to_string(AnonymousLabels.size()), Dbg.Blocks.back()->getFile(), GetRow());
+			Dbg.Builder->insertLabel(dbgLbl, llvm::DILocation::get(Dbg.Blocks.back()->getContext(), GetRow(), GetColumn(), Dbg.Blocks.back()), Builder->GetInsertBlock());
+		}
 		return Zero;
 	} else if (Name == "") {
 		if (AnonymousReferer > AnonymousLabels.size()) {
@@ -1386,6 +1393,10 @@ SSA *LabelExpression::Render() {
 		llvm::BasicBlock* label = AnonymousLabels[AnonymousReferer];
 		Builder->CreateBr(label);
 		Builder->SetInsertPoint(label);
+		if (Flags.Debug) {
+			llvm::DILabel* dbgLbl = Dbg.Builder->createLabel(Dbg.Blocks.back(), "#AL" + std::to_string(AnonymousLabels.size()), Dbg.Blocks.back()->getFile(), GetRow());
+			Dbg.Builder->insertLabel(dbgLbl, llvm::DILocation::get(Dbg.Blocks.back()->getContext(), GetRow(), GetColumn(), Dbg.Blocks.back()), Builder->GetInsertBlock());
+		}
 		return Zero;
 	}
 	if (AllonymousLabels.find(Name) == AllonymousLabels.end()) AllonymousLabels[Name] = llvm::BasicBlock::Create(*GlobalContext, "L#" + Name, function);
@@ -1393,12 +1404,17 @@ SSA *LabelExpression::Render() {
 		llvm::BasicBlock* label = AllonymousLabels[Name];
 		Builder->CreateBr(label);
 		Builder->SetInsertPoint(label);
+		if (Flags.Debug) {
+			llvm::DILabel* dbgLbl = Dbg.Builder->createLabel(Dbg.Blocks.back(), Name, Dbg.Blocks.back()->getFile(), GetRow());
+			Dbg.Builder->insertLabel(dbgLbl, llvm::DILocation::get(Dbg.Blocks.back()->getContext(), GetRow(), GetColumn(), Dbg.Blocks.back()), Builder->GetInsertBlock());
+		}
 	}
 	return Zero;
 }
 
-SSA *JumpExpression::Render() {
-	llvm::Function *function = Builder->GetInsertBlock()->getParent();
+SSA* JumpExpression::Render() {
+	EMIT_DEBUG;
+	llvm::Function* function = Builder->GetInsertBlock()->getParent();
 	SSA* Zero = ZeroSSA(DefinedTypes["dword"]);
 	if (Label == CurrentLabelIdentifier) {
 		llvm::BasicBlock* label = AnonymousLabels.back();
@@ -1435,6 +1451,7 @@ SSA *JumpExpression::Render() {
 }
 
 SSA* SetJumpExpression::Render() {
+	EMIT_DEBUG;
 	llvm::Function* SetJumpIntrinsic = llvm::Intrinsic::getDeclaration(GlobalModule.get(), llvm::Intrinsic::eh_sjlj_setjmp);
 	SetJumpIntrinsic->addFnAttr(llvm::Attribute::AlwaysInline);
 	SetJumpIntrinsic->addFnAttr(llvm::Attribute::ReturnsTwice);
@@ -1462,11 +1479,12 @@ SSA* SetJumpExpression::Render() {
 }
 
 SSA* LongJumpExpression::Render() {
-	llvm::Function *LongJumpIntrinsic = llvm::Intrinsic::getDeclaration(GlobalModule.get(), llvm::Intrinsic::eh_sjlj_longjmp);
+	EMIT_DEBUG;
+	llvm::Function* LongJumpIntrinsic = llvm::Intrinsic::getDeclaration(GlobalModule.get(), llvm::Intrinsic::eh_sjlj_longjmp);
 	LongJumpIntrinsic->addFnAttr(llvm::Attribute::AlwaysInline);
-	SSA *jumpBuffer = JumpBuffer->Render();
-	std::vector<llvm::Type *> IType;
-	std::vector<SSA *> IArg;
+	SSA* jumpBuffer = JumpBuffer->Render();
+	std::vector<llvm::Type*> IType;
+	std::vector<SSA*> IArg;
 	IType.push_back(DefinedTypes["byte*"].Type);
 	IArg.push_back(Builder->CreateBitCast(jumpBuffer, IType[0]));
 	Builder->CreateCall(LongJumpIntrinsic, llvm::ArrayRef<SSA*>(IArg));
@@ -1474,6 +1492,7 @@ SSA* LongJumpExpression::Render() {
 }
 
 SSA* SizeofExpression::Render() {
+	EMIT_DEBUG;
 	SSA* value = Sized->Render();
 	XLSType type = TypeAnnotation[value];
 	SSA* R = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, type.Size / 8, false));
@@ -1482,6 +1501,7 @@ SSA* SizeofExpression::Render() {
 }
 
 SSA* TypeofExpression::Render() {
+	EMIT_DEBUG;
 	SSA* value = Typed->Render();
 	XLSType type = TypeAnnotation[value];
 	SSA* R = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, type.UID, false));
@@ -1503,6 +1523,7 @@ SSA* CountofExpression::Render() {
 }
 
 SSA* SetCountofExpression::Render() {
+	EMIT_DEBUG;
 	VariableExpression* rangedptrExpression = static_cast<VariableExpression *>(Counted.get());
 	if (!rangedptrExpression) return CodeError("setcountof on fire.");
 	XLSVariable rangedptr = AllonymousValues[rangedptrExpression->GetName()];
@@ -1514,8 +1535,9 @@ SSA* SetCountofExpression::Render() {
 	return newCount;
 }
 
-SSA *IfExpression::Render() {
-	SSA *condition = Condition->Render();
+SSA* IfExpression::Render() {
+	EMIT_DEBUG;
+	SSA* condition = Condition->Render();
 	if (!condition) return nullptr;
 
 	if (condition->getType() != llvm::Type::getInt1Ty(*GlobalContext))
@@ -1617,6 +1639,7 @@ SSA* DeclarationExpression::Render() {
 }
 
 SSA* MacroExpression::Render() {
+	EMIT_DEBUG;
 	std::vector<XLiSp::Symbolic> Symbols;
 	Symbols.push_back(XLiSp::SymbolicAtom(Name, true));
 	XLiSp::SymbolicAtom k;
@@ -1660,6 +1683,7 @@ SSA* MacroExpression::Render() {
 }
 
 SSA* XLiSpExpression::Render() {
+	EMIT_DEBUG;
 	return XLiSp::Evaluate(Stream)->Render();
 }
 
@@ -1669,7 +1693,7 @@ SSA* ZeroSSA(XLSType Type) {
 	return R;
 }
 
-SSA *StructDefinition::Render() {
+SSA* StructDefinition::Render() {
 	XLSType NEWType;
 	StructData NEWStruct;
 	NEWType.Name = Name;
@@ -1694,8 +1718,8 @@ SSA *StructDefinition::Render() {
 	return R;
 }
 
-SSA *GlobalVariableNode::Render() {
-	llvm::GlobalVariable *global = new llvm::GlobalVariable(*GlobalModule, Type.Type, false, llvm::GlobalValue::ExternalLinkage, 0, Name);
+SSA* GlobalVariableNode::Render() {
+	llvm::GlobalVariable* global = new llvm::GlobalVariable(*GlobalModule, Type.Type, false, llvm::GlobalValue::ExternalLinkage, 0, Name);
 	global->setInitializer(llvm::ConstantInt::get(*GlobalContext, llvm::APInt(Type.Size, Value, false)));
 	XLSVariable variable;
 	variable.Type = Type;
@@ -1707,7 +1731,7 @@ SSA *GlobalVariableNode::Render() {
 	return global;
 }
 
-llvm::Function *SignatureNode::Render() {
+llvm::Function* SignatureNode::Render() {
 	std::vector<llvm::Type*> ArgumentType;
 	for (uint i = 0; i < Arguments.size(); i++)
 		ArgumentType.push_back(Arguments[i].second.Type);
@@ -1738,10 +1762,10 @@ llvm::Function *SignatureNode::Render() {
 	return function;
 }
 
-llvm::Function *FunctionNode::Render() {
+llvm::Function* FunctionNode::Render() {
 	SignatureNode &signature = *Signature;
 	FunctionSignatures[Signature->GetName()] = std::move(Signature);
-	llvm::Function *function = getFunction(signature.GetName());
+	llvm::Function* function = getFunction(signature.GetName());
 	if (!function) return nullptr;
 
 	if (signature.Binary()) BinaryPrecedence[signature.GetOperatorName()] = signature.GetOperatorPrecedence();
@@ -1791,7 +1815,7 @@ llvm::Function *FunctionNode::Render() {
 	if (Flags.Debug) Dbg.EmitLocation(Builder.get(), Body.get());
 
 	if (function->isVarArg()) {
-		Alloca *VAList = createEntryBlockAlloca(function, "variadic", DefinedTypes["valist"]);
+		Alloca* VAList = createEntryBlockAlloca(function, "variadic", DefinedTypes["valist"]);
 		XLSVariable VAListStore;
 		VAListStore.Type = DefinedTypes["valist"];
 		VAListStore.Value = VAList;
@@ -1805,7 +1829,7 @@ llvm::Function *FunctionNode::Render() {
 		// Builder->CreateIntrinsic(llvm::Intrinsic::vastart, llvm::ArrayRef<llvm::Type*>(IType), llvm::ArrayRef<SSA*>(IArg));
 	}
 
-	if (SSA *returnValue = Body->Render()) {
+	if (SSA* returnValue = Body->Render()) {
 		if (signature.GetType().Name != "void") Builder->CreateRet(Cast(signature.GetType(), returnValue));
 		else Builder->CreateRetVoid();
 		if (Flags.Debug) Dbg.Blocks.pop_back();
