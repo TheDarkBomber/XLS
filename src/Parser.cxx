@@ -785,7 +785,7 @@ UQP(SignatureNode) ParseOperatorSignature() {
 	GetNextToken();
 
 	if (signatureType && argumentNames.size() != signatureType) return ParseError("Invalid number of operands for operator.", nullptr);
-	return MUQ(SignatureNode, functionName, std::move(argumentNames), DefinedTypes["dword"], CurrentLocation, VARIADIC_NONE, llvm::CallingConv::Fast, true, precedence);
+	return MUQ(SignatureNode, functionName, std::move(argumentNames), DefinedTypes["dword"], CurrentLocation, false, VARIADIC_NONE, llvm::CallingConv::Fast, true, precedence);
 }
 
 UQP(SignatureNode) ParseSignature() {
@@ -811,6 +811,12 @@ UQP(SignatureNode) ParseSignature() {
 		GetNextToken();
 		if (CurrentToken.Type != LEXEME_IDENTIFIER)
 			return ParseError("Expected function name in function signature", nullptr);
+	}
+
+	bool internal = false;
+	if (CurrentIdentifier == "intern") {
+		internal = true;
+		GetNextToken();
 	}
 	std::string functionName = CurrentIdentifier;
 	GetNextToken();
@@ -854,7 +860,7 @@ UQP(SignatureNode) ParseSignature() {
 		GetNextToken();
 	}
 
-	return MUQ(SignatureNode, functionName, std::move(argumentNames), type, CurrentLocation, variadic, convention);
+	return MUQ(SignatureNode, functionName, std::move(argumentNames), type, CurrentLocation, internal, variadic, convention);
 }
 
 UQP(FunctionNode) ParseImplementation() {
@@ -886,7 +892,7 @@ UQP(SignatureNode) ParseExtern() {
 UQP(FunctionNode) ParseUnboundedExpression() {
 	static dword times = 0;
 	if (UQP(Expression) expression = ParseExpression()) {
-		UQP(SignatureNode) signature = MUQ(SignatureNode, "__mistakeman" + std::to_string(times), VDX(std::string, XLSType)(), DefinedTypes["dword"]);
+		UQP(SignatureNode) signature = MUQ(SignatureNode, "__mistakeman" + std::to_string(times), VDX(std::string, XLSType)(), DefinedTypes["dword"], CurrentLocation, true);
 		return MUQ(FunctionNode, std::move(signature), std::move(expression));
 	}
 	return nullptr;
@@ -1743,7 +1749,7 @@ llvm::Function* SignatureNode::Render() {
 
 	llvm::FunctionType *functionType = llvm::FunctionType::get(Type.Type, ArgumentType, Variadic == VARIADIC_C);
 
-	llvm::Function *function = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, Name, GlobalModule.get());
+	llvm::Function* function = llvm::Function::Create(functionType, Internal ? llvm::Function::PrivateLinkage : llvm::Function::ExternalLinkage, Name, GlobalModule.get());
 	function->setCallingConv(Convention);
 	if (!Type.UID) function->setDoesNotReturn();
 

@@ -71,6 +71,8 @@
 												 "variadic"
 												 "setjump"
 												 "longjump"
+												 "impl intern"
+												 "implement intern"
 												 "funcdef"
 												 "funcdef macro"))
 					(x-types '("dword" "word" "byte" "boole" "void" "sdword" "sword" "sbyte" "fn&" "jumpbuf" "label&" "valist" "N/A"))

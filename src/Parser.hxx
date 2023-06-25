@@ -379,12 +379,14 @@ class SignatureNode {
 	XLSType Type;
 	Variadism Variadic;
 	SourceLocation DbgLoc;
+	bool Internal;
 public:
-	SignatureNode(const std::string &name, VDX(std::string, XLSType) arguments, const XLSType &type, SourceLocation dbgLoc = CurrentLocation, Variadism variadic = VARIADIC_NONE, llvm::CallingConv::ID convention = llvm::CallingConv::C, bool operator_ = false, Precedence precedence = PRECEDENCE_INVALID) : Name(name), Arguments(std::move(arguments)), Type(type), DbgLoc(dbgLoc), Variadic(variadic), Convention(convention), Operator(operator_), OperatorPrecedence(precedence) {}
+	SignatureNode(const std::string &name, VDX(std::string, XLSType) arguments, const XLSType &type, SourceLocation dbgLoc = CurrentLocation, bool internal = false, Variadism variadic = VARIADIC_NONE, llvm::CallingConv::ID convention = llvm::CallingConv::C, bool operator_ = false, Precedence precedence = PRECEDENCE_INVALID) : Name(name), Arguments(std::move(arguments)), Type(type), DbgLoc(dbgLoc), Internal(internal), Variadic(variadic), Convention(convention), Operator(operator_), OperatorPrecedence(precedence) {}
 	llvm::Function *Render();
 	const std::string &GetName() const { return Name; }
 	const XLSType &GetType() const { return Type; }
 	const Variadism &GetVariadism() const { return Variadic; }
+	const bool IsInternal() const { return Internal; }
 	const VDX(std::string, XLSType) &GetArguments() const { return Arguments; }
 	dword GetRow() const { return DbgLoc.Row; }
 	dword GetColumn() const { return DbgLoc.Column; }
