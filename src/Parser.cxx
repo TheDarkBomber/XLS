@@ -1197,9 +1197,9 @@ SSA *UnaryExpression::Render() {
 	return callInstance;
 }
 
-SSA *CallExpression::Render() {
+SSA* CallExpression::Render() {
 	EMIT_DEBUG;
-	llvm::Function *called = getFunction(Called);
+	llvm::Function* called = getFunction(Called);
 	if (!called) {
 		if (AllonymousValues.find(Called) == AllonymousValues.end())
 			return CodeError("Call to undeclared function.");
@@ -1278,6 +1278,11 @@ SSA *CallExpression::Render() {
 	callInstance->setCallingConv(called->getCallingConv());
 	callInstance->setAttributes(called->getAttributes());
 	TypeAnnotation[callInstance] = ReturnTypeAnnotation[called];
+	if (TypeAnnotation[callInstance].Size == 0) {
+		SSA* c = Cast(DefinedTypes["byte"], callInstance);
+		TypeAnnotation[c] = DefinedTypes["byte"];
+		return c;
+	}
 	return callInstance;
 }
 
@@ -1573,7 +1578,7 @@ SSA* IfExpression::Render() {
 	function->getBasicBlockList().push_back(afterBlock);
 	Builder->SetInsertPoint(afterBlock);
 
-	llvm::PHINode *phiNode = Builder->CreatePHI(GetType(thenBranch).Type, 2, "xls_if_block");
+	llvm::PHINode* phiNode = Builder->CreatePHI(GetType(thenBranch).Type, 2, "xls_if_block");
 	phiNode->addIncoming(thenBranch, thenBlock);
 	phiNode->addIncoming(Cast(GetType(thenBranch), elseBranch), elseBlock);
 	TypeAnnotation[phiNode] = GetType(thenBranch);
