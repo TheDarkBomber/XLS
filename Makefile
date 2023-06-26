@@ -11,6 +11,12 @@ CXX_SOURCES=$(wildcard $(SOURCES)/*.cxx)
 CXX_OBJECTS=$(patsubst $(SOURCES)/%.cxx, $(OBJ_LOCATION)/%.o, $(CXX_SOURCES))
 OBJ_LOCATION=$(BUILD)
 
+ifdef DEBUG
+CXXFLAGS+= -g
+else
+CXXFLAGS+= -O2
+endif
+
 all: xls
 
 nxlib: $(BUILD)/nxlib.so
