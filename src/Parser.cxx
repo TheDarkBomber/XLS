@@ -1726,7 +1726,7 @@ SSA* StructDefinition::Render() {
 
 SSA* GlobalVariableNode::Render() {
 	llvm::GlobalVariable* global = new llvm::GlobalVariable(*GlobalModule, Type.Type, false, llvm::GlobalValue::ExternalLinkage, 0, Name);
-	global->setInitializer(llvm::ConstantInt::get(*GlobalContext, llvm::APInt(Type.Size, Value, false)));
+	global->setInitializer(llvm::Constant::getNullValue(Type.Type));
 	XLSVariable variable;
 	variable.Type = Type;
 	variable.Value = global;
@@ -2085,6 +2085,7 @@ void HandleExtern() {
 }
 
 void HandleGlobal() {
+	(void)CheckTypeDefined(CurrentIdentifier);
 	if (UQP(Statement) global = ParseGlobalVariable(DefinedTypes[CurrentIdentifier])) {
 		if (SSA *globalIR = global->Render()) {
 		}
