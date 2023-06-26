@@ -462,5 +462,11 @@ void InterpretDirective() {
 		CurrentLocation.Column = 0;
 		CurrentLocation.Row = strtoul(nextLine.c_str(), 0, 10);
 		Dbg.ExtraFiles.pop_back();
+	} else if (type == 'L') {
+		std::string nextLine = "";
+		char c;
+		while ((c = getchar()) != '\n') nextLine += c;
+		CurrentLocation.Column = 0;
+		CurrentLocation.Row = strtoul(nextLine.c_str(), 0, 10);
 	}
 }
