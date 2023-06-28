@@ -1,5 +1,6 @@
 extern READ(FD, byte* LOCATION, COUNT) : sdword;
 extern WRITE(FD, byte* MESSAGE, LENGTH) : sdword;
+extern BRK(byte* ADDR) : byte*;
 extern GETPID() : sdword;
 extern FORK() : sdword;
 extern EXIT(result);

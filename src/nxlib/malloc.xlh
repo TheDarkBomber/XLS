@@ -1,0 +1,4 @@
+extern sbrk(increment) : byte*
+
+extern malloc(size) : byte%
+extern free(byte* ptr) : void

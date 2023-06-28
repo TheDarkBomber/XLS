@@ -10,6 +10,7 @@ global %1:function
 section .text
 defsyscall READ, 0
 defsyscall WRITE, 1
+defsyscall BRK, 12
 defsyscall GETPID, 39
 defsyscall FORK, 57
 defsyscall EXIT, 60

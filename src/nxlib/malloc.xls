@@ -1,0 +1,69 @@
+#include malloc.xlh
+
+#include syscalls.xlh
+
+struct Block(dword size, byte* next, dword free);
+
+byte* global-base;
+byte* curbrk;
+
+typedef alias aliabrk fn&(byte*):void
+
+impl sbrk(increment) : byte* {
+	if (curbrk == 0) curbrk = BRK(BRK(0) + 1);
+	if (increment == 0) return curbrk;
+	curbrk = BRK(curbrk + increment);
+	curbrk;
+}
+
+impl intern find-free-block(Block** last, dword size) {
+	Block* current = global-base;
+	while ((current != 0) && !((current.free != 0) && current.size >= size)) {
+		last[0] = current;
+		current = current.next;
+	};
+	current;
+}
+
+impl intern request-space(Block* last, dword size) {
+	Block* block = sbrk(0);
+	byte* request = sbrk(size + (sizeof Block));
+
+	if (last) last.next = block;
+
+	block.size = size;
+	block.next = 0;
+	block.free = 0;
+	block;
+}
+
+impl malloc(size) : byte% {
+	Block* block;
+
+	if (size == 0) return 0;
+
+	if (!global-base) {
+		block = request-space(0, size);
+		if (!block) return 0;
+		global-base = block;
+	} else {
+		Block* last = global-base;
+		block = find-free-block(&last, size);
+		if (!block) {
+			block = request-space(last, size);
+			if (!block) return 0;
+		} else block.free = 0;
+	};
+
+	byte% R = byte*(block) + (sizeof Block);
+	setcountof(R, size);
+	R;
+}
+
+impl free(byte* ptr) : void {
+	if (!ptr) return;
+
+	Block* block = ptr + (sizeof Block);
+	block.free = 1;
+}
+
