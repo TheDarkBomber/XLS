@@ -1090,8 +1090,12 @@ SSA* BinaryExpression::Render() {
 	JMPIF(Operator, ">=", Operators_gte_compare);
 	goto Operators_end;
  Operators_plus:
+	if (GetType(left).IsPointer)
+		RET(Builder->CreateInBoundsGEP(DefinedTypes[GetType(left).Dereference].Type, left, right));
 	RET(Builder->CreateAdd(left, RPCAST, "xls_add"));
  Operators_minus:
+	if (GetType(left).IsPointer)
+		RET(Builder->CreateInBoundsGEP(DefinedTypes[GetType(left).Dereference].Type, left, Builder->CreateMul(right, llvm::ConstantInt::get(GetType(right).Type, llvm::APInt(GetType(right).Size, -1, false)))));
 	RET(Builder->CreateSub(left, RPCAST, "xls_subtract"));
  Operators_multiply:
 	RET(Builder->CreateMul(left, RPCAST, "xls_multiply"));
@@ -1181,6 +1185,7 @@ SSA *UnaryExpression::Render() {
 	JMPIF(Operator, "*", Unary_dereference);
 	goto Unary_end;
  Unary_not:
+	operand = Cast(DefinedTypes["byte"], operand);
 	operand = Builder->CreateZExt(operand, llvm::Type::getInt32Ty(*GlobalContext), "xls_cast_low_to_i32");
 	RET(Builder->CreateICmpEQ(operand, llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false)), "xls_unary_not"));
  Unary_ones_complement:
@@ -1585,11 +1590,11 @@ SSA* IfExpression::Render() {
 	return phiNode;
 }
 
-SSA *WhileExpression::Render() {
-	llvm::Function *function = Builder->GetInsertBlock()->getParent();
-	llvm::BasicBlock *conditionBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_while_check", function);
-	llvm::BasicBlock *loopBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_loop", function);
-	llvm::BasicBlock *afterBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_after_loop", function);
+SSA* WhileExpression::Render() {
+	llvm::Function* function = Builder->GetInsertBlock()->getParent();
+	llvm::BasicBlock* conditionBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_while_check", function);
+	llvm::BasicBlock* loopBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_loop", function);
+	llvm::BasicBlock* afterBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_after_loop", function);
 	BreakStack.push(afterBlock);
 	ContinueStack.push(conditionBlock);
 
@@ -1598,7 +1603,7 @@ SSA *WhileExpression::Render() {
 	else Builder->CreateBr(loopBlock);
 
 	Builder->SetInsertPoint(conditionBlock);
-	SSA *condition = Condition->Render();
+	SSA* condition = Condition->Render();
 	if (!condition) return nullptr;
 	if (condition->getType() != llvm::Type::getInt1Ty(*GlobalContext))
 		condition = Builder->CreateICmpNE( condition, llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, 0, false)), "xls_while_condition");
