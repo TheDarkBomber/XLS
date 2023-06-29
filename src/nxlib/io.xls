@@ -1,0 +1,23 @@
+#include io.xlh
+
+#include syscalls.xlh
+
+#include malloc.xlh
+
+// LANGUAGE FIXME: Problems with include directives being directly on the next line after another.
+
+// TODO: Add flags.
+impl fopen(byte* path) : fhandle* {
+	fhandle* file = malloc(sizeof fhandle);
+	file.fd = OPEN(path, 0, 2);
+	file.buffer = malloc(4096);
+	file;
+}
+
+impl fclose(fhandle* file) : dword {
+	FSYNC(file.fd);
+	CLOSE(file.fd);
+	free(file.buffer);
+	free(file);
+	0;
+}

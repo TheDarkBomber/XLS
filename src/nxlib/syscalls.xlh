@@ -1,7 +1,10 @@
 extern READ(FD, byte* LOCATION, COUNT) : sdword;
 extern WRITE(FD, byte* MESSAGE, LENGTH) : sdword;
+extern OPEN(byte* PATH, FLAGS, word MODE) : sdword;
+extern CLOSE(FD) : sdword;
 extern BRK(byte* ADDR) : byte*;
 extern GETPID() : sdword;
 extern FORK() : sdword;
 extern EXIT(result);
 extern TERMINATE(PID, SIGNAL);
+extern FSYNC(FD) : sdword;

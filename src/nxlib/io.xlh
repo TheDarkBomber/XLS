@@ -1,0 +1,10 @@
+$(set! write (lambda (fd str) (
+	[WRITE($(fd), $(str), $(if (c= (xls-type str) "byte*") [strlen($(str))] [countof $(str)]) )]
+)));
+
+funcdef macro write(expression, expression);
+
+struct fhandle(dword fd, byte% buffer, dword open?);
+
+extern fclose(fhandle* file) : dword;
+extern fopen(byte* path) : fhandle*;

@@ -9,6 +9,10 @@ XLC=$(BUILD)/xls
 XLCFLAGS=module NXLib
 XPP=$(BUILD)/xpp
 
+ifdef DEBUG
+XLCFLAGS+= pessimise debug
+endif
+
 CPU_LEVELS=
 CPU_FEATURES=
 
