@@ -4,7 +4,10 @@ $(set! write (lambda (fd str) (
 
 funcdef macro write(expression, expression);
 
-struct fhandle(dword fd, byte% buffer, dword open?);
+struct fhandle(dword fd, byte% rbuffer, byte% wbuffer, byte* base, dword ri, dword wi, byte mode, byte open?);
 
 extern fclose(fhandle* file) : dword;
 extern fopen(byte* path) : fhandle*;
+
+extern fwrite(fhandle* file, byte% text) : dword;
+extern fflush(fhandle* file) : dword;
