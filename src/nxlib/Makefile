@@ -13,6 +13,10 @@ ifdef DEBUG
 XLCFLAGS+= pessimise debug
 endif
 
+ifdef IR
+XLCFLAGS+= ir
+endif
+
 CPU_LEVELS=
 CPU_FEATURES=
 

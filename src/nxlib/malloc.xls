@@ -18,11 +18,9 @@ impl sbrk(increment) : byte* {
 
 impl intern find-free-block(Block** last, dword size) {
 	Block* current = global-base |> Block*;
-	while ((current != 0) && !((current.free != 0) && current.size >= size)) {
+	while (current && !(current.free && current.size >= size)) {
 		last[0] = current;
 		current = current.next;
-		// LANGUAGE FIXME: Logical operator shorting appears to be non-functional.
-		if (current == 0) break;
 	};
 	current;
 }

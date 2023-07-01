@@ -1066,11 +1066,15 @@ SSA* BinaryExpression::Render() {
 #define RCAST Cast(GetType(left), right)
 #define RPTR left->getType()->isPointerTy() ? PtrRHS(left, right) : right
 #define RPCAST left->getType()->isPointerTy() ? PtrRHS(left, RCAST) : RCAST
-	SSA *R;
+	SSA* R;
 #define RET(V) do { R = V; TypeAnnotation[R] = GetType(left); return R; } while(0)
-	SSA *left = LHS->Render();
-	SSA *right = RHS->Render();
-	if (!left || !right) return nullptr;
+	SSA* left = LHS->Render();
+	SSA* right;
+	if (Operator != "&&") {
+		right = RHS->Render();
+		if (!right) return nullptr;
+	}
+	if (!left) return nullptr;
 	JMPIF(Operator, "+", Operators_plus);
 	JMPIF(Operator, "-", Operators_minus);
 	JMPIF(Operator, "*", Operators_multiply);
@@ -1130,7 +1134,7 @@ SSA* BinaryExpression::Render() {
  Operators_bitwise_xor:
 	RET(Builder->CreateXor(left, right, "xls_bitwise_xor"));
  Operators_logical_and:
-	RET(Builder->CreateLogicalAnd(left, right, "xls_logical_and"));
+	RET(CreateLogicalAnd(left, std::move(RHS)));
  Operators_logical_or:
 	RET(Builder->CreateLogicalOr(left, right, "xls_logical_or"));
  Operators_logical_xor:
@@ -1558,14 +1562,14 @@ SSA* IfExpression::Render() {
 
 	if (condition->getType() != llvm::Type::getInt1Ty(*GlobalContext))
 		condition = Builder->CreateICmpNE(condition, llvm::Constant::getNullValue(condition->getType()), "xls_if_condition");
-	llvm::Function *function = Builder->GetInsertBlock()->getParent();
-	llvm::BasicBlock *thenBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_then", function);
-	llvm::BasicBlock *elseBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_else");
-	llvm::BasicBlock *afterBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_after_if");
+	llvm::Function* function = Builder->GetInsertBlock()->getParent();
+	llvm::BasicBlock* thenBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_then", function);
+	llvm::BasicBlock* elseBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_else");
+	llvm::BasicBlock* afterBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_after_if");
 	Builder->CreateCondBr(condition, thenBlock, elseBlock);
 
 	Builder->SetInsertPoint(thenBlock);
-	SSA *thenBranch = ThenBranch->Render();
+	SSA* thenBranch = ThenBranch->Render();
 	if (!thenBranch) return nullptr;
 
 	Builder->CreateBr(afterBlock);
@@ -1574,7 +1578,7 @@ SSA* IfExpression::Render() {
 	function->getBasicBlockList().push_back(elseBlock);
 	Builder->SetInsertPoint(elseBlock);
 
-	SSA *elseBranch = ElseBranch->Render();
+	SSA* elseBranch = ElseBranch->Render();
 	if (!elseBranch) return nullptr;
 
 	Builder->CreateBr(afterBlock);
@@ -1587,6 +1591,43 @@ SSA* IfExpression::Render() {
 	phiNode->addIncoming(thenBranch, thenBlock);
 	phiNode->addIncoming(Cast(GetType(thenBranch), elseBranch), elseBlock);
 	TypeAnnotation[phiNode] = GetType(thenBranch);
+	return phiNode;
+}
+
+SSA* CreateLogicalAnd(SSA* LHS, UQP(Expression) RHS) {
+	if (LHS->getType() != llvm::Type::getInt1Ty(*GlobalContext))
+		LHS = Builder->CreateICmpNE(LHS, ZeroSSA(GetType(LHS)), "xls_land_lhs_truth");
+
+	llvm::Function* function = Builder->GetInsertBlock()->getParent();
+	llvm::BasicBlock* computeRHS = llvm::BasicBlock::Create(*GlobalContext, "xls_land_lhs_true", function);
+	llvm::BasicBlock* noComputeRHS = llvm::BasicBlock::Create(*GlobalContext, "xls_land_lhs_false");
+	llvm::BasicBlock* afterBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_after_land");
+	Builder->CreateCondBr(LHS, computeRHS, noComputeRHS);
+
+	Builder->SetInsertPoint(computeRHS);
+	SSA* computedRHS = RHS->Render();
+	if (!computedRHS) return nullptr;
+
+	if (computedRHS->getType() != llvm::Type::getInt1Ty(*GlobalContext))
+		computedRHS = Builder->CreateICmpNE(computedRHS, ZeroSSA(GetType(computedRHS)), "xls_land_rhs_truth");
+
+	Builder->CreateBr(afterBlock);
+	computeRHS = Builder->GetInsertBlock();
+
+	function->getBasicBlockList().push_back(noComputeRHS);
+	Builder->SetInsertPoint(noComputeRHS);
+
+	SSA* falseValue = llvm::ConstantInt::getFalse(llvm::Type::getInt1Ty(*GlobalContext));
+	Builder->CreateBr(afterBlock);
+	noComputeRHS = Builder->GetInsertBlock();
+
+	function->getBasicBlockList().push_back(afterBlock);
+	Builder->SetInsertPoint(afterBlock);
+
+	llvm::PHINode* phiNode = Builder->CreatePHI(llvm::Type::getInt1Ty(*GlobalContext), 2, "xls_land_result");
+	phiNode->addIncoming(computedRHS, computeRHS);
+	phiNode->addIncoming(falseValue, noComputeRHS);
+	TypeAnnotation[phiNode] = DefinedTypes["boole"];
 	return phiNode;
 }
 

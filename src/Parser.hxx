@@ -504,6 +504,8 @@ UQP(FunctionNode) ParseOperatorDefinition();
 UQP(FunctionNode) ParseImplementation();
 UQP(FunctionNode) ParseUnboundedExpression();
 
+SSA* CreateLogicalAnd(SSA* LHS, UQP(Expression) RHS);
+
 SSA* ZeroSSA(XLSType Type);
 
 Precedence GetTokenPrecedence();
