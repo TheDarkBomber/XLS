@@ -160,12 +160,14 @@ class VariableExpression : public Expression {
 	bool Dereference;
 	UQP(Expression) Offset;
 	std::string Field;
+	UQP(Expression) FieldOffset;
 public:
-	VariableExpression(const std::string &name, bool isVolatile = false, bool isDereference = false, UQP(Expression) offset = nullptr, std::string field = "") : Name(name), Volatile(isVolatile), Dereference(isDereference), Offset(std::move(offset)), Field(field) {}
+	VariableExpression(const std::string &name, bool isVolatile = false, bool isDereference = false, UQP(Expression) offset = nullptr, std::string field = "", UQP(Expression) fieldOffset = nullptr) : Name(name), Volatile(isVolatile), Dereference(isDereference), Offset(std::move(offset)), Field(field), FieldOffset(std::move(fieldOffset)) {}
 	SSA *Render() override;
 	const std::string &GetName() const { return Name; }
 	const bool &IsDereference() const { return Dereference; }
 	const UQP(Expression) &GetOffset() const { return std::move(Offset); }
+	const UQP(Expression) &GetFieldOffset() const { return std::move(FieldOffset); }
 	const std::string &GetField() const { return Field; }
 };
 

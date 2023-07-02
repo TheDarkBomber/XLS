@@ -34,4 +34,6 @@ SSA* ExdexRangedPointerCount(SSA *value, XLSVariable variable);
 XLSVariable DemoteVariable(XLSVariable variable);
 SSA* DemotePointer(XLSType type, SSA* expression);
 
+XLSVariable FetchVirtualVariable(VariableExpression* variable);
+
 #endif

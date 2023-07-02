@@ -155,3 +155,27 @@ SSA* DemotePointer(XLSType type, SSA* expression) {
 	TypeAnnotation[demoted] = type;
 	return demoted;
 }
+
+XLSVariable FetchVirtualVariable(VariableExpression* variable) {
+	XLSVariable output;
+	output = AllonymousValues[variable->GetName()];
+	if (variable->GetOffset() == nullptr && variable->GetField() == "") return output;
+	if (variable->GetOffset() != nullptr) {
+		SSA* index = variable->GetOffset()->Render();
+		output.Name += "(offset)";
+		SSA* GEP = Builder->CreateGEP(output.Type.Type, output.Value, index);
+		output.Value = GEP;
+	}
+	if (variable->GetField() != "") {
+		std::vector<SSA*> GEPIndex(2);
+		auto fieldData = output.Type.Structure.Fields[variable->GetField()];
+		if (output.Type.IsPointer || output.Type.IsRangedPointer) output = DemoteVariable(output);
+		output.Name += "(field)";
+		GEPIndex[0] = ZeroSSA(DefinedTypes["dword"]);
+		GEPIndex[1] = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(32, fieldData.first, false));
+		SSA* GEP = Builder->CreateGEP(output.Type.Type, output.Value, GEPIndex);
+		output.Type = fieldData.second;
+		output.Value = GEP;
+	}
+	return output;
+}

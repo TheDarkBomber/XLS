@@ -154,7 +154,7 @@ UQP(Expression) ParseIdentifier(bool isVolatile) {
 		GetNextToken();
 		offset = ParseExpression(isVolatile);
 		if (!offset) return nullptr;
-		if (CurrentToken.Value != ']') return ParseError("Expected close square parentheses in dereference offset.");
+		if (CurrentToken.Value != ']') return ParseError("Expected close square parenthesis in dereference offset.");
 		GetNextToken();
 	}
 	if (CurrentToken.Value == '.') {
@@ -162,8 +162,15 @@ UQP(Expression) ParseIdentifier(bool isVolatile) {
 		if (CurrentToken.Type != LEXEME_IDENTIFIER) return ParseError("Expected field name.");
 		std::string field = CurrentIdentifier;
 		GetNextToken();
-		if (offset) return MUQ(VariableExpression, identifier, isVolatile, false, std::move(offset), field);
-		return MUQ(VariableExpression, identifier, isVolatile, false, nullptr, field);
+		UQP(Expression) fieldOffset = nullptr;
+		if (CurrentToken.Value == '[') {
+			GetNextToken();
+			fieldOffset = ParseExpression(isVolatile);
+			if (!fieldOffset) return nullptr;
+			if (CurrentToken.Value != ']') return ParseError("Expected close square parenthesis in field offset.");
+			GetNextToken();
+		}
+		return MUQ(VariableExpression, identifier, isVolatile, false, std::move(offset), field, std::move(fieldOffset));
 	}
 	if (offset) return MUQ(VariableExpression, identifier, isVolatile, false, std::move(offset));
 	if (CurrentToken.Value != '(') return MUQ(VariableExpression, identifier, isVolatile);
@@ -979,6 +986,13 @@ SSA* VariableExpression::Render() {
 	XLSVariable variable = AllonymousValues[Name];
 	if (Dereference) IndexVariable(variable, ZeroSSA(DefinedTypes["dword"]), Volatile);
 
+	if (FieldOffset) {
+		variable = FetchVirtualVariable(this);
+		SSA* offset = FieldOffset->Render();
+		if (!offset) return nullptr;
+		return IndexVariable(variable, offset, Volatile);
+	}
+
 	if (Field != "") {
 		if (!variable.Type.IsStruct) return nullptr;
 		if (variable.Type.Structure.Fields.find(Field) == variable.Type.Structure.Fields.end()) return CodeError("Unknown field.");
@@ -1025,6 +1039,12 @@ SSA* BinaryExpression::Render() {
 			return CodeError("Unknown variable name.");
 
 		XLSVariable variable = AllonymousValues[LAssignment->GetName()];
+		if (LAssignment->GetFieldOffset() != nullptr) {
+			variable = FetchVirtualVariable(LAssignment);
+			SSA* offset = LAssignment->GetFieldOffset()->Render();
+			if (!offset) return nullptr;
+			return ExdexVariable(value, variable, offset, Volatile);
+		}
 		if (LAssignment->GetField() != "") {
 			if (!variable.Type.IsStruct) return nullptr;
 			if (variable.Type.Structure.Fields.find(LAssignment->GetField()) == variable.Type.Structure.Fields.end()) return CodeError("Unknown field to assign.");
@@ -1546,7 +1566,7 @@ SSA* SetCountofExpression::Render() {
 	EMIT_DEBUG;
 	VariableExpression* rangedptrExpression = static_cast<VariableExpression *>(Counted.get());
 	if (!rangedptrExpression) return CodeError("setcountof on fire.");
-	XLSVariable rangedptr = AllonymousValues[rangedptrExpression->GetName()];
+	XLSVariable rangedptr = FetchVirtualVariable(rangedptrExpression);
 	if (!rangedptr.Type.IsRangedPointer) return CodeError("Cannot mutate the count of values that do not have ranged pointer type.");
 	SSA* newCount = NewCount->Render();
 	newCount = Cast(DefinedTypes["#addrsize"], newCount);

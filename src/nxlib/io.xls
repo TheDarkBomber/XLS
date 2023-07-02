@@ -14,22 +14,18 @@ impl fopen(byte* path) : fhandle* {
 	file.base = malloc(4096);
 	// LANGUAGE FIXME: Very bad problems with fields, hence the weird redundant
 	// X and Y variables.
-	byte% X;
-	byte% Y;
 	if (file.mode == 0) {
-		X = file.base;
-		setcountof(X, 4096);
+		file.rbuffer = file.base;
+		setcountof(file.rbuffer, 4096);
 	} else if (file.mode == 1) {
-		Y = file.base;
-		setcountof(Y, 4096);
+		file.wbuffer = file.base;
+		setcountof(file.wbuffer, 4096);
 	} else {
-		X = file.base;
-		Y = file.base + 2048;
-		setcountof(X, 2048);
-		setcountof(Y, 2048);
+		file.rbuffer = file.base;
+		file.wbuffer = file.base + 2048;
+		setcountof(file.rbuffer, 2048);
+		setcountof(file.wbuffer, 2048);
 	};
-	file.rbuffer = X;
-	file.wbuffer = Y;
 	file.open? = 1;
 	file.ri = 0;
 	file.wi = 0;
@@ -47,12 +43,11 @@ impl fclose(fhandle* file) : dword {
 
 impl fwrite(fhandle* file, byte% text) : dword {
 	dword i = 0;
-	byte% B = file.wbuffer;
 	while (i < (countof text)) {
 		if (file.wi == (countof file.wbuffer)) fflush(file);
-		B[file.wi] = text[i];
+		file.wbuffer[file.wi] = text[i];
 		file.wi = file.wi + 1;
-		if (B[file.wi - 1] == '\n') fflush(file);
+		if (file.wbuffer[file.wi - 1] == '\n') fflush(file);
 		i = i + 1;
 	};
 	return i;
