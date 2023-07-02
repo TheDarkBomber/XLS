@@ -1070,7 +1070,7 @@ SSA* BinaryExpression::Render() {
 #define RET(V) do { R = V; TypeAnnotation[R] = GetType(left); return R; } while(0)
 	SSA* left = LHS->Render();
 	SSA* right;
-	if (Operator != "&&") {
+	if (Operator != "&&" && Operator != "||") {
 		right = RHS->Render();
 		if (!right) return nullptr;
 	}
@@ -1134,9 +1134,9 @@ SSA* BinaryExpression::Render() {
  Operators_bitwise_xor:
 	RET(Builder->CreateXor(left, right, "xls_bitwise_xor"));
  Operators_logical_and:
-	RET(CreateLogicalAnd(left, std::move(RHS)));
+	RET(CreateLogicalAnd(left, std::move(RHS), false));
  Operators_logical_or:
-	RET(Builder->CreateLogicalOr(left, right, "xls_logical_or"));
+	RET(CreateLogicalAnd(left, std::move(RHS), true));
  Operators_logical_xor:
 	RET(Builder->CreateICmpNE(Builder->CreateLogicalOr(left, right), Builder->CreateLogicalAnd(left, right), "xls_logical_xor"));
  Operators_end:
@@ -1594,7 +1594,7 @@ SSA* IfExpression::Render() {
 	return phiNode;
 }
 
-SSA* CreateLogicalAnd(SSA* LHS, UQP(Expression) RHS) {
+SSA* CreateLogicalAnd(SSA* LHS, UQP(Expression) RHS, bool orMode) {
 	if (LHS->getType() != llvm::Type::getInt1Ty(*GlobalContext))
 		LHS = Builder->CreateICmpNE(LHS, ZeroSSA(GetType(LHS)), "xls_land_lhs_truth");
 
@@ -1602,7 +1602,8 @@ SSA* CreateLogicalAnd(SSA* LHS, UQP(Expression) RHS) {
 	llvm::BasicBlock* computeRHS = llvm::BasicBlock::Create(*GlobalContext, "xls_land_lhs_true", function);
 	llvm::BasicBlock* noComputeRHS = llvm::BasicBlock::Create(*GlobalContext, "xls_land_lhs_false");
 	llvm::BasicBlock* afterBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_after_land");
-	Builder->CreateCondBr(LHS, computeRHS, noComputeRHS);
+	if (!orMode) Builder->CreateCondBr(LHS, computeRHS, noComputeRHS);
+	else Builder->CreateCondBr(LHS, noComputeRHS, computeRHS);
 
 	Builder->SetInsertPoint(computeRHS);
 	SSA* computedRHS = RHS->Render();
@@ -1617,7 +1618,9 @@ SSA* CreateLogicalAnd(SSA* LHS, UQP(Expression) RHS) {
 	function->getBasicBlockList().push_back(noComputeRHS);
 	Builder->SetInsertPoint(noComputeRHS);
 
-	SSA* falseValue = llvm::ConstantInt::getFalse(llvm::Type::getInt1Ty(*GlobalContext));
+	SSA* terminalValue;
+	if (!orMode) terminalValue = llvm::ConstantInt::getFalse(llvm::Type::getInt1Ty(*GlobalContext));
+	else terminalValue = llvm::ConstantInt::getTrue(llvm::Type::getInt1Ty(*GlobalContext));
 	Builder->CreateBr(afterBlock);
 	noComputeRHS = Builder->GetInsertBlock();
 
@@ -1626,7 +1629,7 @@ SSA* CreateLogicalAnd(SSA* LHS, UQP(Expression) RHS) {
 
 	llvm::PHINode* phiNode = Builder->CreatePHI(llvm::Type::getInt1Ty(*GlobalContext), 2, "xls_land_result");
 	phiNode->addIncoming(computedRHS, computeRHS);
-	phiNode->addIncoming(falseValue, noComputeRHS);
+	phiNode->addIncoming(terminalValue, noComputeRHS);
 	TypeAnnotation[phiNode] = DefinedTypes["boole"];
 	return phiNode;
 }

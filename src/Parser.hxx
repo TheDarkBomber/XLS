@@ -504,7 +504,7 @@ UQP(FunctionNode) ParseOperatorDefinition();
 UQP(FunctionNode) ParseImplementation();
 UQP(FunctionNode) ParseUnboundedExpression();
 
-SSA* CreateLogicalAnd(SSA* LHS, UQP(Expression) RHS);
+SSA* CreateLogicalAnd(SSA* LHS, UQP(Expression) RHS, bool orMode);
 
 SSA* ZeroSSA(XLSType Type);
 
