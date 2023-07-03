@@ -2,3 +2,4 @@ extern sbrk(increment) : byte*
 
 extern malloc(size) : byte%
 extern free(byte* ptr) : void
+extern realloc(byte* ptr, dword size) : byte%

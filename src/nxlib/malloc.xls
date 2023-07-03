@@ -16,7 +16,7 @@ impl sbrk(increment) : byte* {
 	curbrk;
 }
 
-impl intern find-free-block(Block** last, dword size) {
+impl intern find-free-block(Block** last, dword size) : Block* {
 	Block* current = global-base |> Block*;
 	while (current && !(current.free && current.size >= size)) {
 		last[0] = current;
@@ -25,7 +25,7 @@ impl intern find-free-block(Block** last, dword size) {
 	current;
 }
 
-impl intern request-space(Block* last, dword size) {
+impl intern request-space(Block* last, dword size) : Block* {
 	Block* block = sbrk(0);
 	byte* request = sbrk(size + (sizeof Block));
 
@@ -34,6 +34,17 @@ impl intern request-space(Block* last, dword size) {
 	block.size = size;
 	block.next = 0;
 	block.free = 0;
+	block;
+}
+
+impl intern split-block(Block* block, dword size) : Block* {
+	if ((size + (sizeof Block)) >= block.size) return block;
+	Block* to-split = byte*(block + 1) + size;
+	to-split.size = block.size - size - (sizeof Block);
+	to-split.next = block.next;
+	to-split.free = 1;
+	block.size = block;
+	block.next = to-split;
 	block;
 }
 
@@ -63,7 +74,31 @@ impl malloc(size) : byte% {
 impl free(byte* ptr) : void {
 	if (!ptr) return;
 
-	Block* block = ptr + (sizeof Block);
+	Block* block = ptr - (sizeof Block);
 	block.free = 1;
+}
+
+impl realloc(byte* ptr, dword size) : byte% {
+	if (!ptr) return malloc(size);
+
+	byte% R;
+	Block* block = ptr - (sizeof Block);
+	if (block.size >= size) {
+		R = split-block(block, size) + 1;
+		setcountof(R, size);
+		return R;
+	};
+
+	R = malloc(size);
+	if (!R) return 0;
+
+	// LANGUAGE TODO: Implement memcopy
+	dword i = 0;
+	while (i < block.size) {
+		R[i] = ptr[i];
+		i = i + 1;
+	};
+	free(ptr);
+	R;
 }
 
