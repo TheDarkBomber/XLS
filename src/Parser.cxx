@@ -223,6 +223,8 @@ UQP(Expression) ParseDispatcher() {
 		return ParseTypeof();
 	case LEXEME_COUNTOF:
 		return ParseCountof();
+	case LEXEME_MEMSET:
+		return ParseMemset();
 	case LEXEME_MUTABLE:
 		return ParseMutable();
 	case LEXEME_BREAK:
@@ -438,6 +440,27 @@ UQP(Expression) ParseSetCountof() {
 	if (CurrentToken.Value != ')') return ParseError("Expected close parenthesis to terminate setcountof");
 	GetNextToken();
 	return MUQ(SetCountofExpression, std::move(counted), std::move(newCount));
+}
+
+UQP(Expression) ParseMemset() {
+	GetNextToken();
+	if (CurrentToken.Value != '(') return ParseError("Expected open parenthesis after memset");
+	GetNextToken();
+	UQP(Expression) ptr = ParseExpression();
+	if (CurrentToken.Value != ',') return ParseError("Expected comma in memset");
+	GetNextToken();
+	UQP(Expression) value = ParseExpression();
+	if (CurrentToken.Value == ')') {
+		GetNextToken();
+		return MUQ(MemsetExpression, std::move(ptr), std::move(value));
+	}
+	if (CurrentToken.Value != ',') return ParseError("Expected close parenthesis or comma in memset");
+	GetNextToken();
+	// '('
+	UQP(Expression) length = ParseExpression();
+	if (CurrentToken.Value != ')') return ParseError("Expected close parenthesis to terminate memset");
+	GetNextToken();
+	return MUQ(MemsetExpression, std::move(ptr), std::move(value), std::move(length));
 }
 
 UQP(Expression) ParseMutable() {
@@ -1573,6 +1596,79 @@ SSA* SetCountofExpression::Render() {
 	ExdexRangedPointerCount(newCount, rangedptr);
 	TypeAnnotation[newCount] = DefinedTypes["#addrsize"];
 	return newCount;
+}
+
+SSA* MemsetExpression::Render() {
+	EMIT_DEBUG;
+	SSA* ptr = Ptr->Render();
+	XLSType ptype = GetType(ptr);
+	if (!ptype.IsPointer && !ptype.IsRangedPointer) return CodeError("Expected first argument to memset to be a ranged or unranged pointer.");
+	if (Length == nullptr && !ptype.IsRangedPointer) return CodeError("Expected length argument or for the first argument of memset to be a ranged pointer.");
+	SSA* length = (Length != nullptr) ? Cast(DefinedTypes["#addrsize"], Length->Render()) : Builder->CreateExtractValue(ptr, llvm::ArrayRef<unsigned>(RANGED_POINTER_COUNTOF));
+	TypeAnnotation[length] = DefinedTypes["#addrsize"];
+	SSA* value = Cast(DefinedTypes["byte"], Value->Render());
+	// Since LLVM is incomprehensibly absurd, the inline memset intrinsic does not work for non-constant lengths‽ Thus, we roll our own.
+	// We will have to instead use inline memset in small but efficient block sizes.
+	SSA* pvalue = Cast(DefinedTypes["byte*"], ptr);
+	llvm::Function* function = Builder->GetInsertBlock()->getParent();
+	XLSVariable induction;
+	induction.Global = false;
+	induction.Name = ".#memset.tmp.bee";
+	induction.Type = DefinedTypes["#addrsize"];
+	induction.Value = createEntryBlockAlloca(function, "bee", induction.Type);
+	AllonymousValues[".#memset.tmp.bee"] = induction;
+	WriteVariable(ZeroSSA(DefinedTypes["#addrsize"]), induction);
+	// OK, now we need the number of times the loop must run stored somewhere.
+	SSA* n1 = llvm::ConstantInt::get(DefinedTypes["#addrsize"].Type, llvm::APInt(DefinedTypes["#addrsize"].Size, 1, false));
+	SSA* n64 = llvm::ConstantInt::get(DefinedTypes["#addrsize"].Type, llvm::APInt(DefinedTypes["#addrsize"].Size, 64, false));
+	SSA* modulus = Builder->CreateURem(length, n64, "memset-modulus");
+	SSA* division = Builder->CreateUDiv(length, n64, "memset-division");
+	// Time to make a loop!
+	// Loop 1: Slow loop of the first modulus bytes.
+	llvm::BasicBlock* conditionBlock = llvm::BasicBlock::Create(*GlobalContext, "memset-condition-slow", function);
+	llvm::BasicBlock* loop = llvm::BasicBlock::Create(*GlobalContext, "memset-loop-slow", function);
+	llvm::BasicBlock* after = llvm::BasicBlock::Create(*GlobalContext, "memset-after-slow", function);
+
+	Builder->CreateBr(conditionBlock);
+	Builder->SetInsertPoint(conditionBlock);
+	SSA* condition = Builder->CreateICmpULT(ReadVariable(induction), modulus);
+	Builder->CreateCondBr(condition, loop, after);
+
+	Builder->SetInsertPoint(loop);
+	SSA* GEP = Builder->CreateGEP(DefinedTypes["byte"].Type, pvalue, ReadVariable(induction), "memset-gep-slow");
+	Builder->CreateStore(value, GEP);
+	SSA* plusOne = Builder->CreateAdd(ReadVariable(induction), n1);
+	TypeAnnotation[plusOne] = induction.Type;
+	WriteVariable(plusOne, induction);
+
+	Builder->CreateBr(conditionBlock);
+	Builder->SetInsertPoint(after);
+
+	pvalue = Builder->CreateGEP(DefinedTypes["byte"].Type, pvalue, ReadVariable(induction));
+	WriteVariable(ZeroSSA(DefinedTypes["#addrsize"]), induction);
+	// Loop 2: Fast loop of the rest of the bytes.
+	conditionBlock = llvm::BasicBlock::Create(*GlobalContext, "memset-condition-fast", function);
+	loop = llvm::BasicBlock::Create(*GlobalContext, "memset-loop-fast", function);
+	after = llvm::BasicBlock::Create(*GlobalContext, "memset-after-fast", function);
+
+	Builder->CreateBr(conditionBlock);
+	Builder->SetInsertPoint(conditionBlock);
+	condition = Builder->CreateICmpULT(ReadVariable(induction), division);
+	Builder->CreateCondBr(condition, loop, after);
+
+	Builder->SetInsertPoint(loop);
+	SSA* shifted = Builder->CreateShl(ReadVariable(induction), llvm::ConstantInt::get(DefinedTypes["#addrsize"].Type, llvm::APInt(DefinedTypes["#addrsize"].Size, 6, false)));
+	GEP = Builder->CreateGEP(DefinedTypes["byte"].Type, pvalue, shifted, "memset-gep-fast");
+	Builder->CreateMemSetInline(GEP, llvm::MaybeAlign(), value, n64);
+	plusOne = Builder->CreateAdd(ReadVariable(induction), n1);
+	TypeAnnotation[plusOne] = induction.Type;
+	WriteVariable(plusOne, induction);
+
+	Builder->CreateBr(conditionBlock);
+	Builder->SetInsertPoint(after);
+	AllonymousValues.erase(".#memset.tmp.bee");
+
+	return length;
 }
 
 SSA* IfExpression::Render() {

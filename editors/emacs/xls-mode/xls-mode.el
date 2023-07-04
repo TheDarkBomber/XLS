@@ -76,7 +76,7 @@
 												 "funcdef"
 												 "funcdef macro"))
 					(x-types '("dword" "word" "byte" "boole" "void" "sdword" "sword" "sbyte" "fn&" "jumpbuf" "label&" "valist" "N/A"))
-					(x-auxillary '("sizeof" "typeof" "countof" "setcountof"))
+					(x-auxillary '("sizeof" "typeof" "countof" "setcountof" "memset"))
 					(x-constants '())
 
 					(x-keywords-regex (regexp-opt x-keywords 'words))

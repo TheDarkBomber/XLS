@@ -305,6 +305,16 @@ public:
 	SSA* Render() override;
 };
 
+class MemsetExpression : public Expression {
+	UQP(Expression) Ptr;
+	UQP(Expression) Value;
+	UQP(Expression) Length;
+public:
+	MemsetExpression(UQP(Expression) ptr, UQP(Expression) value, UQP(Expression) length = nullptr) : Ptr(std::move(ptr)), Value(std::move(value)), Length(std::move(length)) {}
+	const bool HasLength() const { return Length != nullptr; }
+	SSA* Render() override;
+};
+
 class CVariadicArgumentExpression : public Expression {
 	XLSType Type;
 public:
@@ -480,6 +490,7 @@ UQP(Expression) ParseSizeof();
 UQP(Expression) ParseTypeof();
 UQP(Expression) ParseCountof();
 UQP(Expression) ParseSetCountof();
+UQP(Expression) ParseMemset();
 UQP(Expression) ParseMutable();
 UQP(Expression) ParseBreak();
 UQP(Expression) ParseContinue();
