@@ -315,6 +315,16 @@ public:
 	SSA* Render() override;
 };
 
+class MemcopyExpression : public Expression {
+	UQP(Expression) Destination;
+	UQP(Expression) Source;
+	UQP(Expression) Length;
+	bool RegionsOverlap;
+public:
+	MemcopyExpression(UQP(Expression) destination, UQP(Expression) source, UQP(Expression) length = nullptr, bool overlap = false) : Destination(std::move(destination)), Source(std::move(source)), Length(std::move(length)), RegionsOverlap(overlap) {}
+	SSA* Render() override;
+};
+
 class CVariadicArgumentExpression : public Expression {
 	XLSType Type;
 public:
@@ -491,6 +501,7 @@ UQP(Expression) ParseTypeof();
 UQP(Expression) ParseCountof();
 UQP(Expression) ParseSetCountof();
 UQP(Expression) ParseMemset();
+UQP(Expression) ParseMemcopy();
 UQP(Expression) ParseMutable();
 UQP(Expression) ParseBreak();
 UQP(Expression) ParseContinue();

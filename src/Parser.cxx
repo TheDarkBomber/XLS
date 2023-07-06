@@ -225,6 +225,8 @@ UQP(Expression) ParseDispatcher() {
 		return ParseCountof();
 	case LEXEME_MEMSET:
 		return ParseMemset();
+	case LEXEME_MEMCOPY:
+		return ParseMemcopy();
 	case LEXEME_MUTABLE:
 		return ParseMutable();
 	case LEXEME_BREAK:
@@ -461,6 +463,28 @@ UQP(Expression) ParseMemset() {
 	if (CurrentToken.Value != ')') return ParseError("Expected close parenthesis to terminate memset");
 	GetNextToken();
 	return MUQ(MemsetExpression, std::move(ptr), std::move(value), std::move(length));
+}
+
+UQP(Expression) ParseMemcopy() {
+	bool overlap = (CurrentToken.Subtype == LEXEME_ELSE);
+	GetNextToken();
+	if (CurrentToken.Value != '(') return ParseError("Expected open parenthesis after memcopy");
+	GetNextToken();
+	UQP(Expression) destination = ParseExpression();
+	if (CurrentToken.Value != ',') return ParseError("Expected comma in memcopy");
+	GetNextToken();
+	UQP(Expression) source = ParseExpression();
+	if (CurrentToken.Value == ')') {
+		GetNextToken();
+		return MUQ(MemcopyExpression, std::move(destination), std::move(source), nullptr, overlap);
+	}
+	if (CurrentToken.Value != ',') return ParseError("Expected close parenthesis or comma in memcopy");
+	GetNextToken();
+	// '('
+	UQP(Expression) length = ParseExpression();
+	if (CurrentToken.Value != ')') return ParseError("Expected close parenthesis to terminate memcopy");
+	GetNextToken();
+	return MUQ(MemcopyExpression, std::move(destination), std::move(source), std::move(length), overlap);
 }
 
 UQP(Expression) ParseMutable() {
@@ -1667,6 +1691,84 @@ SSA* MemsetExpression::Render() {
 	Builder->CreateBr(conditionBlock);
 	Builder->SetInsertPoint(after);
 	AllonymousValues.erase(".#memset.tmp.bee");
+
+	return length;
+}
+
+SSA* MemcopyExpression::Render() {
+	EMIT_DEBUG;
+	SSA* destination = Destination->Render();
+	SSA* source = Source->Render();
+	XLSType dtype = GetType(destination);
+	XLSType stype = GetType(source);
+	if (!dtype.IsPointer && !dtype.IsRangedPointer) return CodeError("Expected first argument to memcopy to be a pointer or ranged pointer.");
+	if (!stype.IsPointer && !stype.IsRangedPointer) return CodeError("Expected second argument to memcopy to be a pointer or ranged pointer.");
+	if (Length == nullptr && !stype.IsRangedPointer) return CodeError("Expected length argument or for the second argument of memcopy to be a ranged pointer.");
+	SSA* length = (Length != nullptr) ? Cast(DefinedTypes["#addrsize"], Length->Render()) : Builder->CreateExtractValue(source, RANGED_POINTER_COUNTOF);
+	destination = Cast(DefinedTypes["byte*"], destination);
+	source = Cast(DefinedTypes["byte*"], source);
+	llvm::Function* function = Builder->GetInsertBlock()->getParent();
+	XLSVariable induction;
+	induction.Global = false;
+	induction.Name = ".#memcopy.tmp.bee";
+	induction.Type = DefinedTypes["#addrsize"];
+	induction.Value = createEntryBlockAlloca(function, induction.Name, induction.Type);
+	AllonymousValues[induction.Name] = induction;
+	WriteVariable(ZeroSSA(induction.Type), induction);
+	SSA* n1 = llvm::ConstantInt::get(DefinedTypes["#addrsize"].Type, llvm::APInt(DefinedTypes["#addrsize"].Size, 1, false));
+	SSA* n64 = llvm::ConstantInt::get(DefinedTypes["#addrsize"].Type, llvm::APInt(DefinedTypes["#addrsize"].Size, 64, false));
+	SSA* modulus = Builder->CreateURem(length, n64, "memcopy-modulus");
+	SSA* division = Builder->CreateUDiv(length, n64, "memcopy-division");
+	// Loop 1
+	llvm::BasicBlock* conditionBlock = llvm::BasicBlock::Create(*GlobalContext, "memcopy-condition-slow", function);
+	llvm::BasicBlock* loop = llvm::BasicBlock::Create(*GlobalContext, "memcopy-loop-slow", function);
+	llvm::BasicBlock* after = llvm::BasicBlock::Create(*GlobalContext, "memcopy-after-slow", function);
+
+	Builder->CreateBr(conditionBlock);
+	Builder->SetInsertPoint(conditionBlock);
+	SSA* i = ReadVariable(induction);
+	SSA* condition = Builder->CreateICmpULT(i, modulus);
+	Builder->CreateCondBr(condition, loop, after);
+
+	Builder->SetInsertPoint(loop);
+	SSA* GEPDestination = Builder->CreateGEP(DefinedTypes["byte"].Type, destination, i);
+	SSA* GEPSource = Builder->CreateGEP(DefinedTypes["byte"].Type, source, i);
+	Builder->CreateStore(Builder->CreateLoad(DefinedTypes["byte"].Type, GEPSource), GEPDestination);
+	SSA* plusOne = Builder->CreateAdd(i, n1);
+	TypeAnnotation[plusOne] = induction.Type;
+	WriteVariable(plusOne, induction);
+
+	Builder->CreateBr(conditionBlock);
+	Builder->SetInsertPoint(after);
+
+	destination = Builder->CreateGEP(DefinedTypes["byte"].Type, destination, i);
+	source = Builder->CreateGEP(DefinedTypes["byte"].Type, source, i);
+	WriteVariable(ZeroSSA(induction.Type), induction);
+
+	// Loop 2
+	conditionBlock = llvm::BasicBlock::Create(*GlobalContext, "memcopy-condition-fast", function);
+	loop = llvm::BasicBlock::Create(*GlobalContext, "memcopy-loop-fast", function);
+	after = llvm::BasicBlock::Create(*GlobalContext, "memcopy-after-fast", function);
+
+	Builder->CreateBr(conditionBlock);
+	Builder->SetInsertPoint(conditionBlock);
+	i = ReadVariable(induction);
+	condition = Builder->CreateICmpULT(i, division);
+	Builder->CreateCondBr(condition, loop, after);
+
+	Builder->SetInsertPoint(loop);
+	SSA* shifted = Builder->CreateShl(ReadVariable(induction), llvm::ConstantInt::get(DefinedTypes["#addrsize"].Type, llvm::APInt(DefinedTypes["#addrsize"].Size, 6, false)));
+	GEPDestination = Builder->CreateGEP(DefinedTypes["byte"].Type, destination, shifted);
+	GEPSource = Builder->CreateGEP(DefinedTypes["byte"].Type, source, shifted);
+	if (!RegionsOverlap) Builder->CreateMemCpyInline(GEPDestination, llvm::MaybeAlign(), GEPSource, llvm::MaybeAlign(), n64);
+	else Builder->CreateMemMove(GEPDestination, llvm::MaybeAlign(), GEPSource, llvm::MaybeAlign(), n64);
+	plusOne = Builder->CreateAdd(i, n1);
+	TypeAnnotation[plusOne] = induction.Type;
+	WriteVariable(plusOne, induction);
+
+	Builder->CreateBr(conditionBlock);
+	Builder->SetInsertPoint(after);
+	AllonymousValues.erase(".#memcopy.tmp.bee");
 
 	return length;
 }

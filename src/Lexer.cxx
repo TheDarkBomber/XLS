@@ -117,6 +117,8 @@ Token GetToken() {
 		JMPIF(CurrentIdentifier, "setcountof", GetToken_kw_setcountof);
 		JMPIF(CurrentIdentifier, "funcdef", GetToken_kw_funcdef);
 		JMPIF(CurrentIdentifier, "memset", GetToken_kw_memset);
+		JMPIF(CurrentIdentifier, "memcopy", GetToken_kw_memcopy);
+		JMPIF(CurrentIdentifier, "memcopyovl", GetToken_kw_memcopyovl);
 		goto GetToken_end_kw;
 
 	GetToken_kw_implement:
@@ -147,6 +149,11 @@ Token GetToken() {
 		return output;
 	GetToken_kw_memset:
 		output.Type = LEXEME_MEMSET;
+		return output;
+	GetToken_kw_memcopyovl:
+		output.Subtype = LEXEME_ELSE;
+	GetToken_kw_memcopy:
+		output.Type = LEXEME_MEMCOPY;
 		return output;
 	GetToken_kw_calling:
 		output.Type = LEXEME_IDENTIFIER;

@@ -92,12 +92,7 @@ impl realloc(byte* ptr, dword size) : byte% {
 	R = malloc(size);
 	if (!R) return 0;
 
-	// LANGUAGE TODO: Implement memcopy
-	dword i = 0;
-	while (i < block.size) {
-		R[i] = ptr[i];
-		i = i + 1;
-	};
+	memcopy(R, ptr, block.size);
 	free(ptr);
 	R;
 }
