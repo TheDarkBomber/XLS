@@ -531,6 +531,7 @@ UQP(FunctionNode) ParseUnboundedExpression();
 SSA* CreateLogicalAnd(SSA* LHS, UQP(Expression) RHS, bool orMode);
 
 SSA* ZeroSSA(XLSType Type);
+SSA* IntegerSSA(XLSType Type, dword Value);
 
 Precedence GetTokenPrecedence();
 

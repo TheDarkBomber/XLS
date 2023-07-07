@@ -1643,10 +1643,8 @@ SSA* MemsetExpression::Render() {
 	AllonymousValues[".#memset.tmp.bee"] = induction;
 	WriteVariable(ZeroSSA(DefinedTypes["#addrsize"]), induction);
 	// OK, now we need the number of times the loop must run stored somewhere.
-	SSA* n1 = llvm::ConstantInt::get(DefinedTypes["#addrsize"].Type, llvm::APInt(DefinedTypes["#addrsize"].Size, 1, false));
-	SSA* n64 = llvm::ConstantInt::get(DefinedTypes["#addrsize"].Type, llvm::APInt(DefinedTypes["#addrsize"].Size, 64, false));
-	SSA* modulus = Builder->CreateURem(length, n64, "memset-modulus");
-	SSA* division = Builder->CreateUDiv(length, n64, "memset-division");
+	SSA* modulus = Builder->CreateAnd(length, IntegerSSA(induction.Type, 64 - 1), "memset-modulus");
+	SSA* division = Builder->CreateLShr(length, IntegerSSA(induction.Type, 6), "memset-division");
 	// Time to make a loop!
 	// Loop 1: Slow loop of the first modulus bytes.
 	llvm::BasicBlock* conditionBlock = llvm::BasicBlock::Create(*GlobalContext, "memset-condition-slow", function);
@@ -1662,7 +1660,7 @@ SSA* MemsetExpression::Render() {
 	Builder->SetInsertPoint(loop);
 	SSA* GEP = Builder->CreateGEP(DefinedTypes["byte"].Type, pvalue, i, "memset-gep-slow");
 	Builder->CreateStore(value, GEP);
-	SSA* plusOne = Builder->CreateAdd(i, n1);
+	SSA* plusOne = Builder->CreateAdd(i, IntegerSSA(induction.Type, 1));
 	TypeAnnotation[plusOne] = induction.Type;
 	WriteVariable(plusOne, induction);
 
@@ -1683,10 +1681,10 @@ SSA* MemsetExpression::Render() {
 	Builder->CreateCondBr(condition, loop, after);
 
 	Builder->SetInsertPoint(loop);
-	SSA* shifted = Builder->CreateShl(i, llvm::ConstantInt::get(DefinedTypes["#addrsize"].Type, llvm::APInt(DefinedTypes["#addrsize"].Size, 6, false)));
+	SSA* shifted = Builder->CreateShl(i, IntegerSSA(induction.Type, 6));
 	GEP = Builder->CreateGEP(DefinedTypes["byte"].Type, pvalue, shifted, "memset-gep-fast");
-	Builder->CreateMemSetInline(GEP, llvm::MaybeAlign(), value, n64);
-	plusOne = Builder->CreateAdd(i, n1);
+	Builder->CreateMemSetInline(GEP, llvm::MaybeAlign(), value, IntegerSSA(induction.Type, 64));
+	plusOne = Builder->CreateAdd(i, IntegerSSA(induction.Type, 1));
 	TypeAnnotation[plusOne] = induction.Type;
 	WriteVariable(plusOne, induction);
 
@@ -1717,10 +1715,8 @@ SSA* MemcopyExpression::Render() {
 	induction.Value = createEntryBlockAlloca(function, induction.Name, induction.Type);
 	AllonymousValues[induction.Name] = induction;
 	WriteVariable(ZeroSSA(induction.Type), induction);
-	SSA* n1 = llvm::ConstantInt::get(DefinedTypes["#addrsize"].Type, llvm::APInt(DefinedTypes["#addrsize"].Size, 1, false));
-	SSA* n64 = llvm::ConstantInt::get(DefinedTypes["#addrsize"].Type, llvm::APInt(DefinedTypes["#addrsize"].Size, 64, false));
-	SSA* modulus = Builder->CreateURem(length, n64, "memcopy-modulus");
-	SSA* division = Builder->CreateUDiv(length, n64, "memcopy-division");
+	SSA* modulus = Builder->CreateAnd(length, IntegerSSA(induction.Type, 64 - 1), "memcopy-modulus");
+	SSA* division = Builder->CreateLShr(length, IntegerSSA(induction.Type, 6), "memcopy-division");
 	// Loop 1
 	llvm::BasicBlock* conditionBlock = llvm::BasicBlock::Create(*GlobalContext, "memcopy-condition-slow", function);
 	llvm::BasicBlock* loop = llvm::BasicBlock::Create(*GlobalContext, "memcopy-loop-slow", function);
@@ -1736,7 +1732,7 @@ SSA* MemcopyExpression::Render() {
 	SSA* GEPDestination = Builder->CreateGEP(DefinedTypes["byte"].Type, destination, i);
 	SSA* GEPSource = Builder->CreateGEP(DefinedTypes["byte"].Type, source, i);
 	Builder->CreateStore(Builder->CreateLoad(DefinedTypes["byte"].Type, GEPSource), GEPDestination);
-	SSA* plusOne = Builder->CreateAdd(i, n1);
+	SSA* plusOne = Builder->CreateAdd(i, IntegerSSA(induction.Type, 1));
 	TypeAnnotation[plusOne] = induction.Type;
 	WriteVariable(plusOne, induction);
 
@@ -1759,12 +1755,12 @@ SSA* MemcopyExpression::Render() {
 	Builder->CreateCondBr(condition, loop, after);
 
 	Builder->SetInsertPoint(loop);
-	SSA* shifted = Builder->CreateShl(ReadVariable(induction), llvm::ConstantInt::get(DefinedTypes["#addrsize"].Type, llvm::APInt(DefinedTypes["#addrsize"].Size, 6, false)));
+	SSA* shifted = Builder->CreateShl(i, IntegerSSA(induction.Type, 6));
 	GEPDestination = Builder->CreateGEP(DefinedTypes["byte"].Type, destination, shifted);
 	GEPSource = Builder->CreateGEP(DefinedTypes["byte"].Type, source, shifted);
-	if (!RegionsOverlap) Builder->CreateMemCpyInline(GEPDestination, llvm::MaybeAlign(), GEPSource, llvm::MaybeAlign(), n64);
-	else Builder->CreateMemMove(GEPDestination, llvm::MaybeAlign(), GEPSource, llvm::MaybeAlign(), n64);
-	plusOne = Builder->CreateAdd(i, n1);
+	if (!RegionsOverlap) Builder->CreateMemCpyInline(GEPDestination, llvm::MaybeAlign(), GEPSource, llvm::MaybeAlign(), IntegerSSA(induction.Type, 64));
+	else Builder->CreateMemMove(GEPDestination, llvm::MaybeAlign(), GEPSource, llvm::MaybeAlign(), IntegerSSA(induction.Type, 64));
+	plusOne = Builder->CreateAdd(i, IntegerSSA(induction.Type, 1));
 	TypeAnnotation[plusOne] = induction.Type;
 	WriteVariable(plusOne, induction);
 
@@ -1969,6 +1965,12 @@ SSA* XLiSpExpression::Render() {
 
 SSA* ZeroSSA(XLSType Type) {
 	SSA* R = llvm::Constant::getNullValue(Type.Type);
+	TypeAnnotation[R] = Type;
+	return R;
+}
+
+SSA* IntegerSSA(XLSType Type, dword Value) {
+	SSA* R = llvm::ConstantInt::get(Type.Type, llvm::APInt(Type.Size, Value, false));
 	TypeAnnotation[R] = Type;
 	return R;
 }
