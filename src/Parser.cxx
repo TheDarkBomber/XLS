@@ -1655,13 +1655,14 @@ SSA* MemsetExpression::Render() {
 
 	Builder->CreateBr(conditionBlock);
 	Builder->SetInsertPoint(conditionBlock);
-	SSA* condition = Builder->CreateICmpULT(ReadVariable(induction), modulus);
+	SSA* i = ReadVariable(induction);
+	SSA* condition = Builder->CreateICmpULT(i, modulus);
 	Builder->CreateCondBr(condition, loop, after);
 
 	Builder->SetInsertPoint(loop);
-	SSA* GEP = Builder->CreateGEP(DefinedTypes["byte"].Type, pvalue, ReadVariable(induction), "memset-gep-slow");
+	SSA* GEP = Builder->CreateGEP(DefinedTypes["byte"].Type, pvalue, i, "memset-gep-slow");
 	Builder->CreateStore(value, GEP);
-	SSA* plusOne = Builder->CreateAdd(ReadVariable(induction), n1);
+	SSA* plusOne = Builder->CreateAdd(i, n1);
 	TypeAnnotation[plusOne] = induction.Type;
 	WriteVariable(plusOne, induction);
 
@@ -1677,14 +1678,15 @@ SSA* MemsetExpression::Render() {
 
 	Builder->CreateBr(conditionBlock);
 	Builder->SetInsertPoint(conditionBlock);
-	condition = Builder->CreateICmpULT(ReadVariable(induction), division);
+	i = ReadVariable(induction);
+	condition = Builder->CreateICmpULT(i, division);
 	Builder->CreateCondBr(condition, loop, after);
 
 	Builder->SetInsertPoint(loop);
-	SSA* shifted = Builder->CreateShl(ReadVariable(induction), llvm::ConstantInt::get(DefinedTypes["#addrsize"].Type, llvm::APInt(DefinedTypes["#addrsize"].Size, 6, false)));
+	SSA* shifted = Builder->CreateShl(i, llvm::ConstantInt::get(DefinedTypes["#addrsize"].Type, llvm::APInt(DefinedTypes["#addrsize"].Size, 6, false)));
 	GEP = Builder->CreateGEP(DefinedTypes["byte"].Type, pvalue, shifted, "memset-gep-fast");
 	Builder->CreateMemSetInline(GEP, llvm::MaybeAlign(), value, n64);
-	plusOne = Builder->CreateAdd(ReadVariable(induction), n1);
+	plusOne = Builder->CreateAdd(i, n1);
 	TypeAnnotation[plusOne] = induction.Type;
 	WriteVariable(plusOne, induction);
 
