@@ -309,8 +309,9 @@ class MemsetExpression : public Expression {
 	UQP(Expression) Ptr;
 	UQP(Expression) Value;
 	UQP(Expression) Length;
+	bool Volatile;
 public:
-	MemsetExpression(UQP(Expression) ptr, UQP(Expression) value, UQP(Expression) length = nullptr) : Ptr(std::move(ptr)), Value(std::move(value)), Length(std::move(length)) {}
+	MemsetExpression(UQP(Expression) ptr, UQP(Expression) value, bool isVolatile = false, UQP(Expression) length = nullptr) : Ptr(std::move(ptr)), Value(std::move(value)), Volatile(isVolatile), Length(std::move(length)) {}
 	const bool HasLength() const { return Length != nullptr; }
 	SSA* Render() override;
 };
@@ -319,9 +320,10 @@ class MemcopyExpression : public Expression {
 	UQP(Expression) Destination;
 	UQP(Expression) Source;
 	UQP(Expression) Length;
+	bool Volatile;
 	bool RegionsOverlap;
 public:
-	MemcopyExpression(UQP(Expression) destination, UQP(Expression) source, UQP(Expression) length = nullptr, bool overlap = false) : Destination(std::move(destination)), Source(std::move(source)), Length(std::move(length)), RegionsOverlap(overlap) {}
+	MemcopyExpression(UQP(Expression) destination, UQP(Expression) source, bool isVolatile = false, UQP(Expression) length = nullptr, bool overlap = false) : Destination(std::move(destination)), Source(std::move(source)), Volatile(isVolatile), Length(std::move(length)), RegionsOverlap(overlap) {}
 	SSA* Render() override;
 };
 
@@ -486,10 +488,10 @@ UQP(Expression) ParseCharacterExpression();
 UQP(Expression) ParseStringExpression();
 UQP(Expression) ParseParenthetical();
 UQP(Expression) ParseIdentifier(bool isVolatile = false);
-UQP(Expression) ParseDispatcher();
+UQP(Expression) ParseDispatcher(bool isVolatile = false);
 UQP(Expression) ParseIf();
 UQP(Expression) ParseWhile(bool doWhile = false);
-UQP(Expression) ParseUnary();
+UQP(Expression) ParseUnary(bool isVolatile = false);
 UQP(Expression) ParseDeclaration(XLSType type);
 UQP(Expression) ParseMacro(std::string macro);
 UQP(Expression) ParseBlock();
@@ -500,8 +502,8 @@ UQP(Expression) ParseSizeof();
 UQP(Expression) ParseTypeof();
 UQP(Expression) ParseCountof();
 UQP(Expression) ParseSetCountof();
-UQP(Expression) ParseMemset();
-UQP(Expression) ParseMemcopy();
+UQP(Expression) ParseMemset(bool isVolatile = false);
+UQP(Expression) ParseMemcopy(bool isVolatile = false);
 UQP(Expression) ParseMutable();
 UQP(Expression) ParseBreak();
 UQP(Expression) ParseContinue();

@@ -196,10 +196,10 @@ UQP(Expression) ParseIdentifier(bool isVolatile) {
 	return MUQ(CallExpression, identifier, std::move(arguments));
 }
 
-UQP(Expression) ParseDispatcher() {
+UQP(Expression) ParseDispatcher(bool isVolatile) {
 	switch (CurrentToken.Type) {
 	case LEXEME_IDENTIFIER:
-		return ParseIdentifier();
+		return ParseIdentifier(isVolatile);
 	case LEXEME_INTEGER:
 		return ParseDwordExpression();
 	case LEXEME_CHARACTER_LITERAL:
@@ -224,9 +224,9 @@ UQP(Expression) ParseDispatcher() {
 	case LEXEME_COUNTOF:
 		return ParseCountof();
 	case LEXEME_MEMSET:
-		return ParseMemset();
+		return ParseMemset(isVolatile);
 	case LEXEME_MEMCOPY:
-		return ParseMemcopy();
+		return ParseMemcopy(isVolatile);
 	case LEXEME_MUTABLE:
 		return ParseMutable();
 	case LEXEME_BREAK:
@@ -269,7 +269,7 @@ Precedence GetTokenPrecedence() {
 }
 
 UQP(Expression) ParseExpression(bool isVolatile) {
-	UQP(Expression) LHS = ParseUnary();
+	UQP(Expression) LHS = ParseUnary(isVolatile);
 	if (!LHS) return nullptr;
 	return ParseBinary(PRECEDENCE_INVALID, std::move(LHS), isVolatile);
 }
@@ -283,7 +283,7 @@ UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS, bool isV
 		std::string binaryOperator = CurrentOperator;
 		GetNextToken();
 
-		UQP(Expression) RHS = ParseUnary();
+		UQP(Expression) RHS = ParseUnary(isVolatile);
 		if (!RHS) return nullptr;
 
 		Precedence nextPrecedence = GetTokenPrecedence();
@@ -296,8 +296,8 @@ UQP(Expression) ParseBinary(Precedence precedence, UQP(Expression) LHS, bool isV
 	}
 }
 
-UQP(Expression) ParseUnary() {
-	if (GetTokenPrecedence() == PRECEDENCE_INVALID) return ParseDispatcher();
+UQP(Expression) ParseUnary(bool isVolatile) {
+	if (GetTokenPrecedence() == PRECEDENCE_INVALID) return ParseDispatcher(isVolatile);
 
 	std::string operator_ = CurrentOperator;
 	GetNextToken();
@@ -307,7 +307,7 @@ UQP(Expression) ParseUnary() {
 		return MUQ(VariableExpression, identifier, false, true);
 	}
 
-	if (UQP(Expression) operand = ParseUnary()) {
+	if (UQP(Expression) operand = ParseUnary(isVolatile)) {
 		return MUQ(UnaryExpression, operator_, std::move(operand));
 	}
 	return nullptr;
@@ -444,7 +444,7 @@ UQP(Expression) ParseSetCountof() {
 	return MUQ(SetCountofExpression, std::move(counted), std::move(newCount));
 }
 
-UQP(Expression) ParseMemset() {
+UQP(Expression) ParseMemset(bool isVolatile) {
 	GetNextToken();
 	if (CurrentToken.Value != '(') return ParseError("Expected open parenthesis after memset");
 	GetNextToken();
@@ -454,7 +454,7 @@ UQP(Expression) ParseMemset() {
 	UQP(Expression) value = ParseExpression();
 	if (CurrentToken.Value == ')') {
 		GetNextToken();
-		return MUQ(MemsetExpression, std::move(ptr), std::move(value));
+		return MUQ(MemsetExpression, std::move(ptr), std::move(value), isVolatile);
 	}
 	if (CurrentToken.Value != ',') return ParseError("Expected close parenthesis or comma in memset");
 	GetNextToken();
@@ -462,10 +462,10 @@ UQP(Expression) ParseMemset() {
 	UQP(Expression) length = ParseExpression();
 	if (CurrentToken.Value != ')') return ParseError("Expected close parenthesis to terminate memset");
 	GetNextToken();
-	return MUQ(MemsetExpression, std::move(ptr), std::move(value), std::move(length));
+	return MUQ(MemsetExpression, std::move(ptr), std::move(value), isVolatile, std::move(length));
 }
 
-UQP(Expression) ParseMemcopy() {
+UQP(Expression) ParseMemcopy(bool isVolatile) {
 	bool overlap = (CurrentToken.Subtype == LEXEME_ELSE);
 	GetNextToken();
 	if (CurrentToken.Value != '(') return ParseError("Expected open parenthesis after memcopy");
@@ -476,7 +476,7 @@ UQP(Expression) ParseMemcopy() {
 	UQP(Expression) source = ParseExpression();
 	if (CurrentToken.Value == ')') {
 		GetNextToken();
-		return MUQ(MemcopyExpression, std::move(destination), std::move(source), nullptr, overlap);
+		return MUQ(MemcopyExpression, std::move(destination), std::move(source), isVolatile, nullptr, overlap);
 	}
 	if (CurrentToken.Value != ',') return ParseError("Expected close parenthesis or comma in memcopy");
 	GetNextToken();
@@ -484,7 +484,7 @@ UQP(Expression) ParseMemcopy() {
 	UQP(Expression) length = ParseExpression();
 	if (CurrentToken.Value != ')') return ParseError("Expected close parenthesis to terminate memcopy");
 	GetNextToken();
-	return MUQ(MemcopyExpression, std::move(destination), std::move(source), std::move(length), overlap);
+	return MUQ(MemcopyExpression, std::move(destination), std::move(source), isVolatile, std::move(length), overlap);
 }
 
 UQP(Expression) ParseMutable() {
@@ -1659,7 +1659,7 @@ SSA* MemsetExpression::Render() {
 
 	Builder->SetInsertPoint(loop);
 	SSA* GEP = Builder->CreateGEP(DefinedTypes["byte"].Type, pvalue, i, "memset-gep-slow");
-	Builder->CreateStore(value, GEP);
+	Builder->CreateStore(value, GEP, Volatile);
 	SSA* plusOne = Builder->CreateAdd(i, IntegerSSA(induction.Type, 1));
 	TypeAnnotation[plusOne] = induction.Type;
 	WriteVariable(plusOne, induction);
@@ -1683,7 +1683,7 @@ SSA* MemsetExpression::Render() {
 	Builder->SetInsertPoint(loop);
 	SSA* shifted = Builder->CreateShl(i, IntegerSSA(induction.Type, 6));
 	GEP = Builder->CreateGEP(DefinedTypes["byte"].Type, pvalue, shifted, "memset-gep-fast");
-	Builder->CreateMemSetInline(GEP, llvm::MaybeAlign(), value, IntegerSSA(induction.Type, 64));
+	Builder->CreateMemSetInline(GEP, llvm::MaybeAlign(), value, IntegerSSA(induction.Type, 64), Volatile);
 	plusOne = Builder->CreateAdd(i, IntegerSSA(induction.Type, 1));
 	TypeAnnotation[plusOne] = induction.Type;
 	WriteVariable(plusOne, induction);
@@ -1731,7 +1731,7 @@ SSA* MemcopyExpression::Render() {
 	Builder->SetInsertPoint(loop);
 	SSA* GEPDestination = Builder->CreateGEP(DefinedTypes["byte"].Type, destination, i);
 	SSA* GEPSource = Builder->CreateGEP(DefinedTypes["byte"].Type, source, i);
-	Builder->CreateStore(Builder->CreateLoad(DefinedTypes["byte"].Type, GEPSource), GEPDestination);
+	Builder->CreateStore(Builder->CreateLoad(DefinedTypes["byte"].Type, GEPSource, Volatile), GEPDestination, Volatile);
 	SSA* plusOne = Builder->CreateAdd(i, IntegerSSA(induction.Type, 1));
 	TypeAnnotation[plusOne] = induction.Type;
 	WriteVariable(plusOne, induction);
@@ -1758,8 +1758,8 @@ SSA* MemcopyExpression::Render() {
 	SSA* shifted = Builder->CreateShl(i, IntegerSSA(induction.Type, 6));
 	GEPDestination = Builder->CreateGEP(DefinedTypes["byte"].Type, destination, shifted);
 	GEPSource = Builder->CreateGEP(DefinedTypes["byte"].Type, source, shifted);
-	if (!RegionsOverlap) Builder->CreateMemCpyInline(GEPDestination, llvm::MaybeAlign(), GEPSource, llvm::MaybeAlign(), IntegerSSA(induction.Type, 64));
-	else Builder->CreateMemMove(GEPDestination, llvm::MaybeAlign(), GEPSource, llvm::MaybeAlign(), IntegerSSA(induction.Type, 64));
+	if (!RegionsOverlap) Builder->CreateMemCpyInline(GEPDestination, llvm::MaybeAlign(), GEPSource, llvm::MaybeAlign(), IntegerSSA(induction.Type, 64), Volatile);
+	else Builder->CreateMemMove(GEPDestination, llvm::MaybeAlign(), GEPSource, llvm::MaybeAlign(), IntegerSSA(induction.Type, 64), Volatile);
 	plusOne = Builder->CreateAdd(i, IntegerSSA(induction.Type, 1));
 	TypeAnnotation[plusOne] = induction.Type;
 	WriteVariable(plusOne, induction);
