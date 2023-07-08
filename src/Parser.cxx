@@ -2428,57 +2428,62 @@ bool CheckTypeDefined(std::string name) {
 		return true;
 	}
 
-	if (name == "fn&") {
-		std::string typeName;
-		std::vector<XLSType> constituentTypes;
-		typeName = "fn&(";
-		GetNextToken();
-		if (CurrentToken.Value != '(') return false;
-		GetNextToken();
-		while (CurrentToken.Value != ')') {
-			if (CurrentToken.Type != LEXEME_IDENTIFIER) return false;
-			if (!CheckTypeDefined(CurrentIdentifier)) return false;
-			typeName += CurrentIdentifier;
-			constituentTypes.push_back(DefinedTypes[CurrentIdentifier]);
-			GetNextToken();
-			if (CurrentToken.Value == ',') {
-				GetNextToken();
-				continue;
-			}
-		}
-		// '('
-		typeName += "):";
-		GetNextToken();
-		if (CurrentToken.Value != ':') return false;
-		GetNextToken();
+	if (name == "fn&") return ConstructFPType();
+	if (name == "arbint") return ConstructArbIntType(false);
+	if (name == "sarbint") return ConstructArbIntType(true);
+
+	return false;
+}
+
+bool ConstructFPType() {
+	std::string typeName;
+	std::vector<XLSType> constituentTypes;
+	typeName = "fn&(";
+	GetNextToken();
+	if (CurrentToken.Value != '(') return false;
+	GetNextToken();
+	while (CurrentToken.Value != ')') {
 		if (CurrentToken.Type != LEXEME_IDENTIFIER) return false;
 		if (!CheckTypeDefined(CurrentIdentifier)) return false;
 		typeName += CurrentIdentifier;
 		constituentTypes.push_back(DefinedTypes[CurrentIdentifier]);
-
-		CurrentIdentifier = typeName;
-		if (CheckTypeDefined(typeName)) return true;
-		XLSType NEWType;
-		NEWType.Name = typeName;
-		std::vector<llvm::Type*> TypeArguments;
-		XLSType rType = constituentTypes.back();
-		constituentTypes.pop_back();
-		for (uint i = 0; i < constituentTypes.size(); i++)
-			TypeArguments.push_back(constituentTypes[i].Type);
-		llvm::FunctionType* functionType = llvm::FunctionType::get(rType.Type, TypeArguments, false);
-		llvm::PointerType* fpType = llvm::PointerType::get(functionType, 0);
-		NEWType.Type = fpType;
-		NEWType.Size = GlobalLayout->getPointerSizeInBits();
-		NEWType.IsPointer = true;
-		NEWType.IsFP = true;
-		NEWType.Dereference = "#addrsize";
-		constituentTypes.insert(constituentTypes.begin(), rType);
-		NEWType.FPData = constituentTypes;
-		NEWType.UID = CurrentUID++;
-		DefinedTypes[typeName] = NEWType;
-		return true;
+		GetNextToken();
+		if (CurrentToken.Value == ',') {
+			GetNextToken();
+			continue;
+		}
 	}
-	return false;
+	// '('
+	typeName += "):";
+	GetNextToken();
+	if (CurrentToken.Value != ':') return false;
+	GetNextToken();
+	if (CurrentToken.Type != LEXEME_IDENTIFIER) return false;
+	if (!CheckTypeDefined(CurrentIdentifier)) return false;
+	typeName += CurrentIdentifier;
+	constituentTypes.push_back(DefinedTypes[CurrentIdentifier]);
+
+	CurrentIdentifier = typeName;
+	if (CheckTypeDefined(typeName)) return true;
+	XLSType NEWType;
+	NEWType.Name = typeName;
+	std::vector<llvm::Type*> TypeArguments;
+	XLSType rType = constituentTypes.back();
+	constituentTypes.pop_back();
+	for (uint i = 0; i < constituentTypes.size(); i++)
+		TypeArguments.push_back(constituentTypes[i].Type);
+	llvm::FunctionType* functionType = llvm::FunctionType::get(rType.Type, TypeArguments, false);
+	llvm::PointerType* fpType = llvm::PointerType::get(functionType, 0);
+	NEWType.Type = fpType;
+	NEWType.Size = GlobalLayout->getPointerSizeInBits();
+	NEWType.IsPointer = true;
+	NEWType.IsFP = true;
+	NEWType.Dereference = "#addrsize";
+	constituentTypes.insert(constituentTypes.begin(), rType);
+	NEWType.FPData = constituentTypes;
+	NEWType.UID = CurrentUID++;
+	DefinedTypes[typeName] = NEWType;
+	return true;
 }
 
 bool DefineFPType(std::string function, XLSType* outtype) {
@@ -2502,6 +2507,29 @@ bool DefineFPType(std::string function, XLSType* outtype) {
 	DefinedTypes[FPType.Name] = FPType;
 	TypeMap[FPType.Type] = FPType;
 	*outtype = FPType;
+	return true;
+}
+
+bool ConstructArbIntType(bool sign) {
+	std::string typeName = sign ? "sarbint" : "arbint";
+	XLSType NEWType;
+	GetNextToken();
+	if (CurrentToken.Value != '(') return false;
+	typeName += "(";
+	GetNextToken();
+	if (CurrentToken.Type != LEXEME_INTEGER) return false;
+	typeName += std::to_string(CurrentInteger);
+	NEWType.Size = CurrentInteger;
+	NEWType.Type = llvm::Type::getIntNTy(*GlobalContext, CurrentInteger);
+	GetNextToken();
+	if (CurrentToken.Value != ')') return false;
+	typeName += ")";
+	CurrentIdentifier = typeName;
+	if (CheckTypeDefined(typeName)) return true;
+	NEWType.Name = typeName;
+	NEWType.Signed = sign;
+	NEWType.UID = CurrentUID++;
+	DefinedTypes[NEWType.Name] = NEWType;
 	return true;
 }
 

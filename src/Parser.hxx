@@ -551,6 +551,10 @@ void InitialiseModule(std::string moduleName);
 void InitialiseJIT();
 
 bool DefineFPType(std::string function, XLSType* outtype);
+
+bool ConstructFPType();
+bool ConstructArbIntType(bool sign = false);
+
 bool CheckTypeDefined(std::string name);
 
 SSA* CodeError(const char *error);
