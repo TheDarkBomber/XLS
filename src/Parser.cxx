@@ -608,6 +608,11 @@ UQP(Expression) ParseDeclaration(XLSType type) {
 		GetNextToken();
 		return result;
 	}
+	if (CurrentToken.Type == LEXEME_CHARACTER && CurrentToken.Value == '{') {
+		GetNextToken();
+		return ParseComposite(type);
+		// '}'
+	}
 	if (CurrentToken.Type == LEXEME_CHARACTER && CurrentToken.Value == '(') {
 		GetNextToken();
 		UQP(Expression) toCast = ParseExpression();
@@ -639,6 +644,23 @@ UQP(Expression) ParseDeclaration(XLSType type) {
 	}
 
 	return MUQ(DeclarationExpression, std::move(variableNames), type);
+}
+
+UQP(Expression) ParseComposite(XLSType type) {
+	if (!type.IsStruct) return ParseError("Expected non-aggregate type.");
+	std::vector<UQP(Expression)> values;
+	for (;;) {
+		// '{'
+		values.push_back(std::move(ParseExpression()));
+
+		if (CurrentToken.Type == LEXEME_CHARACTER && CurrentToken.Value == '}') break;
+		if (CurrentToken.Type != LEXEME_CHARACTER && CurrentToken.Value != ',') return ParseError("Expected comma in composite literal.");
+		GetNextToken();
+	}
+
+	GetNextToken();
+
+	return MUQ(CompositeExpression, std::move(values), type);
 }
 
 UQP(Expression) ParseMacro(std::string macro) {
@@ -1884,18 +1906,18 @@ SSA* WhileExpression::Render() {
 
 SSA* DeclarationExpression::Render() {
 	EMIT_DEBUG;
-	llvm::Function *function = Builder->GetInsertBlock()->getParent();
+	llvm::Function* function = Builder->GetInsertBlock()->getParent();
 	for (uint i = 0, e = VariableNames.size(); i != e; i++) {
 		const std::string &variableName = VariableNames[i].first;
-		Expression *definer = VariableNames[i].second.get();
+		Expression* definer = VariableNames[i].second.get();
 
-		SSA *definerSSA;
+		SSA* definerSSA;
 		if (definer) {
 			definerSSA = definer->Render();
 			if (!definerSSA) return nullptr;
 		} else definerSSA = llvm::ConstantInt::get(*GlobalContext, llvm::APInt(Type.Size, 0, false));
 
-		Alloca *alloca = createEntryBlockAlloca(function, variableName, Type);
+		Alloca* alloca = createEntryBlockAlloca(function, variableName, Type);
 
 		if (Flags.Debug) {
 			llvm::DILocalVariable* dbgVar = Dbg.Builder->createAutoVariable(Dbg.Blocks.back(), variableName, Dbg.Blocks.back()->getFile(), GetRow(), Dbg.GetType(Type));
@@ -1912,6 +1934,15 @@ SSA* DeclarationExpression::Render() {
 	}
 
 	return ZeroSSA(Type);
+}
+
+SSA* CompositeExpression::Render() {
+	dword size = Values.size();
+	if (size != Type.Structure.Types.size()) return CodeError("Not enough values for each type in composite.");
+	SSA* R = ZeroSSA(Type);
+	for (int i = 0; i < size; i++) R = Builder->CreateInsertValue(R, Cast(Type.Structure.Types[i].first, Values[Type.Structure.IndexMap[i]]->Render()), i);
+	TypeAnnotation[R] = Type;
+	return R;
 }
 
 SSA* MacroExpression::Render() {
@@ -1979,13 +2010,20 @@ SSA* StructDefinition::Render() {
 	XLSType NEWType;
 	StructData NEWStruct;
 	NEWType.Name = Name;
-	if (Mode == STRUCT_PRACTICAL) std::sort(Types.begin(), Types.end());
+	NEWStruct.IndexMap = std::vector<dword>(Types.size());
+	for (int i = 0; i < Types.size(); i++) NEWStruct.IndexMap[i] = i;
+	if (Mode == STRUCT_PRACTICAL) {
+		std::sort(NEWStruct.IndexMap.begin(), NEWStruct.IndexMap.end(), [&](int i, int j) { return Types[i].first.Size < Types[j].first.Size;});
+		std::sort(Types.begin(), Types.end(), [&](SDX(XLSType, std::string) x, SDX(XLSType, std::string) y) { return x.first.Size < y.first.Size; });
+	}
 	std::vector<llvm::Type *> fields;
 	for (unsigned i = 0; i < Types.size(); i++) {
 		fields.push_back(Types[i].first.Type);
 		NEWStruct.LiteralSize += Types[i].first.Size;
 		NEWStruct.Fields[Types[i].second] = SDX(dword, XLSType)(i, Types[i].first);
 	}
+	NEWStruct.Practical = (Mode == STRUCT_PRACTICAL);
+	NEWStruct.Types = Types;
 	NEWType.Type = llvm::StructType::create(*GlobalContext, llvm::ArrayRef<llvm::Type *>(fields), Name, Mode == STRUCT_PACKED);
 	NEWStruct.Layout = (llvm::StructLayout *)GlobalLayout->getStructLayout((llvm::StructType *)NEWType.Type);
 	NEWStruct.Size = NEWStruct.Layout->getSizeInBits();

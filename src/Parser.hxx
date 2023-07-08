@@ -89,9 +89,12 @@ struct XLSFunctionInfo;
 struct StructData {
 	llvm::StructLayout* Layout = nullptr;
 	bool Packed = false;
+	bool Practical = true;
 	dword LiteralSize;
 	dword Size;
 	std::map<std::string, SDX(dword, XLSType)> Fields;
+	VDX(XLSType, std::string) Types;
+	std::vector<dword> IndexMap;
 };
 
 struct XLSType {
@@ -141,6 +144,7 @@ class CharacterExpression : public Expression {
 	char Value;
 public:
 	CharacterExpression(char value) : Value(value) {}
+	char GetValue() { return Value; }
 	SSA *Render() override;
 };
 
@@ -187,6 +191,14 @@ class MutableArrayExpression : public Expression {
 public:
 	MutableArrayExpression(dword size, XLSType type, UQP(Expression) dynamicSize = nullptr) : Size(size), Type(type), DynamicSize(std::move(dynamicSize)) {}
 	SSA *Render() override;
+};
+
+class CompositeExpression : public Expression {
+	std::vector<UQP(Expression)> Values;
+	XLSType Type;
+public:
+	CompositeExpression(std::vector<UQP(Expression)> values, XLSType type) : Values(std::move(values)), Type(type) {}
+	SSA* Render() override;
 };
 
 class CastExpression : public Expression {
@@ -493,6 +505,7 @@ UQP(Expression) ParseIf();
 UQP(Expression) ParseWhile(bool doWhile = false);
 UQP(Expression) ParseUnary(bool isVolatile = false);
 UQP(Expression) ParseDeclaration(XLSType type);
+UQP(Expression) ParseComposite(XLSType type);
 UQP(Expression) ParseMacro(std::string macro);
 UQP(Expression) ParseBlock();
 UQP(Expression) ParseLabel();
