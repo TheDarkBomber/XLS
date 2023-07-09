@@ -58,6 +58,14 @@ SSA* IndexVariable(XLSVariable variable, SSA* index, bool volatility) {
 		// TODO: boundary check ranged pointers
 		V = Builder->CreateExtractValue(V, llvm::ArrayRef<unsigned>(RANGED_POINTER_VALUE));
 	}
+
+	if (variable.Type.IsVector) {
+		SSA* R = Builder->CreateExtractElement(V, index);
+		R = Cast(DefinedTypes[variable.Type.Dereference], R);
+		TypeAnnotation[R] = DefinedTypes[variable.Type.Dereference];
+		return R;
+	}
+
 	SSA* GEP = Builder->CreateInBoundsGEP(DefinedTypes[variable.Type.Dereference].Type, V, index);
 	XLSVariable indexedVariable {.Type = DefinedTypes[variable.Type.Dereference], .Value = GEP, .Name = ".index@#" + variable.Name};
 	return ReadVariable(indexedVariable, volatility);
@@ -93,6 +101,14 @@ SSA* ExdexVariable(SSA* value, XLSVariable variable, SSA* index, bool volatility
 		// TODO: boundary check ranged pointers
 		V = Builder->CreateExtractValue(V, llvm::ArrayRef<unsigned>(RANGED_POINTER_VALUE));
 	}
+
+	if (variable.Type.IsVector) {
+		SSA* R = Builder->CreateInsertElement(V, castedValue, index);
+		TypeAnnotation[R] = variable.Type;
+		WriteVariable(R, variable, volatility);
+		return R;
+	}
+
 	SSA* GEP = Builder->CreateInBoundsGEP(DefinedTypes[variable.Type.Dereference].Type, V, index);
 	XLSVariable exdexedVariable {.Type = DefinedTypes[variable.Type.Dereference], .Value = GEP, .Name = ".exdex@#" + variable.Name};
 	(void)WriteVariable(castedValue, exdexedVariable, volatility);

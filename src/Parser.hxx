@@ -105,8 +105,10 @@ struct XLSType {
 	bool IsRangedPointer = false;
 	bool IsFP = false;
 	bool IsStruct = false;
+	bool IsVector = false;
 	bool IsLabel = false;
 	bool Signed = false;
+	dword Length = 0;
 	std::string Dereference = "void";
 	StructData Structure;
 	std::vector<XLSType> FPData;
@@ -567,6 +569,7 @@ bool DefineFPType(std::string function, XLSType* outtype);
 
 bool ConstructFPType();
 bool ConstructArbIntType(bool sign = false);
+bool ConstructVectorType();
 
 bool CheckTypeDefined(std::string name);
 

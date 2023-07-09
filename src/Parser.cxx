@@ -1155,6 +1155,7 @@ SSA* BinaryExpression::Render() {
 #define RCAST Cast(GetType(left), right)
 #define RPTR left->getType()->isPointerTy() ? PtrRHS(left, right) : right
 #define RPCAST left->getType()->isPointerTy() ? PtrRHS(left, RCAST) : RCAST
+#define VPREP if (GetType(left).IsVector && !GetType(right).IsVector) right = BroadCast(GetType(left), right)
 	SSA* R;
 #define RET(V) do { R = V; TypeAnnotation[R] = GetType(left); return R; } while(0)
 	SSA* left = LHS->Render();
@@ -1183,18 +1184,23 @@ SSA* BinaryExpression::Render() {
 	JMPIF(Operator, ">=", Operators_gte_compare);
 	goto Operators_end;
  Operators_plus:
+	VPREP;
 	if (GetType(left).IsPointer)
 		RET(Builder->CreateInBoundsGEP(DefinedTypes[GetType(left).Dereference].Type, left, right));
 	RET(Builder->CreateAdd(left, RPCAST, "xls_add"));
  Operators_minus:
+	VPREP;
 	if (GetType(left).IsPointer)
 		RET(Builder->CreateInBoundsGEP(DefinedTypes[GetType(left).Dereference].Type, left, Builder->CreateMul(right, llvm::ConstantInt::get(GetType(right).Type, llvm::APInt(GetType(right).Size, -1, false)))));
 	RET(Builder->CreateSub(left, RPCAST, "xls_subtract"));
  Operators_multiply:
+	VPREP;
 	RET(Builder->CreateMul(left, RPCAST, "xls_multiply"));
  Operators_divide:
+	VPREP;
 	RET(Builder->CreateUDiv(left, RPCAST, "xls_divide"));
  Operators_lt_compare:
+	// TODO: Allow vector operations to work with these.
 	if (GetType(left).Signed || GetType(right).Signed)
 		RET(Builder->CreateICmpSLT(left, RCAST, "xls_slt_compare"));
 	RET(Builder->CreateICmpULT(left, RCAST, "xls_lt_compare"));
@@ -1211,16 +1217,22 @@ SSA* BinaryExpression::Render() {
 		RET(Builder->CreateICmpSGE(left, RCAST, "xls_sgte_compare"));
 	RET(Builder->CreateICmpUGE(left, RCAST, "xls_gte_compare"));
  Operators_equal:
+	VPREP;
 	RET(Builder->CreateICmpEQ(left, RCAST, "xls_equal"));
  Operators_non_equal:
+	VPREP;
 	RET(Builder->CreateICmpNE(left, RCAST, "xls_non_equal"));
  Operators_modulo:
+	VPREP;
 	RET(Builder->CreateURem(left, RPCAST, "xls_modulo"));
  Operators_bitwise_and:
+	VPREP;
 	RET(Builder->CreateAnd(left, right, "xls_bitwise_and"));
  Operators_bitwise_or:
+	VPREP;
 	RET(Builder->CreateOr(left, right, "xls_bitwise_or"));
  Operators_bitwise_xor:
+	VPREP;
 	RET(Builder->CreateXor(left, right, "xls_bitwise_xor"));
  Operators_logical_and:
 	RET(CreateLogicalAnd(left, std::move(RHS), false));
@@ -1442,10 +1454,10 @@ SSA* BlockExpression::Render() {
 	return ExpressionVector.back();
 }
 
-SSA *ReturnExpression::Render() {
+SSA* ReturnExpression::Render() {
 	EMIT_DEBUG;
-	llvm::Function *function = Builder->GetInsertBlock()->getParent();
-	SSA *returnValue;
+	llvm::Function* function = Builder->GetInsertBlock()->getParent();
+	SSA* returnValue;
 	if (!ReturnValue) returnValue = llvm::Constant::getNullValue(function->getReturnType());
 	else returnValue = Cast(ReturnTypeAnnotation[function], ReturnValue->Render());
 	if (!returnValue) return nullptr;
@@ -2469,6 +2481,7 @@ bool CheckTypeDefined(std::string name) {
 	if (name == "fn&") return ConstructFPType();
 	if (name == "arbint") return ConstructArbIntType(false);
 	if (name == "sarbint") return ConstructArbIntType(true);
+	if (name == "vector") return ConstructVectorType();
 
 	return false;
 }
@@ -2568,6 +2581,39 @@ bool ConstructArbIntType(bool sign) {
 	NEWType.Signed = sign;
 	NEWType.UID = CurrentUID++;
 	DefinedTypes[NEWType.Name] = NEWType;
+	return true;
+}
+
+bool ConstructVectorType() {
+	std::string typeName = "vector";
+	XLSType NEWType;
+	GetNextToken();
+	if (CurrentToken.Value != '(') return false;
+	typeName += "(";
+	GetNextToken();
+	if (CurrentToken.Type != LEXEME_IDENTIFIER) return false;
+	if (!CheckTypeDefined(CurrentIdentifier)) return false;
+	typeName += CurrentIdentifier;
+	NEWType.Dereference = CurrentIdentifier;
+	GetNextToken();
+	if (CurrentToken.Value != ',') return false;
+	typeName += ", ";
+	GetNextToken();
+	if (CurrentToken.Type != LEXEME_INTEGER) return false;
+	typeName += std::to_string(CurrentInteger);
+	NEWType.Length = CurrentInteger;
+	GetNextToken();
+	if (CurrentToken.Value != ')') return false;
+	typeName += ")";
+	CurrentIdentifier = typeName;
+	if (CheckTypeDefined(typeName)) return true;
+	NEWType.Name = typeName;
+	NEWType.Size = DefinedTypes[NEWType.Dereference].Size * NEWType.Length;
+	NEWType.Type = llvm::VectorType::get(DefinedTypes[NEWType.Dereference].Type, llvm::ElementCount::get(NEWType.Length, false));
+	NEWType.IsVector = true;
+	NEWType.UID = CurrentUID++;
+	TypeMap[NEWType.Type] = NEWType;
+	DefinedTypes[typeName] = NEWType;
 	return true;
 }
 

@@ -23,5 +23,6 @@ bool operator<=(SDX(XLSType, std::string) A, SDX(XLSType, std::string) B);
 dword GetCountof(XLSType type);
 SSA* Cast(XLSType type, SSA *toCast);
 XLSType GetType(SSA* toType);
+SSA* BroadCast(XLSType type, SSA* toCast);
 
 #endif

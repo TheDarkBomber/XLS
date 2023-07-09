@@ -37,6 +37,7 @@ dword GetCountof(XLSType type) {
 }
 
 #define castret(value) do {casted = value; TypeAnnotation[casted] = type; return casted; } while(0)
+#define elc(x) llvm::ElementCount::get(x, false)
 
 SSA* Cast(XLSType type, SSA* toCast) {
 	XLSType toCastType = GetType(toCast);
@@ -57,8 +58,29 @@ SSA* Cast(XLSType type, SSA* toCast) {
 	if (type.IsPointer) castret(Builder->CreateIntToPtr(toCast, type.Type, "xls_itp_cast"));
 	if (toCastType.IsPointer) castret(Builder->CreatePtrToInt(toCast, type.Type, "xls_pti_cast"));
 	if (type.IsStruct) castret(Builder->CreateBitCast(toCast, type.Type, "xls_bitcast"));
+	if (type.IsVector && !toCastType.IsVector) {
+		if (toCastType.Size == type.Size) castret(Builder->CreateBitCast(toCast, type.Type));
+		if (toCastType.UID == DefinedTypes[type.Dereference].UID) castret(Builder->CreateVectorSplat(elc(type.Length), toCast));
+		return ZeroSSA(type);
+	}
+	if (toCastType.IsVector && !type.IsVector) {
+		if (toCastType.Size == type.Size) castret(Builder->CreateBitCast(toCast, type.Type));
+		return ZeroSSA(type);
+	}
+	if (toCastType.IsVector && type.IsVector) {
+		if (toCastType.Size == type.Size) castret(Builder->CreateBitCast(toCast, type.Type));
+		return ZeroSSA(type);
+	}
 	if (type.Signed) castret(Builder->CreateSExtOrTrunc(toCast, type.Type, "xls_simplicit_cast"));
 	castret(Builder->CreateZExtOrTrunc(toCast, type.Type, "xls_implicit_cast"));
+}
+
+SSA* BroadCast(XLSType type, SSA* toCast) {
+	XLSType toCastType = GetType(toCast);
+	XLSType eltype = DefinedTypes[type.Dereference];
+	SSA* casted;
+	if (eltype.UID == toCastType.UID) castret(Builder->CreateVectorSplat(elc(type.Length), toCast));
+	castret(Builder->CreateVectorSplat(elc(type.Length), Cast(eltype, toCast)));
 }
 
 #undef castret

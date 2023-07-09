@@ -64,6 +64,7 @@ syntax.add {
     ["jumpbuf"]    = "keyword2",
     ["arbint"]     = "keyword2",
     ["sarbint"]    = "keyword2",
+    ["vector"]     = "keyword2",
     ["valist"]     = "keyword2",
     ["fn&"]        = "keyword2",
     ["label&"]     = "keyword2",
