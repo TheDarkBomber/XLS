@@ -75,7 +75,7 @@
 												 "implement intern"
 												 "funcdef"
 												 "funcdef macro"))
-					(x-types '("dword" "word" "byte" "boole" "void" "sdword" "sword" "sbyte" "fn&" "jumpbuf" "label&" "valist" "N/A"))
+					(x-types '("dword" "word" "byte" "boole" "void" "sdword" "sword" "sbyte" "fn&" "jumpbuf" "label&" "arbint" "sarbint" "valist" "N/A"))
 					(x-auxillary '("sizeof" "typeof" "countof" "setcountof" "memset" "memcopy" "memcopyovl"))
 					(x-constants '())
 
