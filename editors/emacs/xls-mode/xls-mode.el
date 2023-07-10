@@ -76,7 +76,7 @@
 												 "funcdef"
 												 "funcdef macro"))
 					(x-types '("dword" "word" "byte" "boole" "void" "sdword" "sword" "sbyte" "fn&" "jumpbuf" "label&" "arbint" "sarbint" "vector" "valist" "N/A"))
-					(x-auxillary '("sizeof" "typeof" "countof" "setcountof" "memset" "memcopy" "memcopyovl"))
+					(x-auxillary '("sizeof" "typeof" "countof" "setcountof" "memset" "memcopy" "memcopyovl" "permute-vector"))
 					(x-constants '())
 
 					(x-keywords-regex (regexp-opt x-keywords 'words))
@@ -90,9 +90,9 @@
 
 		`(
 			 (,x-directive-regex . font-lock-preprocessor-face)
-			 (,x-types-regex . font-lock-type-face)
-			 (,x-keywords-regex . font-lock-keyword-face)
 			 (,x-auxillary-regex . font-lock-builtin-face)
+			 (,x-keywords-regex . font-lock-keyword-face)
+			 (,x-types-regex . font-lock-type-face)
 			 (,x-constants-regex . font-lock-constant-face)
 			 (,x-functions-regex 1 font-lock-function-name-face)
 			 (,x-pipef-regex 1 font-lock-function-name-face)

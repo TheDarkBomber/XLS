@@ -227,6 +227,8 @@ UQP(Expression) ParseDispatcher(bool isVolatile) {
 		return ParseMemset(isVolatile);
 	case LEXEME_MEMCOPY:
 		return ParseMemcopy(isVolatile);
+	case LEXEME_PERMUTE_VECTOR:
+		return ParsePermuteVector();
 	case LEXEME_MUTABLE:
 		return ParseMutable();
 	case LEXEME_BREAK:
@@ -485,6 +487,42 @@ UQP(Expression) ParseMemcopy(bool isVolatile) {
 	if (CurrentToken.Value != ')') return ParseError("Expected close parenthesis to terminate memcopy");
 	GetNextToken();
 	return MUQ(MemcopyExpression, std::move(destination), std::move(source), isVolatile, std::move(length), overlap);
+}
+
+UQP(Expression) ParsePermuteVector() {
+	GetNextToken();
+	if (CurrentToken.Value != '(') return ParseError("Expected open parenthesis after permute-vector");
+	GetNextToken();
+	if (CurrentToken.Value == ')') return ParseError("Index list of vector permutation must not be empty.");
+	// '('
+	std::vector<int> idxList;
+	for (;;) {
+		if (CurrentToken.Type != LEXEME_INTEGER) return ParseError("Expected integer in index list of vector permutation.");
+
+		idxList.push_back(CurrentInteger);
+		GetNextToken();
+
+		if (CurrentToken.Value == ',') {
+			GetNextToken();
+			continue;
+		}
+
+		if (CurrentToken.Value == ')') break;
+
+		return ParseError("Unexpected token in index list of vector permutation.");
+	}
+	GetNextToken();
+	if (CurrentToken.Value != '(') return ParseError("Expected open parenthesis after index list of vector permutation.");
+	GetNextToken();
+	UQP(Expression) primary = ParseExpression();
+	UQP(Expression) secondary = nullptr;
+	if (CurrentToken.Value == ',') {
+		GetNextToken();
+		secondary = ParseExpression();
+	}
+	if (CurrentToken.Value != ')') return ParseError("Expected close parenthesis to end permute-vector");
+	GetNextToken();
+	return MUQ(PermuteVectorExpression, idxList, std::move(primary), std::move(secondary));
 }
 
 UQP(Expression) ParseMutable() {
@@ -1803,6 +1841,40 @@ SSA* MemcopyExpression::Render() {
 	AllonymousValues.erase(".#memcopy.tmp.bee");
 
 	return length;
+}
+
+SSA* PermuteVectorExpression::Render() {
+	SSA* primary = Primary->Render();
+	if (!primary) return nullptr;
+	XLSType ptype = GetType(primary);
+	if (!ptype.IsVector) return CodeError("Expected value of vector type as input to permute-vector.");
+	std::string resultTypeName = "vector(" + ptype.Dereference + ", " + std::to_string(IdxList.size()) + ")";
+	if (DefinedTypes.find(resultTypeName) == DefinedTypes.end()) {
+		XLSType NEWType = ptype;
+		NEWType.Length = IdxList.size();
+		NEWType.Size = DefinedTypes[NEWType.Dereference].Size * NEWType.Length;
+		NEWType.Name = resultTypeName;
+		DefinedTypes[resultTypeName] = NEWType;
+	}
+
+	if (Secondary != nullptr) {
+		SSA* secondary = Secondary->Render();
+		if (!secondary) return nullptr;
+		XLSType stype = GetType(secondary);
+		if (ptype.UID != stype.UID) return CodeError("Both input vectors to permute-vector must be of the same type and length!");
+		if (*std::max_element(IdxList.begin(), IdxList.end()) >= ptype.Length + stype.Length)
+			return CodeError("Index list is out of bounds wrt to the input vectors' length to permute-vector.");
+		SSA* R = Builder->CreateShuffleVector(primary, secondary, IdxList, "xls_dual_vector_permutation");
+		TypeAnnotation[R] = DefinedTypes[resultTypeName];
+		return R;
+	}
+
+	if (*std::max_element(IdxList.begin(), IdxList.end()) >= ptype.Length)
+		return CodeError("Index list is out of bounds wrt to the input vector's length to permute-vector.");
+
+	SSA* R = Builder->CreateShuffleVector(primary, IdxList, "xls_vector_permutation");
+	TypeAnnotation[R] = DefinedTypes[resultTypeName];
+	return R;
 }
 
 SSA* IfExpression::Render() {

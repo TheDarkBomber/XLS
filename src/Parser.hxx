@@ -341,6 +341,15 @@ public:
 	SSA* Render() override;
 };
 
+class PermuteVectorExpression : public Expression {
+	std::vector<int> IdxList;
+	UQP(Expression) Primary;
+	UQP(Expression) Secondary;
+public:
+	PermuteVectorExpression(std::vector<int> idxList, UQP(Expression) primary, UQP(Expression) secondary = nullptr) : IdxList(idxList), Primary(std::move(primary)), Secondary(std::move(secondary)) {}
+	SSA* Render() override;
+};
+
 class CVariadicArgumentExpression : public Expression {
 	XLSType Type;
 public:
@@ -519,6 +528,7 @@ UQP(Expression) ParseCountof();
 UQP(Expression) ParseSetCountof();
 UQP(Expression) ParseMemset(bool isVolatile = false);
 UQP(Expression) ParseMemcopy(bool isVolatile = false);
+UQP(Expression) ParsePermuteVector();
 UQP(Expression) ParseMutable();
 UQP(Expression) ParseBreak();
 UQP(Expression) ParseContinue();

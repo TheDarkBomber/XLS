@@ -38,7 +38,8 @@ enum Lexeme {
 	LEXEME_RAW = 29,
 	LEXEME_FUNCDEF = 30,
 	LEXEME_MEMSET = 31,
-	LEXEME_MEMCOPY = 32
+	LEXEME_MEMCOPY = 32,
+	LEXEME_PERMUTE_VECTOR = 33
 };
 
 enum StringTermination {
