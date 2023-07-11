@@ -685,7 +685,7 @@ UQP(Expression) ParseDeclaration(XLSType type) {
 }
 
 UQP(Expression) ParseComposite(XLSType type) {
-	if (!type.IsStruct) return ParseError("Expected non-aggregate type.");
+	if (!type.IsStruct && !type.IsVector) return ParseError("Expected aggregate type.");
 	std::vector<UQP(Expression)> values;
 	for (;;) {
 		// '{'
@@ -2043,6 +2043,13 @@ SSA* DeclarationExpression::Render() {
 
 SSA* CompositeExpression::Render() {
 	dword size = Values.size();
+	if (Type.IsVector) {
+		if (size != Type.Length) return CodeError("Not enough values for each element in vector literal.");
+		SSA* R = ZeroSSA(Type);
+		for (int i = 0; i < size; i++) R = Builder->CreateInsertElement(R, Cast(DefinedTypes[Type.Dereference], Values[i]->Render()), IntegerSSA(DefinedTypes["dword"], i));
+		TypeAnnotation[R] = Type;
+		return R;
+	}
 	if (size != Type.Structure.Types.size()) return CodeError("Not enough values for each type in composite.");
 	SSA* R = ZeroSSA(Type);
 	for (int i = 0; i < size; i++) R = Builder->CreateInsertValue(R, Cast(Type.Structure.Types[i].first, Values[Type.Structure.IndexMap[i]]->Render()), i);
