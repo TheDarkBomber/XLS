@@ -27,6 +27,10 @@ llvm::DIType* DebugInfo::GetType(XLSType type) {
 			types.push_back(GetType(X));
 		}
 		R = Builder->createSubroutineType(Builder->getOrCreateTypeArray(types));
+	} else if (type.IsVector) {
+		std::vector<llvm::Metadata*> md;
+		for (int i = 0; i < type.Length; i++) md.push_back(GetType(DefinedTypes[type.Dereference]));
+		R = Builder->createVectorType(type.Size, 0, GetType(DefinedTypes[type.Dereference]), Builder->getOrCreateArray(md));
 	} else if (type.Signed) {
 		R = Builder->createBasicType(type.Name, type.Size, llvm::dwarf::DW_ATE_signed);
 	} else {
