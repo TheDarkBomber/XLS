@@ -75,9 +75,11 @@ int main(int argc, char* argv[]) {
 	BinaryPrecedence[">"] = PRECEDENCE_COMPARE;
 	BinaryPrecedence["+"] = PRECEDENCE_ADD;
 	BinaryPrecedence["-"] = PRECEDENCE_ADD;
+	BinaryPrecedence["+/"] = PRECEDENCE_ADD;
 	BinaryPrecedence["*"] = PRECEDENCE_MULTIPLY;
 	BinaryPrecedence["%"] = PRECEDENCE_MULTIPLY;
 	BinaryPrecedence["/"] = PRECEDENCE_MULTIPLY;
+	BinaryPrecedence["*/"] = PRECEDENCE_MULTIPLY;
 	BinaryPrecedence["=="] = PRECEDENCE_COMPARE;
 	BinaryPrecedence["!="] = PRECEDENCE_COMPARE;
 	BinaryPrecedence["&&"] = PRECEDENCE_LOGICAL;
@@ -87,6 +89,9 @@ int main(int argc, char* argv[]) {
 	BinaryPrecedence["|"] = PRECEDENCE_BITWISE;
 	BinaryPrecedence["^"] = PRECEDENCE_BITWISE;
 	BinaryPrecedence["~"] = PRECEDENCE_BITWISE;
+	BinaryPrecedence["&/"] = PRECEDENCE_BITWISE;
+	BinaryPrecedence["|/"] = PRECEDENCE_BITWISE;
+	BinaryPrecedence["^/"] = PRECEDENCE_BITWISE;
 	BinaryPrecedence["!"] = PRECEDENCE_LOGICAL;
 	BinaryPrecedence["<="] = PRECEDENCE_COMPARE;
 	BinaryPrecedence[">="] = PRECEDENCE_COMPARE;

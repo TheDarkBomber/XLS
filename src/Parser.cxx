@@ -1323,9 +1323,15 @@ SSA *UnaryExpression::Render() {
 
 	SSA *R;
 #define RET(V) R = V; TypeAnnotation[R] = GetType(operand); return R
+#define DRET(V) R = V; TypeAnnotation[R] = DefinedTypes[GetType(operand).Dereference]; return R
 	JMPIF(Operator, "!", Unary_not);
 	JMPIF(Operator, "~", Unary_ones_complement);
 	JMPIF(Operator, "*", Unary_dereference);
+	JMPIF(Operator, "+/", Unary_add_reduce);
+	JMPIF(Operator, "*/", Unary_multiply_reduce);
+	JMPIF(Operator, "&/", Unary_and_reduce);
+	JMPIF(Operator, "|/", Unary_or_reduce);
+	JMPIF(Operator, "^/", Unary_xor_reduce);
 	goto Unary_end;
  Unary_not:
 	operand = Cast(DefinedTypes["byte"], operand);
@@ -1335,6 +1341,21 @@ SSA *UnaryExpression::Render() {
 	RET(Builder->CreateNot(operand, "xls_ones_complement"));
  Unary_dereference:
 	RET(Builder->CreateLoad(DefinedTypes[TypeMap[operand->getType()].Dereference].Type, operand, "xls_dereference"));
+ Unary_add_reduce:
+	if (!GetType(operand).IsVector) return CodeError("Can only add-reduce vectors.");
+	DRET(Builder->CreateAddReduce(operand));
+ Unary_multiply_reduce:
+	if (!GetType(operand).IsVector) return CodeError("Can only multiply-reduce vectors.");
+	DRET(Builder->CreateMulReduce(operand));
+ Unary_and_reduce:
+	if (!GetType(operand).IsVector) return CodeError("Can only and-reduce vectors.");
+	DRET(Builder->CreateAndReduce(operand));
+ Unary_or_reduce:
+	if (!GetType(operand).IsVector) return CodeError("Can only or-reduce vectors.");
+	DRET(Builder->CreateOrReduce(operand));
+ Unary_xor_reduce:
+	if (!GetType(operand).IsVector) return CodeError("Can only xor-reduce vectors.");
+	DRET(Builder->CreateXorReduce(operand));
  Unary_end:
 	llvm::Function *function = getFunction(std::string("#op::unary::#") + Operator);
 	if (!function) return CodeError("Unknown unary operator");
