@@ -1,10 +1,6 @@
 #include io.xlh
-
 #include syscalls.xlh
-
 #include malloc.xlh
-
-// LANGUAGE FIXME: Problems with include directives being directly on the next line after another.
 
 // TODO: Add flags.
 impl fopen(byte* path) : fhandle* {

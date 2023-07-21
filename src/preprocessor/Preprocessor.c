@@ -17,7 +17,7 @@ void Preprocess(PPUnit stream) {
 			Directive d = LexDirective(stream);
 			switch (d) {
 			case DIRECTIVE_INCLUDE:
-				PreprocessInclude(stream);
+				PreprocessInclude(&stream);
 				break;
 			case DIRECTIVE_DEFINE:
 				PreprocessDefine(stream);
@@ -46,10 +46,11 @@ void Preprocess(PPUnit stream) {
 	}
 }
 
-void PreprocessInclude(PPUnit stream) {
-	PPUnit u = LexFilename(stream);
+void PreprocessInclude(PPUnit* stream) {
+	PPUnit u = LexFilename(*stream);
 	Preprocess(u);
-	printf("#S%d\n", stream.Row + 1);
+	stream->Row++;
+	printf("#S%d\n", stream->Row);
 	fclose(u.File);
 }
 

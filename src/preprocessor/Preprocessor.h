@@ -3,7 +3,7 @@
 #include "File.h"
 
 void Preprocess(PPUnit stream);
-void PreprocessInclude(PPUnit stream);
+void PreprocessInclude(PPUnit* stream);
 void PreprocessDefine(PPUnit stream);
 
 #endif

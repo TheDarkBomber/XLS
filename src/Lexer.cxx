@@ -30,7 +30,7 @@ char advance() {
 		if (next == ' ') SpacesDetected++;
 		if (next == '#') {
 			InterpretDirective();
-			next = '\v';
+			next = '\n';
 		}
 		Newline = false;
 	}
