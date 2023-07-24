@@ -1907,8 +1907,8 @@ SSA* IfExpression::Render() {
 		condition = Builder->CreateICmpNE(condition, llvm::Constant::getNullValue(condition->getType()), "xls_if_condition");
 	llvm::Function* function = Builder->GetInsertBlock()->getParent();
 	llvm::BasicBlock* thenBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_then", function);
-	llvm::BasicBlock* elseBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_else");
-	llvm::BasicBlock* afterBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_after_if");
+	llvm::BasicBlock* elseBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_else", function);
+	llvm::BasicBlock* afterBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_after_if", function);
 	Builder->CreateCondBr(condition, thenBlock, elseBlock);
 
 	Builder->SetInsertPoint(thenBlock);
@@ -1918,7 +1918,6 @@ SSA* IfExpression::Render() {
 	Builder->CreateBr(afterBlock);
 	thenBlock = Builder->GetInsertBlock();
 
-	function->getBasicBlockList().push_back(elseBlock);
 	Builder->SetInsertPoint(elseBlock);
 
 	SSA* elseBranch = ElseBranch->Render();
@@ -1927,7 +1926,6 @@ SSA* IfExpression::Render() {
 	Builder->CreateBr(afterBlock);
 	elseBlock = Builder->GetInsertBlock();
 
-	function->getBasicBlockList().push_back(afterBlock);
 	Builder->SetInsertPoint(afterBlock);
 
 	llvm::PHINode* phiNode = Builder->CreatePHI(GetType(thenBranch).Type, 2, "xls_if_block");
@@ -1943,8 +1941,8 @@ SSA* CreateLogicalAnd(SSA* LHS, UQP(Expression) RHS, bool orMode) {
 
 	llvm::Function* function = Builder->GetInsertBlock()->getParent();
 	llvm::BasicBlock* computeRHS = llvm::BasicBlock::Create(*GlobalContext, "xls_land_lhs_true", function);
-	llvm::BasicBlock* noComputeRHS = llvm::BasicBlock::Create(*GlobalContext, "xls_land_lhs_false");
-	llvm::BasicBlock* afterBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_after_land");
+	llvm::BasicBlock* noComputeRHS = llvm::BasicBlock::Create(*GlobalContext, "xls_land_lhs_false", function);
+	llvm::BasicBlock* afterBlock = llvm::BasicBlock::Create(*GlobalContext, "xls_after_land", function);
 	if (!orMode) Builder->CreateCondBr(LHS, computeRHS, noComputeRHS);
 	else Builder->CreateCondBr(LHS, noComputeRHS, computeRHS);
 
@@ -1958,7 +1956,6 @@ SSA* CreateLogicalAnd(SSA* LHS, UQP(Expression) RHS, bool orMode) {
 	Builder->CreateBr(afterBlock);
 	computeRHS = Builder->GetInsertBlock();
 
-	function->getBasicBlockList().push_back(noComputeRHS);
 	Builder->SetInsertPoint(noComputeRHS);
 
 	SSA* terminalValue;
@@ -1967,7 +1964,6 @@ SSA* CreateLogicalAnd(SSA* LHS, UQP(Expression) RHS, bool orMode) {
 	Builder->CreateBr(afterBlock);
 	noComputeRHS = Builder->GetInsertBlock();
 
-	function->getBasicBlockList().push_back(afterBlock);
 	Builder->SetInsertPoint(afterBlock);
 
 	llvm::PHINode* phiNode = Builder->CreatePHI(llvm::Type::getInt1Ty(*GlobalContext), 2, "xls_land_result");
