@@ -2,6 +2,7 @@
 #include "Lexer.hxx"
 #include "Parser.hxx"
 #include "Type.hxx"
+#include "Variables.hxx"
 #include "colours.def.h"
 #include <stdarg.h>
 
@@ -407,6 +408,16 @@ namespace XLiSp {
 		return SymbolicAtom(outlist);
 	}
 
+	static SymbolicAtom XLSVariableExistsFun(SymbolicList symbolList, Environment* env) {
+		auto symbols = symbolList.GetSymbols();
+		if (symbols.size() < 2) return XLiSpError("Expected at least one element to xls-variable-exists?, but got %lu.\n", symbols.size() - 1);
+		SymbolicAtom atom = symbols[1].Interpret(env);
+		if (atom.Type == XLISP_STRING) atom.Type = XLISP_IDENTIFIER;
+		if (atom.Type != XLISP_IDENTIFIER) return XLiSpError("Expected first argument to xls-variable-exists? to be a string or identifier.\n");
+		if (AllonymousValues.find(atom.String) == AllonymousValues.end()) return false;
+		return true;
+	}
+
 	UQP(Expression) Evaluate(std::queue<TokenContext> InputStream) {
 		SymbolFunctionMap["i+"] = AddFun;
 		SymbolFunctionMap["i*"] = MulFun;
@@ -443,6 +454,7 @@ namespace XLiSp {
 		SymbolFunctionMap["render"] = RenderFun;
 		SymbolFunctionMap["xls-type"] = QueryXLSTypeFun;
 		SymbolFunctionMap["xls-structure-layout"] = XLSStructureLayoutFun;
+		SymbolFunctionMap["xls-variable-exists?"] = XLSVariableExistsFun;
 		UQP(SymbolicParser) parser = MUQ(SymbolicParser, InputStream);
 		Symbolic symbol = Symbolic(parser->ParseList());
 		TokenContext t;
