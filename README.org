@@ -4,6 +4,9 @@
 XLS is a procedure-oriented low-level programming language that compiles to LLVM bytecode.
 As a result of compilation to LLVM bytecode, XLS inherits the portability features of LLVM.
 
+NOTE: This document is out-of-date. For more current documentation, refer to the ~docs~ directory
+or online at [[https://caesar-rylan.60.nu/xls/docs/basics.html]]
+
 * Syntax overview
 ** Numerical literals
 	 In XLS, numerical literals are simple. ~534~ refers to the number literal 534 in base 10.
